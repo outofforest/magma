@@ -36,7 +36,6 @@ func TestFollowerSetup(t *testing.T) {
 	r := newReactor(&state.State{})
 
 	r.role = types.RoleCandidate
-	r.votedForMe = 10
 	r.electionTime = time.Time{}
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
@@ -49,7 +48,6 @@ func TestFollowerSetup(t *testing.T) {
 	r.transitionToFollower()
 
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Zero(r.votedForMe)
 	requireT.NotEqual(time.Time{}, r.electionTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
@@ -68,9 +66,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
 			LastLogTerm:  0,
@@ -87,9 +85,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 1,
 				Success:      true,
@@ -125,9 +123,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 2,
 			LastLogTerm:  1,
@@ -152,9 +150,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 5,
 				Success:      true,
@@ -201,9 +199,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnDifferentTerm(t
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         4,
 			NextLogIndex: 3,
 			LastLogTerm:  2,
@@ -228,9 +226,9 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnDifferentTerm(t
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 6,
 				Success:      true,
@@ -278,9 +276,9 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         4,
 			NextLogIndex: 2,
 			LastLogTerm:  2,
@@ -297,9 +295,9 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
 				Success:      true,
@@ -338,9 +336,9 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         4,
 			NextLogIndex: 3,
 			LastLogTerm:  3,
@@ -357,9 +355,9 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 1,
 				Success:      false,
@@ -393,9 +391,9 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         4,
 			NextLogIndex: 1000,
 			LastLogTerm:  3,
@@ -412,9 +410,9 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
 				Success:      false,
@@ -450,9 +448,9 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         4,
 			NextLogIndex: 3,
 			LastLogTerm:  2,
@@ -464,9 +462,9 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
 				Success:      true,
@@ -502,9 +500,9 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         2,
 			NextLogIndex: 3,
 			LastLogTerm:  2,
@@ -516,9 +514,9 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         2,
 				NextLogIndex: 3,
 				Success:      true,
@@ -554,9 +552,9 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer2ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         3,
 			NextLogIndex: 3,
 			LastLogTerm:  2,
@@ -573,9 +571,9 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer2ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
 				Success:      false,
@@ -611,9 +609,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 3,
 			LastLogTerm:  1,
@@ -630,9 +628,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 4,
 				Success:      true,
@@ -673,9 +671,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 3,
 			LastLogTerm:  1,
@@ -687,9 +685,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 3,
 				Success:      true,
@@ -726,9 +724,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 3,
 			LastLogTerm:  1,
@@ -745,9 +743,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 4,
 				Success:      true,
@@ -788,9 +786,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 
 	messageID := p2p.NewMessageID()
 	role, messages, err := r.Apply(p2p.Message{
-		ID:     messageID,
 		PeerID: peer1ID,
 		Msg: p2p.AppendEntriesRequest{
+			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 3,
 			LastLogTerm:  1,
@@ -802,9 +800,9 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal([]p2p.Message{
 		{
-			ID:     messageID,
 			PeerID: peer1ID,
 			Msg: p2p.AppendEntriesResponse{
+				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 3,
 				Success:      true,
@@ -822,4 +820,41 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 	}, entries)
 
 	requireT.EqualValues(3, r.committedCount)
+}
+
+func TestFollowerApplyVoteRequest(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	r := newReactor(s)
+	r.electionTime = time.Time{}
+
+	messageID := p2p.NewMessageID()
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         1,
+			NextLogIndex: 0,
+			LastLogTerm:  0,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        1,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.False(r.electionTime.IsZero())
+
+	requireT.EqualValues(1, s.CurrentTerm())
+
+	granted, err := s.VoteFor(peer2ID)
+	requireT.NoError(err)
+	requireT.False(granted)
 }

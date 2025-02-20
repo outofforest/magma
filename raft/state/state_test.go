@@ -9,7 +9,7 @@ import (
 	"github.com/outofforest/magma/raft/types"
 )
 
-func TestCurrentItem(t *testing.T) {
+func TestCurrentTerm(t *testing.T) {
 	requireT := require.New(t)
 
 	s := &State{}
@@ -30,6 +30,16 @@ func TestCurrentItem(t *testing.T) {
 
 	requireT.Error(s.SetCurrentTerm(0))
 	requireT.EqualValues(10, s.CurrentTerm())
+}
+
+func TestSetCurrentTermResetsVotedFor(t *testing.T) {
+	requireT := require.New(t)
+
+	s := &State{}
+	s.votedFor = types.ServerID(uuid.New())
+
+	requireT.NoError(s.SetCurrentTerm(1))
+	requireT.EqualValues(types.ZeroServerID, s.votedFor)
 }
 
 func TestVoteFor(t *testing.T) {

@@ -22,7 +22,6 @@ var ZeroMessageID MessageID
 // It includes a unique message ID, the ID of the peer sending the message,
 // and the payload.
 type Message struct {
-	ID     MessageID
 	PeerID types.ServerID
 	Msg    any
 }
@@ -30,6 +29,8 @@ type Message struct {
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
 type AppendEntriesRequest struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
 	// Term is the leader's current term.
 	Term types.Term
 	// NextLogIndex is the index of the next log entry.
@@ -45,6 +46,8 @@ type AppendEntriesRequest struct {
 // AppendEntriesResponse represents the response sent by a Raft follower
 // to the leader after processing an AppendEntriesRequest.
 type AppendEntriesResponse struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term types.Term
 	// NextLogIndex is the index of the next log item.
@@ -53,22 +56,24 @@ type AppendEntriesResponse struct {
 	Success bool
 }
 
-// RequestVoteRequest represents the structure of a request sent by a Raft candidate
+// VoteRequest represents the structure of a request sent by a Raft candidate
 // to gather votes from other nodes in the cluster during an election process.
-type RequestVoteRequest struct {
+type VoteRequest struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
 	// Term is the candidate's current term.
 	Term types.Term
-	// CandidateID is the ID of the candidate requesting the vote.
-	CandidateID types.ServerID
 	// NextLogIndex is the index of the candidate's next log entry.
 	NextLogIndex types.Index
 	// LastLogTerm is the term of the candidate's last log entry.
 	LastLogTerm types.Term
 }
 
-// RequestVoteResponse represents the response sent by a Raft node
-// to a candidate after processing a RequestVoteRequest during an election.
-type RequestVoteResponse struct {
+// VoteResponse represents the response sent by a Raft node
+// to a candidate after processing a VoteRequest during an election.
+type VoteResponse struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
 	// Term is the current term of the server receiving the request, for candidate to update itself.
 	Term types.Term
 	// VoteGranted indicates whether the candidate received the vote.
