@@ -99,6 +99,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -163,6 +164,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -185,7 +187,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	}, entries)
 }
 
-func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnDifferentTerm(t *testing.T) {
+func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -238,6 +240,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnDifferentTerm(t
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -419,6 +422,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		},
 	}, messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -470,6 +474,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -521,6 +526,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -577,6 +583,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		},
 	}, messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -844,6 +851,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 
@@ -893,6 +901,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -942,6 +951,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -984,6 +994,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -1060,6 +1071,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 
@@ -1127,6 +1139,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(3, s.CurrentTerm())
 }
 
@@ -1160,6 +1173,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 		},
 	}, messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -1205,6 +1219,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 		},
 	}, messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -1251,6 +1266,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		},
 	}, messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -1323,6 +1339,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 

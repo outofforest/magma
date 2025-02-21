@@ -52,6 +52,7 @@ type Reactor struct {
 	timeSource TimeSource
 
 	id       types.ServerID
+	leaderID types.ServerID
 	peers    []types.ServerID
 	minority int
 	state    *state.State
@@ -119,7 +120,7 @@ func (r *Reactor) applyAppendEntriesRequest(peerID types.ServerID, m p2p.AppendE
 		return nil, errors.New("bug in protocol")
 	}
 
-	if err := r.maybeTransitionToFollower(m.Term, true); err != nil {
+	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +140,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 	peerID types.ServerID,
 	m p2p.AppendEntriesResponse,
 ) ([]p2p.Message, error) {
-	if err := r.maybeTransitionToFollower(m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
 
@@ -182,7 +183,7 @@ func (r *Reactor) applyVoteRequest(
 	peerID types.ServerID,
 	m p2p.VoteRequest,
 ) ([]p2p.Message, error) {
-	if err := r.maybeTransitionToFollower(m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
 
@@ -199,7 +200,7 @@ func (r *Reactor) applyVoteRequest(
 }
 
 func (r *Reactor) applyVoteResponse(peerID types.ServerID, m p2p.VoteResponse) ([]p2p.Message, error) {
-	if err := r.maybeTransitionToFollower(m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
 
@@ -331,9 +332,13 @@ func (r *Reactor) applyPeerConnected(peerID types.ServerID) ([]p2p.Message, erro
 	}, nil
 }
 
-func (r *Reactor) maybeTransitionToFollower(term types.Term, onAppendEntryRequest bool) error {
+func (r *Reactor) maybeTransitionToFollower(peerID types.ServerID, term types.Term, onAppendEntryRequest bool) error {
 	if term < r.state.CurrentTerm() || (term == r.state.CurrentTerm() && !onAppendEntryRequest) {
 		return nil
+	}
+
+	if onAppendEntryRequest {
+		r.leaderID = peerID
 	}
 
 	if term > r.state.CurrentTerm() {
@@ -371,6 +376,7 @@ func (r *Reactor) transitionToCandidate() ([]p2p.Message, error) {
 	}
 
 	r.role = types.RoleCandidate
+	r.leaderID = types.ZeroServerID
 	r.votedForMe = 1
 	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
@@ -401,6 +407,7 @@ func (r *Reactor) transitionToCandidate() ([]p2p.Message, error) {
 
 func (r *Reactor) transitionToLeader() ([]p2p.Message, error) {
 	r.role = types.RoleLeader
+	r.leaderID = r.id
 	clear(r.matchIndex)
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
