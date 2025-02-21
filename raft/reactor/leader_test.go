@@ -342,6 +342,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
 	requireT.EqualValues(2, r.matchIndex[peer1ID])
 	requireT.Equal(messageID, r.callInProgress[peer1ID])
+	requireT.Zero(r.committedCount)
 }
 
 func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
@@ -395,6 +396,7 @@ func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
 	requireT.Equal(messageID, r.callInProgress[peer1ID])
+	requireT.Zero(r.committedCount)
 }
 
 func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
@@ -431,4 +433,5 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.EqualValues(5, r.nextIndex[peer1ID])
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Zero(r.committedCount)
 }
