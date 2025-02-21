@@ -19,8 +19,14 @@ import (
 )
 
 // New creates new reactor of raft consensus algorithm.
-func New(id types.ServerID, servers []types.ServerID, s *state.State) *Reactor {
+func New(
+	id types.ServerID,
+	servers []types.ServerID,
+	s *state.State,
+	timeSource TimeSource,
+) *Reactor {
 	r := &Reactor{
+		timeSource:     timeSource,
 		id:             id,
 		peers:          make([]types.ServerID, 0, len(servers)),
 		state:          s,
@@ -43,6 +49,8 @@ func New(id types.ServerID, servers []types.ServerID, s *state.State) *Reactor {
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
+	timeSource TimeSource
+
 	id       types.ServerID
 	peers    []types.ServerID
 	minority int
@@ -243,7 +251,7 @@ func (r *Reactor) applyClientRequest(m p2c.ClientRequest) ([]p2p.Message, error)
 		return nil, err
 	}
 
-	r.heartBeatTime = time.Now()
+	r.heartBeatTime = r.timeSource.Now()
 
 	if len(r.peers) == 0 {
 		r.committedCount = r.computeCommitedCount()
@@ -277,7 +285,7 @@ func (r *Reactor) applyHeartbeatTimeout(m types.HeartbeatTimeout) ([]p2p.Message
 		return nil, nil
 	}
 
-	r.heartBeatTime = time.Now()
+	r.heartBeatTime = r.timeSource.Now()
 
 	if len(r.peers) == 0 {
 		return nil, nil
@@ -355,7 +363,7 @@ func (r *Reactor) maybeTransitionToFollower(term types.Term, onAppendEntryReques
 
 func (r *Reactor) transitionToFollower() {
 	r.role = types.RoleFollower
-	r.electionTime = time.Now()
+	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 	clear(r.callInProgress)
@@ -375,7 +383,7 @@ func (r *Reactor) transitionToCandidate() ([]p2p.Message, error) {
 
 	r.role = types.RoleCandidate
 	r.votedForMe = 1
-	r.electionTime = time.Now()
+	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 
@@ -415,7 +423,7 @@ func (r *Reactor) transitionToLeader() ([]p2p.Message, error) {
 		return nil, err
 	}
 
-	r.heartBeatTime = time.Now()
+	r.heartBeatTime = r.timeSource.Now()
 
 	if len(r.peers) == 0 {
 		r.committedCount = r.computeCommitedCount()
@@ -475,7 +483,7 @@ func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.
 	}
 
 	if success {
-		r.electionTime = time.Now()
+		r.electionTime = r.timeSource.Now()
 		if req.LeaderCommit > r.committedCount {
 			r.committedCount = req.LeaderCommit
 			if r.committedCount > r.nextLogIndex {
@@ -503,7 +511,7 @@ func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req p2p.VoteRequ
 		return p2p.VoteResponse{}, err
 	}
 	if granted {
-		r.electionTime = time.Now()
+		r.electionTime = r.timeSource.Now()
 	}
 
 	return p2p.VoteResponse{
