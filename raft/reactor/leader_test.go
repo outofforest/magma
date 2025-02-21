@@ -396,3 +396,39 @@ func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
 	requireT.Equal(messageID, r.callInProgress[peer1ID])
 }
+
+func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	messageID := p2p.NewMessageID()
+	r.callInProgress[peer1ID] = messageID
+
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.AppendEntriesResponse{
+			MessageID:    messageID,
+			Term:         5,
+			NextLogIndex: 5,
+			Success:      true,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.Empty(messages)
+	requireT.EqualValues(5, r.nextIndex[peer1ID])
+	requireT.EqualValues(5, r.matchIndex[peer1ID])
+	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+}
