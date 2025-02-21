@@ -39,6 +39,7 @@ func TestFollowerSetup(t *testing.T) {
 	r, ts := newReactor(&state.State{})
 
 	r.role = types.RoleCandidate
+	r.votedForMe = 2
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
 	r.callInProgress[peer1ID] = p2p.NewMessageID()
@@ -51,6 +52,7 @@ func TestFollowerSetup(t *testing.T) {
 	r.transitionToFollower()
 
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Zero(r.votedForMe)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
@@ -1007,6 +1009,140 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	requireT.True(granted)
 }
 
+func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 2},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(2))
+	r, ts := newReactor(s)
+	expectedElectionTime := ts.Add(time.Hour)
+
+	messageID := p2p.NewMessageID()
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         2,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        2,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, s.CurrentTerm())
+
+	expectedElectionTime = ts.Add(time.Hour)
+
+	messageID = p2p.NewMessageID()
+	role, messages, err = r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         2,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        2,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, s.CurrentTerm())
+}
+
+func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 2},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(2))
+	r, ts := newReactor(s)
+	expectedElectionTime := ts.Add(time.Hour)
+
+	messageID := p2p.NewMessageID()
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         2,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        2,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, s.CurrentTerm())
+
+	expectedElectionTime = ts.Add(time.Hour)
+
+	messageID = p2p.NewMessageID()
+	role, messages, err = r.Apply(p2p.Message{
+		PeerID: peer2ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         3,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer2ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        3,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(3, s.CurrentTerm())
+}
+
 func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
@@ -1136,6 +1272,73 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	requireT.True(granted)
 }
 
+func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 2},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(2))
+	r, ts := newReactor(s)
+	expectedElectionTime := ts.Add(time.Hour)
+
+	messageID := p2p.NewMessageID()
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         2,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        2,
+				VoteGranted: true,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, s.CurrentTerm())
+
+	ts.Add(time.Hour)
+
+	messageID = p2p.NewMessageID()
+	role, messages, err = r.Apply(p2p.Message{
+		PeerID: peer2ID,
+		Msg: p2p.VoteRequest{
+			MessageID:    messageID,
+			Term:         2,
+			NextLogIndex: 3,
+			LastLogTerm:  2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer2ID,
+			Msg: p2p.VoteResponse{
+				MessageID:   messageID,
+				Term:        2,
+				VoteGranted: false,
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, s.CurrentTerm())
+}
+
 func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
@@ -1230,4 +1433,36 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	granted, err := s.VoteFor(peer1ID)
 	requireT.NoError(err)
 	requireT.True(granted)
+}
+
+func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	r, ts := newReactor(s)
+
+	heartbeatTimeoutTime := ts.Add(time.Hour)
+	notExpectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: types.HeartbeatTimeout{
+			Time: heartbeatTimeoutTime,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.NotEqual(notExpectedHeartbeatTime, r.electionTime)
+	requireT.Empty(messages)
+}
+
+func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	r, _ := newReactor(s)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: types.ServerID(uuid.New()),
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Empty(messages)
 }
