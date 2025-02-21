@@ -710,3 +710,200 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	requireT.EqualValues(6, r.matchIndex[peer2ID])
 	requireT.EqualValues(7, r.committedCount)
 }
+
+func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	clear(r.callInProgress)
+	r.nextIndex = map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}
+
+	r.heartBeatTime = ts.Add(time.Hour)
+	heartbeatTimeoutTime := ts.Add(time.Hour)
+	expectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: types.HeartbeatTimeout{
+			Time: heartbeatTimeoutTime,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.NotEmpty(messages)
+	messageID := messages[0].Msg.(p2p.AppendEntriesRequest).MessageID
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+		{
+			PeerID: peer2ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+		{
+			PeerID: peer3ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+		{
+			PeerID: peer4ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+}
+
+func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	clear(r.callInProgress)
+	r.nextIndex = map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}
+
+	heartbeatTimeoutTime := ts.Add(time.Hour)
+	r.heartBeatTime = ts.Add(time.Hour)
+	notExpectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: types.HeartbeatTimeout{
+			Time: heartbeatTimeoutTime,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.Empty(messages)
+	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+}
+
+func TestLeaderApplyPeerConnected(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex = map[types.ServerID]types.Index{
+		peer1ID: 1,
+		peer2ID: 2,
+		peer3ID: 3,
+		peer4ID: 4,
+	}
+	r.matchIndex = map[types.ServerID]types.Index{
+		peer1ID: 1,
+		peer2ID: 2,
+		peer3ID: 3,
+		peer4ID: 4,
+	}
+
+	oldMessageID := p2p.NewMessageID()
+	r.callInProgress = map[types.ServerID]p2p.MessageID{
+		peer1ID: oldMessageID,
+		peer2ID: oldMessageID,
+		peer3ID: oldMessageID,
+		peer4ID: oldMessageID,
+	}
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: peer1ID,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.Equal(map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 2,
+		peer3ID: 3,
+		peer4ID: 4,
+	}, r.nextIndex)
+	requireT.Equal(map[types.ServerID]types.Index{
+		peer1ID: 0,
+		peer2ID: 2,
+		peer3ID: 3,
+		peer4ID: 4,
+	}, r.matchIndex)
+	requireT.NotEmpty(messages)
+	messageID := messages[0].Msg.(p2p.AppendEntriesRequest).MessageID
+	requireT.Equal(map[types.ServerID]p2p.MessageID{
+		peer1ID: messageID,
+		peer2ID: oldMessageID,
+		peer3ID: oldMessageID,
+		peer4ID: oldMessageID,
+	}, r.callInProgress)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+	}, messages)
+}
