@@ -152,7 +152,6 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 6,
-				Success:      true,
 			},
 		},
 	}, messages)

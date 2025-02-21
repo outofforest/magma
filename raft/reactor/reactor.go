@@ -151,14 +151,14 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return nil, nil
 	}
 
-	r.nextIndex[peerID] = m.NextLogIndex
-	if m.Success && r.matchIndex[peerID] != m.NextLogIndex {
+	if m.NextLogIndex > r.nextIndex[peerID] {
 		r.matchIndex[peerID] = m.NextLogIndex
 		r.committedCount = r.computeCommitedCount()
 	}
 
-	if r.nextIndex[peerID] < r.nextLogIndex {
-		resp, err := r.newAppendEntriesRequest(r.nextIndex[peerID])
+	r.nextIndex[peerID] = m.NextLogIndex
+	if m.NextLogIndex < r.nextLogIndex {
+		resp, err := r.newAppendEntriesRequest(m.NextLogIndex)
 		if err != nil {
 			return nil, err
 		}
@@ -482,7 +482,6 @@ func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.
 	}
 
 	resp.NextLogIndex = r.nextLogIndex
-	resp.Success = success
 	return resp, nil
 }
 

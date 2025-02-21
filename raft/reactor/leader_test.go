@@ -185,7 +185,6 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 6,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -232,7 +231,6 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 			MessageID:    messageID,
 			Term:         3,
 			NextLogIndex: 2,
-			Success:      true,
 		},
 	})
 	requireT.NoError(err)
@@ -309,6 +307,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T
 
 	messageID := p2p.NewMessageID()
 	r.callInProgress[peer1ID] = messageID
+	r.nextIndex[peer1ID] = 0
 
 	role, messages, err := r.Apply(p2p.Message{
 		PeerID: peer1ID,
@@ -316,7 +315,6 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T
 			MessageID:    messageID,
 			Term:         5,
 			NextLogIndex: 2,
-			Success:      true,
 		},
 	})
 	requireT.NoError(err)
@@ -370,7 +368,6 @@ func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
 			MessageID:    messageID,
 			Term:         5,
 			NextLogIndex: 2,
-			Success:      false,
 		},
 	})
 	requireT.NoError(err)
@@ -424,7 +421,6 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 			MessageID:    messageID,
 			Term:         5,
 			NextLogIndex: 5,
-			Success:      true,
 		},
 	})
 	requireT.NoError(err)
