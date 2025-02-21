@@ -19,6 +19,7 @@ func TestCandidateSetup(t *testing.T) {
 	r, ts := newReactor(s)
 
 	r.role = types.RoleLeader
+	r.leaderID = serverID
 	r.votedForMe = 10
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
@@ -33,6 +34,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleCandidate, r.role)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Empty(r.nextIndex)
@@ -156,6 +158,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -213,6 +216,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -250,6 +254,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	requireT.Zero(r.votedForMe)
 	requireT.Empty(messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -283,6 +288,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -316,6 +322,7 @@ func TestCandidateApplyVoteResponseIgnoreNotExpectedResponse(t *testing.T) {
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 }
@@ -348,6 +355,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 }
@@ -380,6 +388,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 }
@@ -439,6 +448,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	requireT.Empty(messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 }
@@ -471,6 +481,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
@@ -607,6 +618,7 @@ func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	r, _ := newReactor(s)
 	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
+	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, s.CurrentTerm())
 
 	role, messages, err := r.Apply(p2p.Message{

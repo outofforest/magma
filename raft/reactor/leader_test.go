@@ -25,6 +25,7 @@ func TestLeaderSetup(t *testing.T) {
 	r, ts := newReactor(s)
 
 	r.role = types.RoleCandidate
+	r.leaderID = peer1ID
 	r.votedForMe = 10
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
@@ -39,6 +40,7 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(serverID, r.leaderID)
 	requireT.EqualValues(10, r.votedForMe)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.NotEmpty(messages)
@@ -189,6 +191,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -239,6 +242,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT.Empty(messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Empty(r.callInProgress)
+	requireT.Equal(serverID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 }
@@ -277,6 +281,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.Equal(serverID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -341,6 +346,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T
 	requireT.EqualValues(2, r.matchIndex[peer1ID])
 	requireT.Equal(messageID, r.callInProgress[peer1ID])
 	requireT.Zero(r.committedCount)
+	requireT.Equal(serverID, r.leaderID)
 }
 
 func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
@@ -394,6 +400,7 @@ func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
 	requireT.Equal(messageID, r.callInProgress[peer1ID])
 	requireT.Zero(r.committedCount)
+	requireT.Equal(serverID, r.leaderID)
 }
 
 func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
@@ -432,6 +439,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
 	requireT.Zero(r.committedCount)
+	requireT.Equal(serverID, r.leaderID)
 }
 
 func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
@@ -906,4 +914,5 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 			},
 		},
 	}, messages)
+	requireT.Equal(serverID, r.leaderID)
 }
