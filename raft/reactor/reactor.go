@@ -97,7 +97,7 @@ func (r *Reactor) Apply(msg p2p.Message) (types.Role, []p2p.Message, error) {
 	case p2p.VoteResponse:
 		messages, err = r.applyVoteResponse(msg.PeerID, m)
 	case p2c.ClientRequest:
-		messages, err = r.applyClientRequest(m)
+		messages, err = r.applyClientRequest(msg.PeerID, m)
 	case types.HeartbeatTimeout:
 		messages, err = r.applyHeartbeatTimeout(m)
 	case types.ElectionTimeout:
@@ -226,10 +226,18 @@ func (r *Reactor) applyVoteResponse(peerID types.ServerID, m p2p.VoteResponse) (
 	return r.transitionToLeader()
 }
 
-func (r *Reactor) applyClientRequest(m p2c.ClientRequest) ([]p2p.Message, error) {
+func (r *Reactor) applyClientRequest(peerID types.ServerID, m p2c.ClientRequest) ([]p2p.Message, error) {
 	if r.role != types.RoleLeader {
-		// FiXME (wojciech): Redirect client to leader.
-		return nil, nil
+		// We redirect request to leader, but only once, to avoid infinite hops.
+		if r.leaderID == types.ZeroServerID || peerID != types.ZeroServerID {
+			return nil, nil
+		}
+		return []p2p.Message{
+			{
+				PeerID: r.leaderID,
+				Msg:    m,
+			},
+		}, nil
 	}
 
 	newLogIndex, err := r.appendLogItem(state.LogItem{
