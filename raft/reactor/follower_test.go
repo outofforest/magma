@@ -95,7 +95,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 1,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -160,7 +159,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 5,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -236,7 +234,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnDifferentTerm(t
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 6,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -305,7 +302,6 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -365,7 +361,6 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 1,
-				Success:      false,
 			},
 		},
 	}, messages)
@@ -420,7 +415,6 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
-				Success:      false,
 			},
 		},
 	}, messages)
@@ -472,7 +466,6 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -524,7 +517,6 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 				MessageID:    messageID,
 				Term:         2,
 				NextLogIndex: 3,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -581,7 +573,6 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 3,
-				Success:      false,
 			},
 		},
 	}, messages)
@@ -638,7 +629,6 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 4,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -695,7 +685,6 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 3,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -753,7 +742,6 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 4,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -810,7 +798,6 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 3,
-				Success:      true,
 			},
 		},
 	}, messages)

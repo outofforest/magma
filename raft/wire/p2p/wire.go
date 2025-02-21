@@ -52,8 +52,6 @@ type AppendEntriesResponse struct {
 	Term types.Term
 	// NextLogIndex is the index of the next log item.
 	NextLogIndex types.Index
-	// Success indicates whether the follower contained the matching log entry.
-	Success bool
 }
 
 // VoteRequest represents the structure of a request sent by a Raft candidate

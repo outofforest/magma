@@ -99,7 +99,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestCandidateAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -152,7 +152,6 @@ func TestCandidateAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testin
 				MessageID:    messageID,
 				Term:         4,
 				NextLogIndex: 6,
-				Success:      true,
 			},
 		},
 	}, messages)
@@ -570,12 +569,13 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		peer3ID: 0,
 		peer4ID: 0,
 	}, r.nextIndex)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
-	requireT.EqualValues(2, r.lastLogTerm)
-	requireT.EqualValues(1, r.nextLogIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
+	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(2, r.lastLogTerm)
+	requireT.EqualValues(1, r.nextLogIndex)
+
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 
