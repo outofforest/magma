@@ -219,7 +219,7 @@ func (r *Reactor) applyVoteResponse(peerID types.ServerID, m p2p.VoteResponse) (
 		return nil, err
 	}
 
-	if r.role != types.RoleCandidate || m.Term != r.state.CurrentTerm() || !m.VoteGranted {
+	if r.role != types.RoleCandidate || m.Term != r.state.CurrentTerm() {
 		return nil, nil
 	}
 
@@ -228,6 +228,10 @@ func (r *Reactor) applyVoteResponse(peerID types.ServerID, m p2p.VoteResponse) (
 	}
 
 	r.callInProgress[peerID] = p2p.ZeroMessageID
+
+	if !m.VoteGranted {
+		return nil, nil
+	}
 
 	r.votedForMe++
 	if r.votedForMe <= r.minority {
@@ -364,6 +368,7 @@ func (r *Reactor) maybeTransitionToFollower(term types.Term, onAppendEntryReques
 func (r *Reactor) transitionToFollower() {
 	r.role = types.RoleFollower
 	r.electionTime = r.timeSource.Now()
+	r.votedForMe = 0
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 	clear(r.callInProgress)
@@ -432,13 +437,13 @@ func (r *Reactor) transitionToLeader() ([]p2p.Message, error) {
 
 	messages := make([]p2p.Message, 0, len(r.peers))
 
-	msg, err := r.newAppendEntriesRequest(r.nextLogIndex)
+	msg, err := r.newAppendEntriesRequest(r.indexTermStarted)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, peerID := range r.peers {
-		r.nextIndex[peerID] = r.nextLogIndex
+		r.nextIndex[peerID] = r.indexTermStarted
 		r.callInProgress[peerID] = msg.MessageID
 
 		messages = append(messages, p2p.Message{
