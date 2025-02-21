@@ -139,6 +139,10 @@ func (r *Reactor) applyAppendEntriesResponse(
 	peerID types.ServerID,
 	m p2p.AppendEntriesResponse,
 ) ([]p2p.Message, error) {
+	if err := r.maybeTransitionToFollower(m.Term, false); err != nil {
+		return nil, err
+	}
+
 	if r.role != types.RoleLeader {
 		return nil, nil
 	}
@@ -147,28 +151,8 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return nil, nil
 	}
 
-	if err := r.maybeTransitionToFollower(m.Term, false); err != nil {
-		return nil, err
-	}
-
 	r.nextIndex[peerID] = m.NextLogIndex
-	if !m.Success {
-		resp, err := r.newAppendEntriesRequest(r.nextIndex[peerID])
-		if err != nil {
-			return nil, err
-		}
-
-		r.callInProgress[peerID] = resp.MessageID
-
-		return []p2p.Message{
-			{
-				PeerID: peerID,
-				Msg:    resp,
-			},
-		}, nil
-	}
-
-	if r.matchIndex[peerID] != m.NextLogIndex {
+	if m.Success && r.matchIndex[peerID] != m.NextLogIndex {
 		r.matchIndex[peerID] = m.NextLogIndex
 		r.committedCount = r.computeCommitedCount()
 	}
