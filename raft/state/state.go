@@ -120,59 +120,59 @@ func (s *State) Append(
 	nextLogIndex types.Index,
 	lastLogTerm types.Term,
 	entries []LogItem,
-) (types.Term, types.Index, bool, error) {
+) (types.Term, types.Index, error) {
 	//nolint:nestif
 	if nextLogIndex == 0 {
 		if lastLogTerm != 0 {
-			return 0, 0, false, errors.New("bug in protocol")
+			return 0, 0, errors.New("bug in protocol")
 		}
 		if len(entries) > 0 {
 			if types.Index(len(s.log)) > 0 && entries[0].Term <= s.log[0].Term {
-				return 0, 0, false, errors.New("bug in protocol")
+				return 0, 0, errors.New("bug in protocol")
 			}
 
 			var term types.Term
 			for _, e := range entries {
 				if e.Term < term {
-					return 0, 0, false, errors.New("bug in protocol")
+					return 0, 0, errors.New("bug in protocol")
 				}
 				term = e.Term
 			}
 		}
 		s.log = entries
 		if len(s.log) == 0 {
-			return 0, 0, true, nil
+			return 0, 0, nil
 		}
-		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), true, nil
+		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), nil
 	}
 	if lastLogTerm == 0 {
-		return 0, 0, false, errors.New("bug in protocol")
+		return 0, 0, errors.New("bug in protocol")
 	}
 
 	if nextLogIndex > types.Index(len(s.log)) {
 		if len(s.log) == 0 {
-			return 0, 0, false, nil
+			return 0, 0, nil
 		}
-		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), false, nil
+		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), nil
 	}
 
 	//nolint:nestif
 	if s.log[nextLogIndex-1].Term == lastLogTerm {
 		if len(entries) > 0 {
 			if types.Index(len(s.log)) > nextLogIndex && entries[0].Term <= s.log[nextLogIndex].Term {
-				return 0, 0, false, errors.New("bug in protocol")
+				return 0, 0, errors.New("bug in protocol")
 			}
 
 			term := s.log[nextLogIndex-1].Term
 			for _, e := range entries {
 				if e.Term < term {
-					return 0, 0, false, errors.New("bug in protocol")
+					return 0, 0, errors.New("bug in protocol")
 				}
 				term = e.Term
 			}
 		}
 		s.log = append(s.log[:nextLogIndex], entries...)
-		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), true, nil
+		return s.log[len(s.log)-1].Term, types.Index(len(s.log)), nil
 	}
 
 	// FIXME (wojciech): Maybe implement binary search.
@@ -180,10 +180,10 @@ func (s *State) Append(
 	for i := nextLogIndex - 1; i > 0; i-- {
 		if s.log[i-1].Term != revertTerm {
 			s.log = s.log[:i]
-			return s.log[i-1].Term, i, false, nil
+			return s.log[i-1].Term, i, nil
 		}
 	}
 
 	s.log = nil
-	return 0, 0, false, nil
+	return 0, 0, nil
 }
