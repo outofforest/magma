@@ -297,7 +297,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	requireT.False(granted)
 }
 
-func TestCandidateApplyVoteResponseIgnoreNotExpectedResponse(t *testing.T) {
+func TestCandidateApplyVoteResponseIgnoreStaleResponse(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))

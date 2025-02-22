@@ -294,7 +294,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T) {
+func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	_, _, success, err := s.Append(0, 0, []state.LogItem{
@@ -349,7 +349,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogsOnSuccess(t *testing.T
 	requireT.Equal(serverID, r.leaderID)
 }
 
-func TestLeaderApplyAppendEntriesResponseSendLogsOnFailure(t *testing.T) {
+func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	_, _, success, err := s.Append(0, 0, []state.LogItem{
@@ -438,6 +438,44 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.EqualValues(5, r.nextIndex[peer1ID])
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Equal(p2p.ZeroMessageID, r.callInProgress[peer1ID])
+	requireT.Zero(r.committedCount)
+	requireT.Equal(serverID, r.leaderID)
+}
+
+func TestLeaderApplyAppendEntriesResponseIgnoreStaleResponse(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	messageID := p2p.NewMessageID()
+	r.callInProgress[peer1ID] = messageID
+	r.nextIndex[peer1ID] = 0
+
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer1ID,
+		Msg: p2p.AppendEntriesResponse{
+			MessageID:    p2p.NewMessageID(),
+			Term:         5,
+			NextLogIndex: 2,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.Empty(messages)
+	requireT.EqualValues(0, r.nextIndex[peer1ID])
+	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(messageID, r.callInProgress[peer1ID])
 	requireT.Zero(r.committedCount)
 	requireT.Equal(serverID, r.leaderID)
 }
@@ -838,6 +876,72 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.Empty(messages)
 	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+}
+
+func TestLeaderApplyHeartbeatTimeoutAfterIgnoreSomePeers(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 3},
+		{Term: 4},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.callInProgress = map[types.ServerID]p2p.MessageID{
+		peer1ID: p2p.NewMessageID(),
+		peer3ID: p2p.NewMessageID(),
+	}
+
+	r.nextIndex = map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}
+
+	r.heartBeatTime = ts.Add(time.Hour)
+	heartbeatTimeoutTime := ts.Add(time.Hour)
+	expectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: types.HeartbeatTimeout{
+			Time: heartbeatTimeoutTime,
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.NotEmpty(messages)
+	messageID := messages[0].Msg.(p2p.AppendEntriesRequest).MessageID
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer2ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+		{
+			PeerID: peer4ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         5,
+				NextLogIndex: 5,
+				LastLogTerm:  5,
+				Entries:      []state.LogItem{},
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 }
 
 func TestLeaderApplyPeerConnected(t *testing.T) {
