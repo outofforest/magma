@@ -124,12 +124,11 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -199,13 +198,12 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(3))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -276,13 +274,12 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -335,13 +332,12 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -389,13 +385,12 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -446,13 +441,12 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -498,13 +492,12 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -550,13 +543,12 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(4))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -607,13 +599,12 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, _ := newReactor(s)
 	r.committedCount = 1
@@ -668,13 +659,12 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, _ := newReactor(s)
 	r.committedCount = 1
@@ -720,13 +710,12 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, _ := newReactor(s)
 	r.committedCount = 1
@@ -781,13 +770,12 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, _ := newReactor(s)
 	r.committedCount = 1
@@ -875,13 +863,12 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -925,13 +912,12 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -1018,13 +1004,12 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -1086,13 +1071,12 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -1193,13 +1177,12 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -1239,14 +1222,13 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -1286,13 +1268,12 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)

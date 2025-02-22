@@ -109,13 +109,12 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, success, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []state.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
 	})
 	requireT.NoError(err)
-	requireT.True(success)
 
 	r, ts := newReactor(s)
 	_, err = r.transitionToCandidate()

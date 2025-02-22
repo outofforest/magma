@@ -481,14 +481,13 @@ func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.
 		return resp, nil
 	}
 
-	var success bool
 	var err error
-	r.lastLogTerm, r.nextLogIndex, success, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Entries)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Entries)
 	if err != nil {
 		return p2p.AppendEntriesResponse{}, err
 	}
 
-	if success {
+	if r.nextLogIndex >= req.NextLogIndex {
 		r.electionTime = r.timeSource.Now()
 		if req.LeaderCommit > r.committedCount {
 			r.committedCount = req.LeaderCommit
@@ -548,13 +547,12 @@ func (r *Reactor) computeCommitedCount() types.Index {
 
 func (r *Reactor) appendLogItem(item state.LogItem) (types.Index, error) {
 	nextLogIndex := r.nextLogIndex
-	var success bool
 	var err error
-	r.lastLogTerm, r.nextLogIndex, success, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, []state.LogItem{item})
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, []state.LogItem{item})
 	if err != nil {
 		return 0, err
 	}
-	if !success {
+	if r.nextLogIndex != nextLogIndex+1 {
 		return 0, errors.New("bug in protocol")
 	}
 	r.matchIndex[r.id] = r.nextLogIndex
