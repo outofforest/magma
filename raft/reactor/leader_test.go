@@ -27,6 +27,7 @@ func TestLeaderSetup(t *testing.T) {
 	r.role = types.RoleCandidate
 	r.leaderID = peer1ID
 	r.votedForMe = 10
+	r.indexTermStarted = 12
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
 
@@ -35,7 +36,7 @@ func TestLeaderSetup(t *testing.T) {
 	r.committedCount = 2
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
-	msg, err := r.transitionToLeader(peers)
+	msg, err := r.transitionToLeader()
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
@@ -55,12 +56,8 @@ func TestLeaderSetup(t *testing.T) {
 		},
 		LeaderCommit: 2,
 	}, msg)
-	requireT.Equal(map[types.ServerID]types.Index{
-		peer1ID: 3,
-		peer2ID: 3,
-		peer3ID: 3,
-		peer4ID: 3,
-	}, r.nextIndex)
+	requireT.EqualValues(3, r.indexTermStarted)
+	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 4,
 	}, r.matchIndex)
@@ -93,7 +90,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.NoError(err)
 
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -158,7 +155,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToLeader(peers)
+	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedElectionTime := ts.Add(time.Hour)
@@ -169,7 +166,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 		MessageID:    messageID,
 		Term:         3,
 		NextLogIndex: 2,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
@@ -185,7 +182,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToLeader(peers)
+	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
 
@@ -231,7 +228,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	messageID := p2p.NewMessageID()
@@ -241,7 +238,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 		MessageID:    messageID,
 		Term:         5,
 		NextLogIndex: 2,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.AppendEntriesRequest{
@@ -273,7 +270,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	messageID := p2p.NewMessageID()
@@ -282,7 +279,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 		MessageID:    messageID,
 		Term:         5,
 		NextLogIndex: 2,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.AppendEntriesRequest{
@@ -314,7 +311,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
@@ -325,7 +322,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 		MessageID:    messageID,
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
@@ -347,7 +344,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
@@ -359,7 +356,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
@@ -368,7 +365,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer2ID])
 	requireT.EqualValues(5, r.committedCount)
@@ -386,7 +383,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, []state.LogItem{
 		{Term: 5},
@@ -402,7 +399,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
@@ -411,7 +408,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer2ID])
 	requireT.EqualValues(5, r.committedCount)
@@ -429,7 +426,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, []state.LogItem{
 		{Term: 5},
@@ -446,7 +443,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 6,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(6, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
@@ -455,7 +452,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 7,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(7, r.matchIndex[peer2ID])
 	requireT.EqualValues(5, r.committedCount)
@@ -473,10 +470,15 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	clear(r.nextIndex)
+	r.nextIndex = map[types.ServerID]types.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}
 
 	r.committedCount = 0
 	r.matchIndex[serverID] = 5
@@ -485,7 +487,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
@@ -494,7 +496,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 4,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(4, r.matchIndex[peer2ID])
 	requireT.Zero(r.committedCount)
@@ -512,7 +514,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, []state.LogItem{
 		{Term: 5},
@@ -529,7 +531,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 5,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.EqualValues(7, r.committedCount)
@@ -538,7 +540,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		MessageID:    p2p.NewMessageID(),
 		Term:         5,
 		NextLogIndex: 6,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(6, r.matchIndex[peer2ID])
 	requireT.EqualValues(7, r.committedCount)
@@ -556,7 +558,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[types.ServerID]types.Index{
@@ -570,7 +572,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, peers)
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.AppendEntriesRequest{
@@ -595,7 +597,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[types.ServerID]types.Index{
@@ -609,7 +611,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	r.heartBeatTime = ts.Add(time.Hour)
 	notExpectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, peers)
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
@@ -629,14 +631,14 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
 		Data: []byte{0x01},
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(p2p.AppendEntriesRequest{
@@ -652,12 +654,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		},
 	}, msg)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
-	requireT.Equal(map[types.ServerID]types.Index{
-		peer1ID: 5,
-		peer2ID: 5,
-		peer3ID: 5,
-		peer4ID: 5,
-	}, r.nextIndex)
+	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 7,
 	}, r.matchIndex)
@@ -693,7 +690,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader(peers)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[types.ServerID]types.Index{

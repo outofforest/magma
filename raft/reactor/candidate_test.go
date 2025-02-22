@@ -29,7 +29,7 @@ func TestCandidateSetup(t *testing.T) {
 	r.committedCount = 5
 
 	expectedElectionTime := ts.Add(time.Hour)
-	msg, err := r.transitionToCandidate(peers)
+	msg, err := r.transitionToCandidate()
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleCandidate, r.role)
@@ -76,7 +76,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.NoError(err)
 
 	r, ts := newReactor(s)
-	_, err = r.transitionToCandidate(peers)
+	_, err = r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -141,7 +141,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -180,7 +180,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -191,7 +191,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 		MessageID:   messageID,
 		Term:        3,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
@@ -211,7 +211,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -222,7 +222,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 		MessageID:   messageID,
 		Term:        1,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(1, r.votedForMe)
@@ -242,7 +242,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -254,7 +254,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 		MessageID:   messageID,
 		Term:        2,
 		VoteGranted: false,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(1, r.votedForMe)
@@ -270,7 +270,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -282,7 +282,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 		MessageID:   messageID,
 		Term:        2,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
@@ -298,7 +298,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -310,7 +310,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 		MessageID:   messageID,
 		Term:        2,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
@@ -320,7 +320,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	_, err = r.transitionToCandidate(peers)
+	_, err = r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -332,7 +332,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 		MessageID:   messageID,
 		Term:        3,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
@@ -348,7 +348,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -360,7 +360,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		MessageID:   messageID,
 		Term:        2,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
@@ -377,7 +377,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		MessageID:   messageID,
 		Term:        2,
 		VoteGranted: true,
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.EqualValues(3, r.votedForMe)
@@ -394,12 +394,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		},
 		LeaderCommit: 0,
 	}, msg)
-	requireT.Equal(map[types.ServerID]types.Index{
-		peer1ID: 0,
-		peer2ID: 0,
-		peer3ID: 0,
-		peer4ID: 0,
-	}, r.nextIndex)
+	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
@@ -414,14 +409,14 @@ func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
 
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	notExpectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, peers)
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.NotEqual(notExpectedHeartbeatTime, r.electionTime)
@@ -432,7 +427,7 @@ func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	r, _ := newReactor(s)
-	_, err := r.transitionToCandidate(peers)
+	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.Equal(types.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, s.CurrentTerm())

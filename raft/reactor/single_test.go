@@ -12,15 +12,20 @@ import (
 	"github.com/outofforest/magma/raft/wire/p2p"
 )
 
+func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
+	timeSource := &TestTimeSource{}
+	return New(serverID, 1, s, timeSource), timeSource
+}
+
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	r, ts := newReactor(s)
+	r, ts := newReactorSingleMode(s)
 
 	electionTimeoutTime := ts.Add(time.Hour)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyElectionTimeout(electionTimeoutTime, nil)
+	msg, err := r.ApplyElectionTimeout(electionTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedElectionTime, r.electionTime)
@@ -63,15 +68,15 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(nil)
+	r, ts := newReactorSingleMode(s)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
 		Data: []byte{0x01},
-	}, nil)
+	})
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
@@ -114,14 +119,14 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactor(s)
-	_, err = r.transitionToLeader(nil)
+	r, ts := newReactorSingleMode(s)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, nil)
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
