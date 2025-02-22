@@ -5,6 +5,8 @@ package reactor
 // FIXME (wojciech): Preventing server from being a leader.
 // FIXME (wojciech): Rebalance reactors across servers.
 // FIXME (wojciech): Read and write state and logs.
+// FIXME (wojciech): Stop accepting client requests if there are too many uncommited entries.
+// FIXME (wojciech): Keep in memory only uncommited changes. If append is requested below commit is a protocol bug.
 
 import (
 	"sort"
