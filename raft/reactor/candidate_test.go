@@ -99,6 +99,10 @@ func TestCandidateSetup(t *testing.T) {
 	granted, err = s.VoteFor(serverID)
 	requireT.NoError(err)
 	requireT.True(granted)
+
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.Nil(entries)
 }
 
 func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {

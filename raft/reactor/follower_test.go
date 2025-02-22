@@ -37,7 +37,8 @@ func TestFollowerInitialRole(t *testing.T) {
 
 func TestFollowerSetup(t *testing.T) {
 	requireT := require.New(t)
-	r, ts := newReactor(&state.State{})
+	s := &state.State{}
+	r, ts := newReactor(s)
 
 	r.role = types.RoleCandidate
 	r.votedForMe = 2
@@ -62,6 +63,12 @@ func TestFollowerSetup(t *testing.T) {
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
 	requireT.EqualValues(5, r.committedCount)
+
+	requireT.EqualValues(0, s.CurrentTerm())
+
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.Nil(entries)
 }
 
 func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
