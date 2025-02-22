@@ -9,6 +9,7 @@ import (
 
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/raft/wire/p2c"
 	"github.com/outofforest/magma/raft/wire/p2p"
 )
 
@@ -1469,4 +1470,87 @@ func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Empty(messages)
+}
+
+func TestFollowerApplyClientRequestForwardToLeader(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(1))
+	r, ts := newReactor(s)
+	r.leaderID = peer1ID
+
+	notExpectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: p2c.ClientRequest{
+			Data: []byte{0x01},
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.NotEmpty(messages)
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2c.ClientRequest{
+				Data: []byte{0x01},
+			},
+		},
+	}, messages)
+	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+	requireT.Zero(r.nextLogIndex)
+	requireT.Empty(r.nextLogIndex)
+	requireT.Empty(r.matchIndex)
+	requireT.Empty(r.callInProgress)
+	requireT.Zero(r.committedCount)
+}
+
+func TestFollowerApplyClientRequestIgnoreIfReceivedFromPeer(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(1))
+	r, ts := newReactor(s)
+	r.leaderID = peer1ID
+
+	notExpectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		PeerID: peer2ID,
+		Msg: p2c.ClientRequest{
+			Data: []byte{0x01},
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Empty(messages)
+	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+	requireT.Zero(r.nextLogIndex)
+	requireT.Empty(r.nextLogIndex)
+	requireT.Empty(r.matchIndex)
+	requireT.Empty(r.callInProgress)
+	requireT.Zero(r.committedCount)
+}
+
+func TestFollowerApplyClientRequestIgnoreIfNoLeader(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(1))
+	r, ts := newReactor(s)
+
+	notExpectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: p2c.ClientRequest{
+			Data: []byte{0x01},
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, role)
+	requireT.Empty(messages)
+	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+	requireT.Zero(r.nextLogIndex)
+	requireT.Empty(r.nextLogIndex)
+	requireT.Empty(r.matchIndex)
+	requireT.Empty(r.callInProgress)
+	requireT.Zero(r.committedCount)
 }
