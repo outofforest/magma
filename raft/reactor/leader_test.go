@@ -133,6 +133,15 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.EqualValues(2, r.committedCount)
 
 	requireT.EqualValues(3, s.CurrentTerm())
+
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+	}, entries)
 }
 
 func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
@@ -945,7 +954,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterIgnoreSomePeers(t *testing.T) {
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 }
 
-func TestApplyClientRequestBroadcast(t *testing.T) {
+func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	_, _, success, err := s.Append(0, 0, []state.LogItem{
@@ -1073,7 +1082,7 @@ func TestApplyClientRequestBroadcast(t *testing.T) {
 	}, entries)
 }
 
-func TestApplyClientRequestIgnoreSomePeers(t *testing.T) {
+func TestLeaderApplyClientRequestAppendAndIgnoreSomePeers(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	_, _, success, err := s.Append(0, 0, []state.LogItem{
