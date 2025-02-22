@@ -8,6 +8,7 @@ import (
 
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/raft/wire/p2c"
 	"github.com/outofforest/magma/raft/wire/p2p"
 )
 
@@ -942,6 +943,250 @@ func TestLeaderApplyHeartbeatTimeoutAfterIgnoreSomePeers(t *testing.T) {
 		},
 	}, messages)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+}
+
+func TestApplyClientRequestBroadcast(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+		{Term: 3},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	clear(r.callInProgress)
+
+	expectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: p2c.ClientRequest{
+			Data: []byte{0x01},
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.NotEmpty(messages)
+	messageID := messages[0].Msg.(p2p.AppendEntriesRequest).MessageID
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer1ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+		{
+			PeerID: peer2ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+		{
+			PeerID: peer3ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+		{
+			PeerID: peer4ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.Equal(map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}, r.nextIndex)
+	requireT.Equal(map[types.ServerID]types.Index{
+		serverID: 7,
+	}, r.matchIndex)
+	requireT.Equal(map[types.ServerID]p2p.MessageID{
+		peer1ID: messageID,
+		peer2ID: messageID,
+		peer3ID: messageID,
+		peer4ID: messageID,
+	}, r.callInProgress)
+	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(7, r.nextLogIndex)
+	requireT.EqualValues(0, r.committedCount)
+
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+		{Term: 3},
+		{Term: 4},
+		{
+			Term: 4,
+			Data: []byte{0x01},
+		},
+	}, entries)
+}
+
+func TestApplyClientRequestIgnoreSomePeers(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	_, _, success, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+		{Term: 3},
+	})
+	requireT.NoError(err)
+	requireT.True(success)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	oldMessageID := p2p.NewMessageID()
+	r.callInProgress = map[types.ServerID]p2p.MessageID{
+		peer1ID: oldMessageID,
+	}
+
+	expectedHeartbeatTime := ts.Add(time.Hour)
+
+	role, messages, err := r.Apply(p2p.Message{
+		Msg: p2c.ClientRequest{
+			Data: []byte{0x01},
+		},
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, role)
+	requireT.NotEmpty(messages)
+	messageID := messages[0].Msg.(p2p.AppendEntriesRequest).MessageID
+	requireT.Equal([]p2p.Message{
+		{
+			PeerID: peer2ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+		{
+			PeerID: peer3ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+		{
+			PeerID: peer4ID,
+			Msg: p2p.AppendEntriesRequest{
+				MessageID:    messageID,
+				Term:         4,
+				NextLogIndex: 6,
+				LastLogTerm:  4,
+				Entries: []state.LogItem{
+					{
+						Term: 4,
+						Data: []byte{0x01},
+					},
+				},
+			},
+		},
+	}, messages)
+	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.Equal(map[types.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}, r.nextIndex)
+	requireT.Equal(map[types.ServerID]types.Index{
+		serverID: 7,
+	}, r.matchIndex)
+	requireT.Equal(map[types.ServerID]p2p.MessageID{
+		peer1ID: oldMessageID,
+		peer2ID: messageID,
+		peer3ID: messageID,
+		peer4ID: messageID,
+	}, r.callInProgress)
+	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(7, r.nextLogIndex)
+	requireT.EqualValues(0, r.committedCount)
+
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+		{Term: 3},
+		{Term: 4},
+		{
+			Term: 4,
+			Data: []byte{0x01},
+		},
+	}, entries)
 }
 
 func TestLeaderApplyPeerConnected(t *testing.T) {
