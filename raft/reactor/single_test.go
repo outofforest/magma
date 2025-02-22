@@ -12,32 +12,22 @@ import (
 	"github.com/outofforest/magma/raft/wire/p2p"
 )
 
-func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
-	timeSource := &TestTimeSource{}
-	return New(serverID, nil, s, timeSource), timeSource
-}
-
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	r, ts := newReactorSingleMode(s)
+	r, ts := newReactor(s)
 
 	electionTimeoutTime := ts.Add(time.Hour)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	role, messages, err := r.Apply(p2p.Message{
-		Msg: types.ElectionTimeout{
-			Time: electionTimeoutTime,
-		},
-	})
+	msg, err := r.ApplyElectionTimeout(electionTimeoutTime, nil)
 	requireT.NoError(err)
-	requireT.Equal(types.RoleLeader, role)
+	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(expectedElectionTime, r.heartBeatTime)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
-	requireT.Empty(messages)
-	requireT.Empty(r.callInProgress)
+	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 1,
@@ -73,24 +63,21 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactorSingleMode(s)
-	_, err = r.transitionToLeader()
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader(nil)
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	role, messages, err := r.Apply(p2p.Message{
-		Msg: p2c.ClientRequest{
-			Data: []byte{0x01},
-		},
-	})
+	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
+		Data: []byte{0x01},
+	}, nil)
 	requireT.NoError(err)
 
-	requireT.Equal(types.RoleLeader, role)
+	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Empty(messages)
-	requireT.Empty(r.callInProgress)
+	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 7,
@@ -127,25 +114,20 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactorSingleMode(s)
-	_, err = r.transitionToLeader()
+	r, ts := newReactor(s)
+	_, err = r.transitionToLeader(nil)
 	requireT.NoError(err)
 
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	role, messages, err := r.Apply(p2p.Message{
-		Msg: types.HeartbeatTimeout{
-			Time: heartbeatTimeoutTime,
-		},
-	})
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, nil)
 	requireT.NoError(err)
 
-	requireT.Equal(types.RoleLeader, role)
+	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Empty(messages)
-	requireT.Empty(r.callInProgress)
+	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 6,

@@ -33,11 +33,7 @@ type (
 var ZeroServerID ServerID
 
 // HeartbeatTimeout is sent to raft reactor when it's time to send heartbeat to connected peers.
-type HeartbeatTimeout struct {
-	Time time.Time
-}
+type HeartbeatTimeout time.Time
 
 // ElectionTimeout is sent to raft reactor when it's time to switch to election phase.
-type ElectionTimeout struct {
-	Time time.Time
-}
+type ElectionTimeout time.Time
