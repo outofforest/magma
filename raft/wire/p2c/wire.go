@@ -4,8 +4,3 @@ package p2c
 type ClientRequest struct {
 	Data []byte
 }
-
-// ClientResponse represents a server's response indicating the result of processing a client's request.
-type ClientResponse struct {
-	Success bool
-}
