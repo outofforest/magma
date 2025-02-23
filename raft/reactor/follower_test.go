@@ -25,7 +25,7 @@ var (
 
 func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
 	timeSource := &TestTimeSource{}
-	return New(serverID, s, timeSource), timeSource
+	return New(serverID, len(peers)/2+1, s, timeSource), timeSource
 }
 
 func TestFollowerInitialRole(t *testing.T) {
@@ -1132,7 +1132,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	electionTimeoutTime := ts.Add(time.Hour)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyElectionTimeout(electionTimeoutTime, peers)
+	msg, err := r.ApplyElectionTimeout(electionTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.Equal(expectedElectionTime, r.electionTime)
@@ -1163,7 +1163,7 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	r.electionTime = ts.Add(time.Hour)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyElectionTimeout(electionTimeoutTime, peers)
+	msg, err := r.ApplyElectionTimeout(electionTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
@@ -1184,7 +1184,7 @@ func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	notExpectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime, peers)
+	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.NotEqual(notExpectedHeartbeatTime, r.electionTime)
@@ -1212,7 +1212,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 
 	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
 		Data: []byte{0x01},
-	}, peers)
+	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)

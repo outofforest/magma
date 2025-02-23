@@ -9,14 +9,29 @@ import (
 	"github.com/outofforest/magma/raft/types"
 )
 
-func TestInfo(t *testing.T) {
+func TestID(t *testing.T) {
+	requireT := require.New(t)
+
+	r, _ := newReactor(&state.State{})
+	r.id = serverID
+
+	requireT.Equal(serverID, r.ID())
+}
+
+func TestRole(t *testing.T) {
 	requireT := require.New(t)
 
 	r, _ := newReactor(&state.State{})
 	r.role = types.RoleLeader
+
+	requireT.Equal(types.RoleLeader, r.Role())
+}
+
+func TestLeaderID(t *testing.T) {
+	requireT := require.New(t)
+
+	r, _ := newReactor(&state.State{})
 	r.leaderID = serverID
 
-	role, leaderID := r.Info()
-	requireT.Equal(types.RoleLeader, role)
-	requireT.Equal(serverID, leaderID)
+	requireT.Equal(serverID, r.LeaderID())
 }

@@ -18,14 +18,6 @@ type MessageID uuid.UUID
 // ZeroMessageID represents uninitialized message ID.
 var ZeroMessageID MessageID
 
-// Message represents a structure for P2P messages exchanged between peers.
-// It includes a unique message ID, the ID of the peer sending the message,
-// and the payload.
-type Message struct {
-	PeerID types.ServerID
-	Msg    any
-}
-
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
 type AppendEntriesRequest struct {

@@ -32,6 +32,12 @@ type (
 // ZeroServerID represents an uninitialized ServerID with a zero value.
 var ZeroServerID ServerID
 
+// Command represents a command executed by state machine.
+type Command struct {
+	PeerID ServerID
+	Cmd    any
+}
+
 // HeartbeatTimeout is sent to raft reactor when it's time to send heartbeat to connected peers.
 type HeartbeatTimeout time.Time
 

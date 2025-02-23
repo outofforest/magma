@@ -23,6 +23,7 @@ import (
 // New creates new reactor of raft consensus algorithm.
 func New(
 	id types.ServerID,
+	majority int,
 	s *state.State,
 	timeSource TimeSource,
 ) *Reactor {
@@ -30,6 +31,7 @@ func New(
 		timeSource:   timeSource,
 		id:           id,
 		state:        s,
+		majority:     majority,
 		lastLogTerm:  s.LastLogTerm(),
 		nextLogIndex: s.NextLogIndex(),
 		nextIndex:    map[types.ServerID]types.Index{},
@@ -48,6 +50,7 @@ type Reactor struct {
 	leaderID types.ServerID
 	state    *state.State
 
+	majority       int
 	role           types.Role
 	lastLogTerm    types.Term
 	nextLogIndex   types.Index
@@ -66,9 +69,19 @@ type Reactor struct {
 	heartBeatTime    time.Time
 }
 
-// Info returns the current role of the reactor (e.g., leader, follower, candidate) and the ID of the leader.
-func (r *Reactor) Info() (types.Role, types.ServerID) {
-	return r.role, r.leaderID
+// ID returns the ID of the server.
+func (r *Reactor) ID() types.ServerID {
+	return r.id
+}
+
+// Role returns current role.
+func (r *Reactor) Role() types.Role {
+	return r.role
+}
+
+// LeaderID returns current leader.
+func (r *Reactor) LeaderID() types.ServerID {
+	return r.leaderID
 }
 
 // ApplyAppendEntriesRequest handles an incoming AppendEntries request from a peer.
@@ -102,7 +115,6 @@ func (r *Reactor) ApplyAppendEntriesRequest(
 func (r *Reactor) ApplyAppendEntriesResponse(
 	peerID types.ServerID,
 	m p2p.AppendEntriesResponse,
-	peers []types.ServerID,
 ) (p2p.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return p2p.AppendEntriesRequest{}, err
@@ -112,9 +124,9 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 		return p2p.AppendEntriesRequest{}, nil
 	}
 
-	if m.NextLogIndex > r.nextIndex[peerID] {
+	if m.NextLogIndex > r.getNextIndex(peerID) {
 		r.matchIndex[peerID] = m.NextLogIndex
-		r.committedCount = r.computeCommitedCount((len(peers) + 1) / 2)
+		r.committedCount = r.computeCommittedCount()
 	}
 
 	r.nextIndex[peerID] = m.NextLogIndex
@@ -155,7 +167,6 @@ func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m p2p.VoteRequest) (p2
 func (r *Reactor) ApplyVoteResponse(
 	peerID types.ServerID,
 	m p2p.VoteResponse,
-	peers []types.ServerID,
 ) (p2p.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return p2p.AppendEntriesRequest{}, err
@@ -169,20 +180,19 @@ func (r *Reactor) ApplyVoteResponse(
 		return p2p.AppendEntriesRequest{}, nil
 	}
 
-	minority := (len(peers) + 1) / 2
 	r.votedForMe++
-	if r.votedForMe <= minority {
+	if r.votedForMe < r.majority {
 		return p2p.AppendEntriesRequest{}, nil
 	}
 
-	return r.transitionToLeader(peers)
+	return r.transitionToLeader()
 }
 
 // ApplyClientRequest processes a client request for appending a new log entry.
 // It ensures the reactor can only process the request if it is in the Leader role.
 // It appends the client's data as a new log entry, and returns an AppendEntriesRequest to replicate
 // the log entry to peers.
-func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest, peers []types.ServerID) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest) (p2p.AppendEntriesRequest, error) {
 	// ApplyClientRequest processes a client request to append a log item.
 	// If the reactor is not in the Leader role, it returns an empty AppendEntriesRequest.
 	// As the leader, it appends the client's data as a new log item, updates the heartbeat time,
@@ -202,7 +212,7 @@ func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest, peers []types.ServerID
 
 	r.heartBeatTime = r.timeSource.Now()
 
-	if len(peers) == 0 {
+	if r.majority == 1 {
 		r.committedCount = r.nextLogIndex
 		return p2p.AppendEntriesRequest{}, nil
 	}
@@ -219,14 +229,14 @@ func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest, peers []types.ServerID
 // sends a heartbeat to other peers if the timeout has expired. The function checks
 // if the reactor is still in the Leader role and whether the provided timeout is
 // valid (i.e., after the last recorded heartbeat).
-func (r *Reactor) ApplyHeartbeatTimeout(t time.Time, peers []types.ServerID) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (p2p.AppendEntriesRequest, error) {
 	if r.role != types.RoleLeader || t.Before(r.heartBeatTime) {
 		return p2p.AppendEntriesRequest{}, nil
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
-	if len(peers) == 0 {
+	if r.majority == 1 {
 		return p2p.AppendEntriesRequest{}, nil
 	}
 
@@ -241,12 +251,12 @@ func (r *Reactor) ApplyHeartbeatTimeout(t time.Time, peers []types.ServerID) (p2
 // ApplyElectionTimeout processes an election timeout event, transitioning the reactor
 // to a candidate state if the timeout has expired and the reactor is not already a leader.
 // It then sends a VoteRequest to peers to begin a new election.
-func (r *Reactor) ApplyElectionTimeout(t time.Time, peers []types.ServerID) (p2p.VoteRequest, error) {
+func (r *Reactor) ApplyElectionTimeout(t time.Time) (p2p.VoteRequest, error) {
 	if r.role == types.RoleLeader || t.Before(r.electionTime) {
 		return p2p.VoteRequest{}, nil
 	}
 
-	return r.transitionToCandidate(peers)
+	return r.transitionToCandidate()
 }
 
 // ApplyPeerConnected handles the event of a new peer connection.
@@ -299,7 +309,7 @@ func (r *Reactor) transitionToFollower() {
 	clear(r.matchIndex)
 }
 
-func (r *Reactor) transitionToCandidate(peers []types.ServerID) (p2p.VoteRequest, error) {
+func (r *Reactor) transitionToCandidate() (p2p.VoteRequest, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
 		return p2p.VoteRequest{}, err
 	}
@@ -318,8 +328,8 @@ func (r *Reactor) transitionToCandidate(peers []types.ServerID) (p2p.VoteRequest
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 
-	if len(peers) == 0 {
-		_, err := r.transitionToLeader(peers)
+	if r.majority == 1 {
+		_, err := r.transitionToLeader()
 		return p2p.VoteRequest{}, err
 	}
 
@@ -331,9 +341,10 @@ func (r *Reactor) transitionToCandidate(peers []types.ServerID) (p2p.VoteRequest
 	}, nil
 }
 
-func (r *Reactor) transitionToLeader(peers []types.ServerID) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) transitionToLeader() (p2p.AppendEntriesRequest, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
+	clear(r.nextIndex)
 	clear(r.matchIndex)
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
@@ -347,7 +358,7 @@ func (r *Reactor) transitionToLeader(peers []types.ServerID) (p2p.AppendEntriesR
 
 	r.heartBeatTime = r.timeSource.Now()
 
-	if len(peers) == 0 {
+	if r.majority == 1 {
 		r.committedCount = r.nextLogIndex
 		return p2p.AppendEntriesRequest{}, nil
 	}
@@ -355,10 +366,6 @@ func (r *Reactor) transitionToLeader(peers []types.ServerID) (p2p.AppendEntriesR
 	msg, err := r.newAppendEntriesRequest(r.indexTermStarted)
 	if err != nil {
 		return p2p.AppendEntriesRequest{}, err
-	}
-
-	for _, peerID := range peers {
-		r.nextIndex[peerID] = r.indexTermStarted
 	}
 
 	return msg, nil
@@ -433,7 +440,7 @@ func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req p2p.VoteRequ
 	}, nil
 }
 
-func (r *Reactor) computeCommitedCount(minority int) types.Index {
+func (r *Reactor) computeCommittedCount() types.Index {
 	// FIXME (wojciech): This is executed frequently and must be optimised.
 	indexes := make([]types.Index, 0, len(r.matchIndex))
 	for _, index := range r.matchIndex {
@@ -442,7 +449,7 @@ func (r *Reactor) computeCommitedCount(minority int) types.Index {
 		}
 	}
 
-	if len(indexes) <= minority {
+	if len(indexes) < r.majority {
 		return r.committedCount
 	}
 
@@ -450,7 +457,7 @@ func (r *Reactor) computeCommitedCount(minority int) types.Index {
 		return indexes[i] > indexes[j]
 	})
 
-	return indexes[minority]
+	return indexes[r.majority-1]
 }
 
 func (r *Reactor) appendLogItem(item state.LogItem) (types.Index, error) {
@@ -466,4 +473,11 @@ func (r *Reactor) appendLogItem(item state.LogItem) (types.Index, error) {
 	r.matchIndex[r.id] = r.nextLogIndex
 
 	return nextLogIndex, nil
+}
+
+func (r *Reactor) getNextIndex(peerID types.ServerID) types.Index {
+	if i, exists := r.nextIndex[peerID]; exists {
+		return i
+	}
+	return r.indexTermStarted
 }
