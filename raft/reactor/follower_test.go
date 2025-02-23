@@ -341,6 +341,90 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	}, entries)
 }
 
+func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+		{Term: 3},
+		{Term: 3},
+	})
+	requireT.NoError(err)
+
+	r, _ := newReactor(s)
+
+	// First time.
+
+	messageID := p2p.NewMessageID()
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, p2p.AppendEntriesRequest{
+		MessageID:    messageID,
+		Term:         5,
+		NextLogIndex: 5,
+		LastLogTerm:  4,
+		Entries: []state.LogItem{
+			{
+				Term: 5,
+				Data: []byte{0x01},
+			},
+		},
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(p2p.AppendEntriesResponse{
+		MessageID:    messageID,
+		Term:         5,
+		NextLogIndex: 3,
+	}, msg)
+	requireT.EqualValues(3, r.nextLogIndex)
+	requireT.EqualValues(2, r.lastLogTerm)
+
+	requireT.EqualValues(5, s.CurrentTerm())
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+	}, entries)
+
+	// Second time.
+
+	messageID = p2p.NewMessageID()
+	msg, err = r.ApplyAppendEntriesRequest(peer1ID, p2p.AppendEntriesRequest{
+		MessageID:    messageID,
+		Term:         6,
+		NextLogIndex: 3,
+		LastLogTerm:  3,
+		Entries: []state.LogItem{
+			{
+				Term: 6,
+				Data: []byte{0x01},
+			},
+		},
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(p2p.AppendEntriesResponse{
+		MessageID:    messageID,
+		Term:         6,
+		NextLogIndex: 1,
+	}, msg)
+	requireT.EqualValues(1, r.nextLogIndex)
+	requireT.EqualValues(1, r.lastLogTerm)
+
+	requireT.EqualValues(6, s.CurrentTerm())
+	_, entries, err = s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+	}, entries)
+}
+
 func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}

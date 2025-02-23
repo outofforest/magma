@@ -9,7 +9,6 @@ import (
 
 	"github.com/outofforest/magma/raft/engine"
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/magma/raft/wire/p2p"
 	"github.com/outofforest/parallel"
 )
 
@@ -108,7 +107,7 @@ func runEngine(
 			roleCh <- role
 		}
 
-		if toSend.MessageID != p2p.ZeroMessageID {
+		if len(toSend.Recipients) > 0 {
 			sendCh <- toSend
 		}
 	}
