@@ -607,7 +607,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	}, entries)
 }
 
-func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -633,7 +633,7 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 				Data: []byte{0x01},
 			},
 		},
-		LeaderCommit: 3,
+		LeaderCommit: 2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -656,10 +656,10 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommit(t *testing.T
 		},
 	}, entries)
 
-	requireT.EqualValues(3, r.committedCount)
+	requireT.EqualValues(2, r.committedCount)
 }
 
-func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -702,7 +702,7 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLeaderCommitOnHeartbeat(t
 	requireT.EqualValues(2, r.committedCount)
 }
 
-func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -754,7 +754,7 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLength(t *testing.T) {
 	requireT.EqualValues(4, r.committedCount)
 }
 
-func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -776,6 +776,94 @@ func TestFollowerAppendEntriesRequestSetCommitedCountToLogLengthOnHeartbeat(t *t
 		LastLogTerm:  1,
 		Entries:      nil,
 		LeaderCommit: 100,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(p2p.AppendEntriesResponse{
+		MessageID:    messageID,
+		Term:         1,
+		NextLogIndex: 3,
+	}, msg)
+
+	requireT.EqualValues(1, s.CurrentTerm())
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 1},
+	}, entries)
+
+	requireT.EqualValues(3, r.committedCount)
+}
+
+func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(1))
+	_, _, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 1},
+		{Term: 2},
+		{Term: 2},
+	})
+	requireT.NoError(err)
+
+	r, _ := newReactor(s)
+	r.committedCount = 1
+
+	messageID := p2p.NewMessageID()
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, p2p.AppendEntriesRequest{
+		MessageID:    messageID,
+		Term:         3,
+		NextLogIndex: 5,
+		LastLogTerm:  3,
+		Entries:      nil,
+		LeaderCommit: 3,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(p2p.AppendEntriesResponse{
+		MessageID:    messageID,
+		Term:         3,
+		NextLogIndex: 3,
+	}, msg)
+
+	requireT.EqualValues(3, s.CurrentTerm())
+	_, entries, err := s.Entries(0)
+	requireT.NoError(err)
+	requireT.EqualValues([]state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 1},
+	}, entries)
+
+	requireT.EqualValues(1, r.committedCount)
+}
+
+func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *testing.T) {
+	requireT := require.New(t)
+	s := &state.State{}
+	requireT.NoError(s.SetCurrentTerm(1))
+	_, _, err := s.Append(0, 0, []state.LogItem{
+		{Term: 1},
+		{Term: 1},
+		{Term: 1},
+	})
+	requireT.NoError(err)
+
+	r, _ := newReactor(s)
+	r.committedCount = 3
+
+	messageID := p2p.NewMessageID()
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, p2p.AppendEntriesRequest{
+		MessageID:    messageID,
+		Term:         1,
+		NextLogIndex: 3,
+		LastLogTerm:  1,
+		Entries:      nil,
+		LeaderCommit: 2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
