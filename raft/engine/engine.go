@@ -13,12 +13,8 @@ import (
 
 // Send is an instruction to send messages to peers.
 type Send struct {
-	// MessageID is the message ID.
-	MessageID p2p.MessageID
 	// PeerID is the recipient, if equal to `ZeroServerID` message is broadcasted to all connected peers.
 	Recipients []types.ServerID
-	// ExpectResponse means sender expects response from recipient.
-	ExpectResponse bool
 	// Message is message to send.
 	Message any
 }
@@ -42,6 +38,7 @@ type Engine struct {
 
 // Apply applied command and returns message to be sent to peers.
 func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
+	var messageID p2p.MessageID
 	var toSend Send
 
 	role := e.reactor.Role()
@@ -62,7 +59,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
 	case p2p.VoteRequest:
 		resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
 		if err != nil {
@@ -78,7 +75,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.broadcastAppendEntriesRequest(req)
+		messageID, toSend = e.broadcastAppendEntriesRequest(req)
 	case p2c.ClientRequest:
 		leaderID := e.reactor.LeaderID()
 		if leaderID == types.ZeroServerID {
@@ -89,7 +86,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			if err != nil {
 				return 0, Send{}, err
 			}
-			toSend = e.broadcastAppendEntriesRequest(req)
+			messageID, toSend = e.broadcastAppendEntriesRequest(req)
 			break
 		}
 
@@ -99,30 +96,28 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		}
 
 		toSend = Send{
-			MessageID:      p2p.NewMessageID(),
-			Recipients:     []types.ServerID{leaderID},
-			ExpectResponse: false,
-			Message:        c,
+			Recipients: []types.ServerID{leaderID},
+			Message:    c,
 		}
 	case types.HeartbeatTimeout:
 		req, err := e.reactor.ApplyHeartbeatTimeout(time.Time(c))
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.broadcastAppendEntriesRequest(req)
+		messageID, toSend = e.broadcastAppendEntriesRequest(req)
 	case types.ElectionTimeout:
 		req, err := e.reactor.ApplyElectionTimeout(time.Time(c))
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.broadcastVoteRequest(req)
+		messageID, toSend = e.broadcastVoteRequest(req)
 	case types.ServerID:
 		req, err := e.reactor.ApplyPeerConnected(c)
 		if err != nil {
 			return 0, Send{}, err
 		}
 		e.expectedResponses[c] = p2p.ZeroMessageID
-		toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
 	default:
 		return 0, Send{}, errors.Errorf("unexpected message type %T", c)
 	}
@@ -132,70 +127,76 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		clear(e.expectedResponses)
 	}
 
-	if toSend.MessageID == p2p.ZeroMessageID {
-		return newRole, Send{}, nil
+	if messageID == p2p.ZeroMessageID {
+		return newRole, toSend, nil
 	}
 
-	if toSend.ExpectResponse {
-		// FIXME (wojciech): Avoid allocation.
-		recipients := make([]types.ServerID, 0, len(e.peers))
-		for _, p := range toSend.Recipients {
-			if e.expectedResponses[p] == p2p.ZeroMessageID {
-				e.expectedResponses[p] = toSend.MessageID
-				recipients = append(recipients, p)
-			}
+	// FIXME (wojciech): Avoid allocation.
+	recipients := make([]types.ServerID, 0, len(e.peers))
+	for _, p := range toSend.Recipients {
+		if e.expectedResponses[p] == p2p.ZeroMessageID {
+			e.expectedResponses[p] = messageID
+			recipients = append(recipients, p)
 		}
-		toSend.Recipients = recipients
 	}
+	toSend.Recipients = recipients
 
 	return newRole, toSend, nil
 }
 
-func (e *Engine) unicastAppendEntriesRequest(peerID types.ServerID, req p2p.AppendEntriesRequest) Send {
-	return Send{
-		MessageID: req.MessageID,
+func (e *Engine) unicastAppendEntriesRequest(
+	peerID types.ServerID,
+	req p2p.AppendEntriesRequest,
+) (p2p.MessageID, Send) {
+	if req.MessageID == p2p.ZeroMessageID {
+		return p2p.ZeroMessageID, Send{}
+	}
+	return req.MessageID, Send{
 		// FIXME (wojciech): Avoid allocation.
-		Recipients:     []types.ServerID{peerID},
-		ExpectResponse: true,
-		Message:        req,
+		Recipients: []types.ServerID{peerID},
+		Message:    req,
 	}
 }
 
-func (e *Engine) broadcastAppendEntriesRequest(req p2p.AppendEntriesRequest) Send {
-	return Send{
-		MessageID:      req.MessageID,
-		Recipients:     e.peers,
-		ExpectResponse: true,
-		Message:        req,
+func (e *Engine) broadcastAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.MessageID, Send) {
+	if req.MessageID == p2p.ZeroMessageID {
+		return p2p.ZeroMessageID, Send{}
+	}
+	return req.MessageID, Send{
+		Recipients: e.peers,
+		Message:    req,
 	}
 }
 
 func (e *Engine) unicastAppendEntriesResponse(peerID types.ServerID, resp p2p.AppendEntriesResponse) Send {
+	if resp.MessageID == p2p.ZeroMessageID {
+		return Send{}
+	}
 	return Send{
-		MessageID: resp.MessageID,
 		// FIXME (wojciech): Avoid allocation.
-		Recipients:     []types.ServerID{peerID},
-		ExpectResponse: false,
-		Message:        resp,
+		Recipients: []types.ServerID{peerID},
+		Message:    resp,
 	}
 }
 
-func (e *Engine) broadcastVoteRequest(req p2p.VoteRequest) Send {
-	return Send{
-		MessageID:      req.MessageID,
-		Recipients:     e.peers,
-		ExpectResponse: true,
-		Message:        req,
+func (e *Engine) broadcastVoteRequest(req p2p.VoteRequest) (p2p.MessageID, Send) {
+	if req.MessageID == p2p.ZeroMessageID {
+		return p2p.ZeroMessageID, Send{}
+	}
+	return req.MessageID, Send{
+		Recipients: e.peers,
+		Message:    req,
 	}
 }
 
 func (e *Engine) unicastVoteResponse(peerID types.ServerID, resp p2p.VoteResponse) Send {
+	if resp.MessageID == p2p.ZeroMessageID {
+		return Send{}
+	}
 	return Send{
-		MessageID: resp.MessageID,
 		// FIXME (wojciech): Avoid allocation.
-		Recipients:     []types.ServerID{peerID},
-		ExpectResponse: false,
-		Message:        resp,
+		Recipients: []types.ServerID{peerID},
+		Message:    resp,
 	}
 }
 
