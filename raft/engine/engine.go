@@ -52,7 +52,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		toSend = e.unicastAppendEntriesResponse(cmd.PeerID, resp)
 	case p2p.AppendEntriesResponse:
 		if !e.isExpected(cmd.PeerID, c.MessageID) {
-			return 0, Send{}, nil
+			return e.reactor.Role(), Send{}, nil
 		}
 
 		req, err := e.reactor.ApplyAppendEntriesResponse(cmd.PeerID, c)
@@ -68,7 +68,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 		toSend = e.unicastVoteResponse(cmd.PeerID, resp)
 	case p2p.VoteResponse:
 		if !e.isExpected(cmd.PeerID, c.MessageID) {
-			return 0, Send{}, nil
+			return e.reactor.Role(), Send{}, nil
 		}
 
 		req, err := e.reactor.ApplyVoteResponse(cmd.PeerID, c)
@@ -79,7 +79,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 	case p2c.ClientRequest:
 		leaderID := e.reactor.LeaderID()
 		if leaderID == types.ZeroServerID {
-			return 0, Send{}, nil
+			return e.reactor.Role(), Send{}, nil
 		}
 		if leaderID == e.reactor.ID() {
 			req, err := e.reactor.ApplyClientRequest(c)
@@ -92,7 +92,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 
 		// We redirect request to leader, but only once, to avoid infinite hops.
 		if cmd.PeerID != types.ZeroServerID {
-			return 0, Send{}, nil
+			return e.reactor.Role(), Send{}, nil
 		}
 
 		toSend = Send{
