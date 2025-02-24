@@ -16,13 +16,12 @@ import (
 
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/magma/raft/wire/p2c"
-	"github.com/outofforest/magma/raft/wire/p2p"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 // New creates new reactor of raft consensus algorithm.
 func New(
-	id types.ServerID,
+	id magmatypes.ServerID,
 	majority int,
 	s *state.State,
 	timeSource TimeSource,
@@ -34,8 +33,8 @@ func New(
 		majority:     majority,
 		lastLogTerm:  s.LastLogTerm(),
 		nextLogIndex: s.NextLogIndex(),
-		nextIndex:    map[types.ServerID]types.Index{},
-		matchIndex:   map[types.ServerID]types.Index{},
+		nextIndex:    map[magmatypes.ServerID]types.Index{},
+		matchIndex:   map[magmatypes.ServerID]types.Index{},
 	}
 	r.transitionToFollower()
 
@@ -46,8 +45,8 @@ func New(
 type Reactor struct {
 	timeSource TimeSource
 
-	id       types.ServerID
-	leaderID types.ServerID
+	id       magmatypes.ServerID
+	leaderID magmatypes.ServerID
 	state    *state.State
 
 	majority       int
@@ -64,13 +63,13 @@ type Reactor struct {
 
 	// Leader specific.
 	indexTermStarted types.Index
-	nextIndex        map[types.ServerID]types.Index
-	matchIndex       map[types.ServerID]types.Index
+	nextIndex        map[magmatypes.ServerID]types.Index
+	matchIndex       map[magmatypes.ServerID]types.Index
 	heartBeatTime    time.Time
 }
 
 // ID returns the ID of the server.
-func (r *Reactor) ID() types.ServerID {
+func (r *Reactor) ID() magmatypes.ServerID {
 	return r.id
 }
 
@@ -80,7 +79,7 @@ func (r *Reactor) Role() types.Role {
 }
 
 // LeaderID returns current leader.
-func (r *Reactor) LeaderID() types.ServerID {
+func (r *Reactor) LeaderID() magmatypes.ServerID {
 	return r.leaderID
 }
 
@@ -89,9 +88,9 @@ func (r *Reactor) LeaderID() types.ServerID {
 // based on the request parameters. If the request is invalid or a protocol bug is detected,
 // it returns an appropriate error.
 func (r *Reactor) ApplyAppendEntriesRequest(
-	peerID types.ServerID,
-	m *p2p.AppendEntriesRequest,
-) (*p2p.AppendEntriesResponse, error) {
+	peerID magmatypes.ServerID,
+	m *types.AppendEntriesRequest,
+) (*types.AppendEntriesResponse, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
 		return nil, errors.New("bug in protocol")
 	}
@@ -113,9 +112,9 @@ func (r *Reactor) ApplyAppendEntriesRequest(
 // If the peer's log is behind, it prepares and returns a new AppendEntries request.
 // Returns an empty request if no further action is required or an error occurred.
 func (r *Reactor) ApplyAppendEntriesResponse(
-	peerID types.ServerID,
-	m *p2p.AppendEntriesResponse,
-) (*p2p.AppendEntriesRequest, error) {
+	peerID magmatypes.ServerID,
+	m *types.AppendEntriesResponse,
+) (*types.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
@@ -146,7 +145,7 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 // It ensures the reactor transitions to a follower if necessary,
 // based on the term in the request, and then handles the vote request.
 // The function returns a VoteResponse and an error if any issues occur during processing.
-func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m *p2p.VoteRequest) (*p2p.VoteResponse, error) {
+func (r *Reactor) ApplyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (*types.VoteResponse, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
@@ -165,9 +164,9 @@ func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m *p2p.VoteRequest) (*
 // When the majority of votes is achieved, it transitions the reactor to the leader.
 // If no action is required or conditions aren't met, it returns an empty AppendEntriesRequest.
 func (r *Reactor) ApplyVoteResponse(
-	peerID types.ServerID,
-	m *p2p.VoteResponse,
-) (*p2p.AppendEntriesRequest, error) {
+	peerID magmatypes.ServerID,
+	m *types.VoteResponse,
+) (*types.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
 		return nil, err
 	}
@@ -192,7 +191,7 @@ func (r *Reactor) ApplyVoteResponse(
 // It ensures the reactor can only process the request if it is in the Leader role.
 // It appends the client's data as a new log entry, and returns an AppendEntriesRequest to replicate
 // the log entry to peers.
-func (r *Reactor) ApplyClientRequest(m *p2c.ClientRequest) (*p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntriesRequest, error) {
 	// ApplyClientRequest processes a client request to append a log item.
 	// If the reactor is not in the Leader role, it returns an empty AppendEntriesRequest.
 	// As the leader, it appends the client's data as a new log item, updates the heartbeat time,
@@ -202,7 +201,7 @@ func (r *Reactor) ApplyClientRequest(m *p2c.ClientRequest) (*p2p.AppendEntriesRe
 		return nil, nil //nolint:nilnil
 	}
 
-	newLogIndex, err := r.appendLogItem(state.LogItem{
+	newLogIndex, err := r.appendLogItem(types.LogItem{
 		Term: r.state.CurrentTerm(),
 		Data: m.Data,
 	})
@@ -229,7 +228,7 @@ func (r *Reactor) ApplyClientRequest(m *p2c.ClientRequest) (*p2p.AppendEntriesRe
 // sends a heartbeat to other peers if the timeout has expired. The function checks
 // if the reactor is still in the Leader role and whether the provided timeout is
 // valid (i.e., after the last recorded heartbeat).
-func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*types.AppendEntriesRequest, error) {
 	if r.role != types.RoleLeader || t.Before(r.heartBeatTime) {
 		return nil, nil //nolint:nilnil
 	}
@@ -251,7 +250,7 @@ func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*p2p.AppendEntriesRequest,
 // ApplyElectionTimeout processes an election timeout event, transitioning the reactor
 // to a candidate state if the timeout has expired and the reactor is not already a leader.
 // It then sends a VoteRequest to peers to begin a new election.
-func (r *Reactor) ApplyElectionTimeout(t time.Time) (*p2p.VoteRequest, error) {
+func (r *Reactor) ApplyElectionTimeout(t time.Time) (*types.VoteRequest, error) {
 	if r.role == types.RoleLeader || t.Before(r.electionTime) {
 		return nil, nil //nolint:nilnil
 	}
@@ -263,7 +262,7 @@ func (r *Reactor) ApplyElectionTimeout(t time.Time) (*p2p.VoteRequest, error) {
 // If the reactor is in the Leader role, it prepares an AppendEntriesRequest
 // for the newly connected peer. It also initializes the peer's nextIndex and
 // matchIndex to track replication state.
-func (r *Reactor) ApplyPeerConnected(peerID types.ServerID) (*p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyPeerConnected(peerID magmatypes.ServerID) (*types.AppendEntriesRequest, error) {
 	if r.role != types.RoleLeader {
 		return nil, nil //nolint:nilnil
 	}
@@ -279,7 +278,11 @@ func (r *Reactor) ApplyPeerConnected(peerID types.ServerID) (*p2p.AppendEntriesR
 	return msg, nil
 }
 
-func (r *Reactor) maybeTransitionToFollower(peerID types.ServerID, term types.Term, onAppendEntryRequest bool) error {
+func (r *Reactor) maybeTransitionToFollower(
+	peerID magmatypes.ServerID,
+	term types.Term,
+	onAppendEntryRequest bool,
+) error {
 	if term < r.state.CurrentTerm() || (term == r.state.CurrentTerm() && !onAppendEntryRequest) {
 		return nil
 	}
@@ -309,7 +312,7 @@ func (r *Reactor) transitionToFollower() {
 	clear(r.matchIndex)
 }
 
-func (r *Reactor) transitionToCandidate() (*p2p.VoteRequest, error) {
+func (r *Reactor) transitionToCandidate() (*types.VoteRequest, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
 		return nil, err
 	}
@@ -333,14 +336,14 @@ func (r *Reactor) transitionToCandidate() (*p2p.VoteRequest, error) {
 		return nil, err
 	}
 
-	return &p2p.VoteRequest{
+	return &types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 	}, nil
 }
 
-func (r *Reactor) transitionToLeader() (*p2p.AppendEntriesRequest, error) {
+func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
 	clear(r.nextIndex)
@@ -348,7 +351,7 @@ func (r *Reactor) transitionToLeader() (*p2p.AppendEntriesRequest, error) {
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
-	r.indexTermStarted, err = r.appendLogItem(state.LogItem{
+	r.indexTermStarted, err = r.appendLogItem(types.LogItem{
 		Term: r.state.CurrentTerm(),
 	})
 	if err != nil {
@@ -370,12 +373,12 @@ func (r *Reactor) transitionToLeader() (*p2p.AppendEntriesRequest, error) {
 	return msg, nil
 }
 
-func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*p2p.AppendEntriesRequest, error) {
+func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
 	lastLogTerm, entries, err := r.state.Entries(nextLogIndex)
 	if err != nil {
 		return nil, err
 	}
-	return &p2p.AppendEntriesRequest{
+	return &types.AppendEntriesRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  lastLogTerm,
@@ -384,8 +387,8 @@ func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*p2p.Append
 	}, nil
 }
 
-func (r *Reactor) handleAppendEntriesRequest(req *p2p.AppendEntriesRequest) (*p2p.AppendEntriesResponse, error) {
-	resp := &p2p.AppendEntriesResponse{
+func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
+	resp := &types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 	}
@@ -413,10 +416,13 @@ func (r *Reactor) handleAppendEntriesRequest(req *p2p.AppendEntriesRequest) (*p2
 	return resp, nil
 }
 
-func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req *p2p.VoteRequest) (*p2p.VoteResponse, error) {
+func (r *Reactor) handleVoteRequest(
+	candidateID magmatypes.ServerID,
+	req *types.VoteRequest,
+) (*types.VoteResponse, error) {
 	if req.Term < r.state.CurrentTerm() || r.lastLogTerm > req.LastLogTerm ||
 		(r.lastLogTerm == req.LastLogTerm && r.nextLogIndex > req.NextLogIndex) {
-		return &p2p.VoteResponse{
+		return &types.VoteResponse{
 			Term: r.state.CurrentTerm(),
 		}, nil
 	}
@@ -429,7 +435,7 @@ func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req *p2p.VoteReq
 		r.electionTime = r.timeSource.Now()
 	}
 
-	return &p2p.VoteResponse{
+	return &types.VoteResponse{
 		Term:        r.state.CurrentTerm(),
 		VoteGranted: granted,
 	}, nil
@@ -455,10 +461,10 @@ func (r *Reactor) computeCommittedCount() types.Index {
 	return indexes[r.majority-1]
 }
 
-func (r *Reactor) appendLogItem(item state.LogItem) (types.Index, error) {
+func (r *Reactor) appendLogItem(item types.LogItem) (types.Index, error) {
 	nextLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, []state.LogItem{item})
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, []types.LogItem{item})
 	if err != nil {
 		return 0, err
 	}
@@ -470,7 +476,7 @@ func (r *Reactor) appendLogItem(item state.LogItem) (types.Index, error) {
 	return nextLogIndex, nil
 }
 
-func (r *Reactor) getNextIndex(peerID types.ServerID) types.Index {
+func (r *Reactor) getNextIndex(peerID magmatypes.ServerID) types.Index {
 	if i, exists := r.nextIndex[peerID]; exists {
 		return i
 	}

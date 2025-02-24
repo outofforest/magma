@@ -1,12 +1,9 @@
-package wire
+package p2p
 
 import (
 	"unsafe"
 
-	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/magma/raft/wire/p2c"
-	"github.com/outofforest/magma/raft/wire/p2p"
 	"github.com/outofforest/mass"
 	"github.com/outofforest/proton"
 	"github.com/pkg/errors"
@@ -27,24 +24,24 @@ var _ proton.Marshaller = Marshaller{}
 func NewMarshaller(capacity uint64) Marshaller {
 	return Marshaller{
 		mass0: mass.New[Hello](capacity),
-		mass1: mass.New[p2c.ClientRequest](capacity),
-		mass2: mass.New[p2p.VoteResponse](capacity),
-		mass3: mass.New[p2p.VoteRequest](capacity),
-		mass4: mass.New[p2p.AppendEntriesResponse](capacity),
-		mass6: mass.New[p2p.AppendEntriesRequest](capacity),
-		mass5: mass.New[state.LogItem](capacity),
+		mass1: mass.New[types.ClientRequest](capacity),
+		mass2: mass.New[types.VoteResponse](capacity),
+		mass3: mass.New[types.VoteRequest](capacity),
+		mass4: mass.New[types.AppendEntriesResponse](capacity),
+		mass6: mass.New[types.AppendEntriesRequest](capacity),
+		mass5: mass.New[types.LogItem](capacity),
 	}
 }
 
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {
 	mass0 *mass.Mass[Hello]
-	mass1 *mass.Mass[p2c.ClientRequest]
-	mass2 *mass.Mass[p2p.VoteResponse]
-	mass3 *mass.Mass[p2p.VoteRequest]
-	mass4 *mass.Mass[p2p.AppendEntriesResponse]
-	mass6 *mass.Mass[p2p.AppendEntriesRequest]
-	mass5 *mass.Mass[state.LogItem]
+	mass1 *mass.Mass[types.ClientRequest]
+	mass2 *mass.Mass[types.VoteResponse]
+	mass3 *mass.Mass[types.VoteRequest]
+	mass4 *mass.Mass[types.AppendEntriesResponse]
+	mass6 *mass.Mass[types.AppendEntriesRequest]
+	mass5 *mass.Mass[types.LogItem]
 }
 
 // Size computes the size of marshalled message.
@@ -52,15 +49,15 @@ func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *Hello:
 		return size0(msg2), nil
-	case *p2c.ClientRequest:
+	case *types.ClientRequest:
 		return size1(msg2), nil
-	case *p2p.VoteResponse:
+	case *types.VoteResponse:
 		return size2(msg2), nil
-	case *p2p.VoteRequest:
+	case *types.VoteRequest:
 		return size3(msg2), nil
-	case *p2p.AppendEntriesResponse:
+	case *types.AppendEntriesResponse:
 		return size4(msg2), nil
-	case *p2p.AppendEntriesRequest:
+	case *types.AppendEntriesRequest:
 		return size6(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -78,15 +75,15 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	switch msg2 := msg.(type) {
 	case *Hello:
 		return id0, marshal0(msg2, buf), nil
-	case *p2c.ClientRequest:
+	case *types.ClientRequest:
 		return id1, marshal1(msg2, buf), nil
-	case *p2p.VoteResponse:
+	case *types.VoteResponse:
 		return id2, marshal2(msg2, buf), nil
-	case *p2p.VoteRequest:
+	case *types.VoteRequest:
 		return id3, marshal3(msg2, buf), nil
-	case *p2p.AppendEntriesResponse:
+	case *types.AppendEntriesResponse:
 		return id4, marshal4(msg2, buf), nil
-	case *p2p.AppendEntriesRequest:
+	case *types.AppendEntriesRequest:
 		return id6, marshal6(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -176,7 +173,7 @@ func unmarshal0(
 	return o
 }
 
-func size1(m *p2c.ClientRequest) uint64 {
+func size1(m *types.ClientRequest) uint64 {
 	var n uint64 = 1
 	{
 		// Data
@@ -209,7 +206,7 @@ func size1(m *p2c.ClientRequest) uint64 {
 	return n
 }
 
-func marshal1(m *p2c.ClientRequest, b []byte) uint64 {
+func marshal1(m *types.ClientRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Data
@@ -365,7 +362,7 @@ func marshal1(m *p2c.ClientRequest, b []byte) uint64 {
 }
 
 func unmarshal1(
-	m *p2c.ClientRequest,
+	m *types.ClientRequest,
 	b []byte,
 ) uint64 {
 	var o uint64
@@ -429,7 +426,7 @@ func unmarshal1(
 	return o
 }
 
-func size2(m *p2p.VoteResponse) uint64 {
+func size2(m *types.VoteResponse) uint64 {
 	var n uint64 = 18
 	{
 		// Term
@@ -460,7 +457,7 @@ func size2(m *p2p.VoteResponse) uint64 {
 	return n
 }
 
-func marshal2(m *p2p.VoteResponse, b []byte) uint64 {
+func marshal2(m *types.VoteResponse, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// MessageID
@@ -626,7 +623,7 @@ func marshal2(m *p2p.VoteResponse, b []byte) uint64 {
 }
 
 func unmarshal2(
-	m *p2p.VoteResponse,
+	m *types.VoteResponse,
 	b []byte,
 ) uint64 {
 	var o uint64 = 1
@@ -694,7 +691,7 @@ func unmarshal2(
 	return o
 }
 
-func size3(m *p2p.VoteRequest) uint64 {
+func size3(m *types.VoteRequest) uint64 {
 	var n uint64 = 19
 	{
 		// Term
@@ -777,7 +774,7 @@ func size3(m *p2p.VoteRequest) uint64 {
 	return n
 }
 
-func marshal3(m *p2p.VoteRequest, b []byte) uint64 {
+func marshal3(m *types.VoteRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -1222,7 +1219,7 @@ func marshal3(m *p2p.VoteRequest, b []byte) uint64 {
 }
 
 func unmarshal3(
-	m *p2p.VoteRequest,
+	m *types.VoteRequest,
 	b []byte,
 ) uint64 {
 	var o uint64
@@ -1383,7 +1380,7 @@ func unmarshal3(
 	return o
 }
 
-func size4(m *p2p.AppendEntriesResponse) uint64 {
+func size4(m *types.AppendEntriesResponse) uint64 {
 	var n uint64 = 18
 	{
 		// Term
@@ -1440,7 +1437,7 @@ func size4(m *p2p.AppendEntriesResponse) uint64 {
 	return n
 }
 
-func marshal4(m *p2p.AppendEntriesResponse, b []byte) uint64 {
+func marshal4(m *types.AppendEntriesResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -1741,7 +1738,7 @@ func marshal4(m *p2p.AppendEntriesResponse, b []byte) uint64 {
 }
 
 func unmarshal4(
-	m *p2p.AppendEntriesResponse,
+	m *types.AppendEntriesResponse,
 	b []byte,
 ) uint64 {
 	var o uint64
@@ -1853,7 +1850,7 @@ func unmarshal4(
 	return o
 }
 
-func size6(m *p2p.AppendEntriesRequest) uint64 {
+func size6(m *types.AppendEntriesRequest) uint64 {
 	var n uint64 = 21
 	{
 		// Term
@@ -1992,7 +1989,7 @@ func size6(m *p2p.AppendEntriesRequest) uint64 {
 	return n
 }
 
-func marshal6(m *p2p.AppendEntriesRequest, b []byte) uint64 {
+func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -2728,9 +2725,9 @@ func marshal6(m *p2p.AppendEntriesRequest, b []byte) uint64 {
 }
 
 func unmarshal6(
-	m *p2p.AppendEntriesRequest,
+	m *types.AppendEntriesRequest,
 	b []byte,
-	mass5 *mass.Mass[state.LogItem],
+	mass5 *mass.Mass[types.LogItem],
 ) uint64 {
 	var o uint64
 	{
@@ -3000,7 +2997,7 @@ func unmarshal6(
 	return o
 }
 
-func size5(m *state.LogItem) uint64 {
+func size5(m *types.LogItem) uint64 {
 	var n uint64 = 2
 	{
 		// Term
@@ -3059,7 +3056,7 @@ func size5(m *state.LogItem) uint64 {
 	return n
 }
 
-func marshal5(m *state.LogItem, b []byte) uint64 {
+func marshal5(m *types.LogItem, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -3359,7 +3356,7 @@ func marshal5(m *state.LogItem, b []byte) uint64 {
 }
 
 func unmarshal5(
-	m *state.LogItem,
+	m *types.LogItem,
 	b []byte,
 ) uint64 {
 	var o uint64

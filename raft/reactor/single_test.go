@@ -8,7 +8,7 @@ import (
 
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/magma/raft/wire/p2c"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
@@ -33,7 +33,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
-	requireT.Equal(map[types.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
 	requireT.EqualValues(1, r.committedCount)
@@ -50,7 +50,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 	}, entries)
 }
@@ -58,7 +58,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -73,7 +73,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(&p2c.ClientRequest{
+	msg, err := r.ApplyClientRequest(&types.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)
@@ -83,7 +83,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
-	requireT.Equal(map[types.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 7,
 	}, r.matchIndex)
 	requireT.EqualValues(7, r.committedCount)
@@ -92,7 +92,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -109,7 +109,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -133,7 +133,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
-	requireT.Equal(map[types.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 6,
 	}, r.matchIndex)
 	requireT.EqualValues(6, r.committedCount)
@@ -142,7 +142,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},

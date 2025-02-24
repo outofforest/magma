@@ -7,6 +7,7 @@ require (
 	github.com/outofforest/mass v0.2.1
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.8.1
+	github.com/outofforest/resonance v0.8.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 )
@@ -16,6 +17,7 @@ require (
 	github.com/outofforest/ioc/v2 v2.5.2 // indirect
 	github.com/outofforest/logger v0.6.0 // indirect
 	github.com/outofforest/run v0.8.0 // indirect
+	github.com/outofforest/spin v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect

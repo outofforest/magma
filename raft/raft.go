@@ -12,23 +12,25 @@ import (
 	"github.com/outofforest/parallel"
 )
 
+// GossipFunc is the declaration of the function responsible for gossiping messages between peers.
+type GossipFunc func(ctx context.Context, cmdCh chan<- types.Command, sendCh <-chan engine.Send) error
+
 // Run runs Raft processor.
-func Run(ctx context.Context, e *engine.Engine) error {
+func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-		recvCh := make(chan types.Command, 10)
+		cmdCh := make(chan types.Command, 10)
 		sendCh := make(chan engine.Send, 10)
 		roleCh := make(chan types.Role, 1)
 
 		spawn("producers", parallel.Fail, func(ctx context.Context) error {
-			defer close(recvCh)
+			defer close(cmdCh)
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("timeouts", parallel.Fail, func(ctx context.Context) error {
-					return runTimeouts(ctx, roleCh, recvCh)
+					return runTimeouts(ctx, roleCh, cmdCh)
 				})
-				spawn("peers", parallel.Fail, func(ctx context.Context) error {
-					<-ctx.Done()
-					return errors.WithStack(ctx.Err())
+				spawn("gossip", parallel.Fail, func(ctx context.Context) error {
+					return gossipFunc(ctx, cmdCh, sendCh)
 				})
 				return nil
 			})
@@ -36,14 +38,14 @@ func Run(ctx context.Context, e *engine.Engine) error {
 		spawn("consumer", parallel.Fail, func(ctx context.Context) error {
 			defer close(sendCh)
 
-			return runEngine(ctx, e, recvCh, sendCh, roleCh)
+			return runEngine(ctx, e, cmdCh, sendCh, roleCh)
 		})
 
 		return nil
 	})
 }
 
-func runTimeouts(ctx context.Context, roleCh <-chan types.Role, recvCh chan<- types.Command) error {
+func runTimeouts(ctx context.Context, roleCh <-chan types.Role, cmdCh chan<- types.Command) error {
 	heartbeatDuration := heartbeatTimeout()
 	electionDuration := electionTimeout()
 
@@ -61,11 +63,11 @@ func runTimeouts(ctx context.Context, roleCh <-chan types.Role, recvCh chan<- ty
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
 		case <-tickerHeartbeat.C:
-			// FIXME (wojciech): Using p2p.Message here is strange.
-			recvCh <- types.Command{Cmd: types.HeartbeatTimeout(time.Now().Add(-heartbeatDuration))}
+			// FIXME (wojciech): Using types.Message here is strange.
+			cmdCh <- types.Command{Cmd: types.HeartbeatTimeout(time.Now().Add(-heartbeatDuration))}
 		case <-tickerElection.C:
-			// FIXME (wojciech): Using p2p.Message here is strange.
-			recvCh <- types.Command{Cmd: types.ElectionTimeout(time.Now().Add(-electionDuration))}
+			// FIXME (wojciech): Using types.Message here is strange.
+			cmdCh <- types.Command{Cmd: types.ElectionTimeout(time.Now().Add(-electionDuration))}
 		case role := <-roleCh:
 			switch role {
 			case types.RoleFollower:
@@ -85,14 +87,14 @@ func runTimeouts(ctx context.Context, roleCh <-chan types.Role, recvCh chan<- ty
 func runEngine(
 	ctx context.Context,
 	e *engine.Engine,
-	recvCh <-chan types.Command,
+	cmdCh <-chan types.Command,
 	sendCh chan<- engine.Send,
 	roleCh chan types.Role,
 ) error {
 	role := types.RoleFollower
 	roleCh <- role
 
-	for cmd := range recvCh {
+	for cmd := range cmdCh {
 		newRole, toSend, err := e.Apply(cmd)
 		if err != nil {
 			return err

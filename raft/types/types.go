@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/outofforest/magma/types"
 )
 
 // Role is the role of the server.
@@ -24,17 +26,14 @@ type (
 
 	// Index represents the index of a log entry.
 	Index uint64
-
-	// ServerID represents the unique identifier of a server.
-	ServerID uuid.UUID
 )
 
 // ZeroServerID represents an uninitialized ServerID with a zero value.
-var ZeroServerID ServerID
+var ZeroServerID types.ServerID
 
 // Command represents a command executed by state machine.
 type Command struct {
-	PeerID ServerID
+	PeerID types.ServerID
 	Cmd    any
 }
 
@@ -43,3 +42,77 @@ type HeartbeatTimeout time.Time
 
 // ElectionTimeout is sent to raft reactor when it's time to switch to election phase.
 type ElectionTimeout time.Time
+
+// NewMessageID generates a new unique identifier for a message.
+func NewMessageID() MessageID {
+	return MessageID(uuid.New())
+}
+
+// MessageID represents a unique identifier for a message.
+type MessageID uuid.UUID
+
+// ZeroMessageID represents uninitialized message ID.
+var ZeroMessageID MessageID
+
+// AppendEntriesRequest represents the structure of a request sent by a Raft leader
+// to replicate log entries or as a heartbeat.
+type AppendEntriesRequest struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
+	// Term is the leader's current term.
+	Term Term
+	// NextLogIndex is the index of the next log entry.
+	NextLogIndex Index
+	// LastLogTerm is the term of the last log entry.
+	LastLogTerm Term
+	// Entries are the log entries to store (empty for a heartbeat).
+	Entries []LogItem
+	// LeaderCommit is the leader's commit index.
+	LeaderCommit Index
+}
+
+// AppendEntriesResponse represents the response sent by a Raft follower
+// to the leader after processing an AppendEntriesRequest.
+type AppendEntriesResponse struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
+	// Term is the current term of the server receiving the request, for leader to update itself.
+	Term Term
+	// NextLogIndex is the index of the next log item.
+	NextLogIndex Index
+}
+
+// VoteRequest represents the structure of a request sent by a Raft candidate
+// to gather votes from other nodes in the cluster during an election process.
+type VoteRequest struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
+	// Term is the candidate's current term.
+	Term Term
+	// NextLogIndex is the index of the candidate's next log entry.
+	NextLogIndex Index
+	// LastLogTerm is the term of the candidate's last log entry.
+	LastLogTerm Term
+}
+
+// VoteResponse represents the response sent by a Raft node
+// to a candidate after processing a VoteRequest during an election.
+type VoteResponse struct {
+	// MessageID is random identifier of the message.
+	MessageID MessageID
+	// Term is the current term of the server receiving the request, for candidate to update itself.
+	Term Term
+	// VoteGranted indicates whether the candidate received the vote.
+	VoteGranted bool
+}
+
+// ClientRequest represents a client's request to append item to the log.
+type ClientRequest struct {
+	Data []byte
+}
+
+// LogItem represents a single entry in the log.
+type LogItem struct {
+	Term Term
+	Data []byte
+}
