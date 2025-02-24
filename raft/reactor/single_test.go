@@ -9,7 +9,6 @@ import (
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/raft/wire/p2c"
-	"github.com/outofforest/magma/raft/wire/p2p"
 )
 
 func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
@@ -32,7 +31,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT.Equal(expectedElectionTime, r.heartBeatTime)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 1,
@@ -74,7 +73,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
+	msg, err := r.ApplyClientRequest(&p2c.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)
@@ -82,7 +81,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 7,
@@ -132,7 +131,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[types.ServerID]types.Index{
 		serverID: 6,

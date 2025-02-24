@@ -44,13 +44,13 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 	role := e.reactor.Role()
 
 	switch c := cmd.Cmd.(type) {
-	case p2p.AppendEntriesRequest:
+	case *p2p.AppendEntriesRequest:
 		resp, err := e.reactor.ApplyAppendEntriesRequest(cmd.PeerID, c)
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.unicastAppendEntriesResponse(cmd.PeerID, resp)
-	case p2p.AppendEntriesResponse:
+		toSend = e.unicastAppendEntriesResponse(cmd.PeerID, c.MessageID, resp)
+	case *p2p.AppendEntriesResponse:
 		if !e.isExpected(cmd.PeerID, c.MessageID) {
 			return e.reactor.Role(), Send{}, nil
 		}
@@ -60,13 +60,13 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			return 0, Send{}, err
 		}
 		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
-	case p2p.VoteRequest:
+	case *p2p.VoteRequest:
 		resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
 		if err != nil {
 			return 0, Send{}, err
 		}
-		toSend = e.unicastVoteResponse(cmd.PeerID, resp)
-	case p2p.VoteResponse:
+		toSend = e.unicastVoteResponse(cmd.PeerID, c.MessageID, resp)
+	case *p2p.VoteResponse:
 		if !e.isExpected(cmd.PeerID, c.MessageID) {
 			return e.reactor.Role(), Send{}, nil
 		}
@@ -76,7 +76,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			return 0, Send{}, err
 		}
 		messageID, toSend = e.broadcastAppendEntriesRequest(req)
-	case p2c.ClientRequest:
+	case *p2c.ClientRequest:
 		leaderID := e.reactor.LeaderID()
 		if leaderID == types.ZeroServerID {
 			return e.reactor.Role(), Send{}, nil
@@ -146,11 +146,12 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 
 func (e *Engine) unicastAppendEntriesRequest(
 	peerID types.ServerID,
-	req p2p.AppendEntriesRequest,
+	req *p2p.AppendEntriesRequest,
 ) (p2p.MessageID, Send) {
-	if req.MessageID == p2p.ZeroMessageID {
+	if req == nil {
 		return p2p.ZeroMessageID, Send{}
 	}
+	req.MessageID = p2p.NewMessageID()
 	return req.MessageID, Send{
 		// FIXME (wojciech): Avoid allocation.
 		Recipients: []types.ServerID{peerID},
@@ -158,20 +159,26 @@ func (e *Engine) unicastAppendEntriesRequest(
 	}
 }
 
-func (e *Engine) broadcastAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.MessageID, Send) {
-	if req.MessageID == p2p.ZeroMessageID {
+func (e *Engine) broadcastAppendEntriesRequest(req *p2p.AppendEntriesRequest) (p2p.MessageID, Send) {
+	if req == nil {
 		return p2p.ZeroMessageID, Send{}
 	}
+	req.MessageID = p2p.NewMessageID()
 	return req.MessageID, Send{
 		Recipients: e.peers,
 		Message:    req,
 	}
 }
 
-func (e *Engine) unicastAppendEntriesResponse(peerID types.ServerID, resp p2p.AppendEntriesResponse) Send {
-	if resp.MessageID == p2p.ZeroMessageID {
+func (e *Engine) unicastAppendEntriesResponse(
+	peerID types.ServerID,
+	messageID p2p.MessageID,
+	resp *p2p.AppendEntriesResponse,
+) Send {
+	if resp == nil {
 		return Send{}
 	}
+	resp.MessageID = messageID
 	return Send{
 		// FIXME (wojciech): Avoid allocation.
 		Recipients: []types.ServerID{peerID},
@@ -179,20 +186,22 @@ func (e *Engine) unicastAppendEntriesResponse(peerID types.ServerID, resp p2p.Ap
 	}
 }
 
-func (e *Engine) broadcastVoteRequest(req p2p.VoteRequest) (p2p.MessageID, Send) {
-	if req.MessageID == p2p.ZeroMessageID {
+func (e *Engine) broadcastVoteRequest(req *p2p.VoteRequest) (p2p.MessageID, Send) {
+	if req == nil {
 		return p2p.ZeroMessageID, Send{}
 	}
+	req.MessageID = p2p.NewMessageID()
 	return req.MessageID, Send{
 		Recipients: e.peers,
 		Message:    req,
 	}
 }
 
-func (e *Engine) unicastVoteResponse(peerID types.ServerID, resp p2p.VoteResponse) Send {
-	if resp.MessageID == p2p.ZeroMessageID {
+func (e *Engine) unicastVoteResponse(peerID types.ServerID, messageID p2p.MessageID, resp *p2p.VoteResponse) Send {
+	if resp == nil {
 		return Send{}
 	}
+	resp.MessageID = messageID
 	return Send{
 		// FIXME (wojciech): Avoid allocation.
 		Recipients: []types.ServerID{peerID},

@@ -43,8 +43,7 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.Equal(serverID, r.leaderID)
 	requireT.EqualValues(10, r.votedForMe)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         3,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
@@ -96,9 +95,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	messageID := p2p.NewMessageID()
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, p2p.AppendEntriesRequest{
-		MessageID:    messageID,
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
@@ -120,8 +117,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(p2p.AppendEntriesResponse{
-		MessageID:    messageID,
+	requireT.Equal(&p2p.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 6,
 	}, msg)
@@ -160,17 +156,14 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	messageID := p2p.NewMessageID()
-
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    messageID,
+	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         3,
 		NextLogIndex: 2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(serverID, r.leaderID)
 
@@ -188,17 +181,14 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	messageID := p2p.NewMessageID()
-	msg, err := r.ApplyVoteRequest(peer1ID, p2p.VoteRequest{
-		MessageID:    messageID,
+	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
 		Term:         3,
 		NextLogIndex: 1,
 		LastLogTerm:  1,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(p2p.VoteResponse{
-		MessageID:   messageID,
+	requireT.Equal(&p2p.VoteResponse{
 		Term:        3,
 		VoteGranted: true,
 	}, msg)
@@ -231,18 +221,15 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	messageID := p2p.NewMessageID()
 	r.nextIndex[peer1ID] = 0
 
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    messageID,
+	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 2,
 		LastLogTerm:  2,
@@ -273,17 +260,13 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	messageID := p2p.NewMessageID()
-
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    messageID,
+	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 2,
 		LastLogTerm:  2,
@@ -316,16 +299,13 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 
 	clear(r.nextIndex)
 
-	messageID := p2p.NewMessageID()
-
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    messageID,
+	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.EqualValues(5, r.nextIndex[peer1ID])
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
@@ -352,8 +332,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	r.committedCount = 0
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -361,8 +340,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer2ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -395,8 +373,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	r.committedCount = 0
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -404,8 +381,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer2ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -439,8 +415,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	r.committedCount = 0
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 6,
 	})
@@ -448,8 +423,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	requireT.EqualValues(6, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer2ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 7,
 	})
@@ -483,8 +457,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	r.committedCount = 0
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -492,8 +465,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer2ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 4,
 	})
@@ -527,8 +499,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	r.committedCount = 7
 	r.matchIndex[serverID] = 7
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer1ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
@@ -536,8 +507,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 	requireT.EqualValues(7, r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, p2p.AppendEntriesResponse{
-		MessageID:    p2p.NewMessageID(),
+	_, err = r.ApplyAppendEntriesResponse(peer2ID, &p2p.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 6,
 	})
@@ -575,8 +545,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 5,
 		LastLogTerm:  5,
@@ -614,7 +583,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.ZeroMessageID, msg.MessageID)
+	requireT.Nil(msg)
 	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
 }
 
@@ -636,13 +605,12 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(p2c.ClientRequest{
+	msg, err := r.ApplyClientRequest(&p2c.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 6,
 		LastLogTerm:  4,
@@ -721,8 +689,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		peer3ID: 3,
 		peer4ID: 4,
 	}, r.matchIndex)
-	requireT.Equal(p2p.AppendEntriesRequest{
-		MessageID:    msg.MessageID,
+	requireT.Equal(&p2p.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 5,
 		LastLogTerm:  5,
