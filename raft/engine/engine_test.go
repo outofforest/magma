@@ -630,7 +630,6 @@ func TestApplyPeerConnected(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd:    peer1ID,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, role)
@@ -661,7 +660,6 @@ func TestApplyPeerConnectedNotLeader(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd:    peer1ID,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, role)

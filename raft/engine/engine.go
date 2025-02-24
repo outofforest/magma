@@ -43,83 +43,102 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 
 	role := e.reactor.Role()
 
-	switch c := cmd.Cmd.(type) {
-	case *p2p.AppendEntriesRequest:
-		resp, err := e.reactor.ApplyAppendEntriesRequest(cmd.PeerID, c)
-		if err != nil {
-			return 0, Send{}, err
-		}
-		toSend = e.unicastAppendEntriesResponse(cmd.PeerID, c.MessageID, resp)
-	case *p2p.AppendEntriesResponse:
-		if !e.isExpected(cmd.PeerID, c.MessageID) {
-			return e.reactor.Role(), Send{}, nil
-		}
+	switch {
+	case cmd.PeerID == types.ZeroServerID:
+		switch c := cmd.Cmd.(type) {
+		case *p2c.ClientRequest:
+			leaderID := e.reactor.LeaderID()
+			if leaderID == types.ZeroServerID {
+				return e.reactor.Role(), Send{}, nil
+			}
+			if leaderID == e.reactor.ID() {
+				req, err := e.reactor.ApplyClientRequest(c)
+				if err != nil {
+					return 0, Send{}, err
+				}
+				messageID, toSend = e.broadcastAppendEntriesRequest(req)
+				break
+			}
 
-		req, err := e.reactor.ApplyAppendEntriesResponse(cmd.PeerID, c)
-		if err != nil {
-			return 0, Send{}, err
-		}
-		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
-	case *p2p.VoteRequest:
-		resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
-		if err != nil {
-			return 0, Send{}, err
-		}
-		toSend = e.unicastVoteResponse(cmd.PeerID, c.MessageID, resp)
-	case *p2p.VoteResponse:
-		if !e.isExpected(cmd.PeerID, c.MessageID) {
-			return e.reactor.Role(), Send{}, nil
-		}
-
-		req, err := e.reactor.ApplyVoteResponse(cmd.PeerID, c)
-		if err != nil {
-			return 0, Send{}, err
-		}
-		messageID, toSend = e.broadcastAppendEntriesRequest(req)
-	case *p2c.ClientRequest:
-		leaderID := e.reactor.LeaderID()
-		if leaderID == types.ZeroServerID {
-			return e.reactor.Role(), Send{}, nil
-		}
-		if leaderID == e.reactor.ID() {
-			req, err := e.reactor.ApplyClientRequest(c)
+			toSend = Send{
+				Recipients: []types.ServerID{leaderID},
+				Message:    c,
+			}
+		case types.HeartbeatTimeout:
+			req, err := e.reactor.ApplyHeartbeatTimeout(time.Time(c))
 			if err != nil {
 				return 0, Send{}, err
 			}
 			messageID, toSend = e.broadcastAppendEntriesRequest(req)
-			break
+		case types.ElectionTimeout:
+			req, err := e.reactor.ApplyElectionTimeout(time.Time(c))
+			if err != nil {
+				return 0, Send{}, err
+			}
+			messageID, toSend = e.broadcastVoteRequest(req)
+		default:
+			return 0, Send{}, errors.Errorf("unexpected message type %T", c)
 		}
-
-		// We redirect request to leader, but only once, to avoid infinite hops.
-		if cmd.PeerID != types.ZeroServerID {
-			return e.reactor.Role(), Send{}, nil
-		}
-
-		toSend = Send{
-			Recipients: []types.ServerID{leaderID},
-			Message:    c,
-		}
-	case types.HeartbeatTimeout:
-		req, err := e.reactor.ApplyHeartbeatTimeout(time.Time(c))
+	case cmd.Cmd == nil:
+		req, err := e.reactor.ApplyPeerConnected(cmd.PeerID)
 		if err != nil {
 			return 0, Send{}, err
 		}
-		messageID, toSend = e.broadcastAppendEntriesRequest(req)
-	case types.ElectionTimeout:
-		req, err := e.reactor.ApplyElectionTimeout(time.Time(c))
-		if err != nil {
-			return 0, Send{}, err
-		}
-		messageID, toSend = e.broadcastVoteRequest(req)
-	case types.ServerID:
-		req, err := e.reactor.ApplyPeerConnected(c)
-		if err != nil {
-			return 0, Send{}, err
-		}
-		e.expectedResponses[c] = p2p.ZeroMessageID
+		e.expectedResponses[cmd.PeerID] = p2p.ZeroMessageID
 		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
 	default:
-		return 0, Send{}, errors.Errorf("unexpected message type %T", c)
+		switch c := cmd.Cmd.(type) {
+		case *p2p.AppendEntriesRequest:
+			resp, err := e.reactor.ApplyAppendEntriesRequest(cmd.PeerID, c)
+			if err != nil {
+				return 0, Send{}, err
+			}
+			toSend = e.unicastAppendEntriesResponse(cmd.PeerID, c.MessageID, resp)
+		case *p2p.AppendEntriesResponse:
+			if !e.isExpected(cmd.PeerID, c.MessageID) {
+				return e.reactor.Role(), Send{}, nil
+			}
+
+			req, err := e.reactor.ApplyAppendEntriesResponse(cmd.PeerID, c)
+			if err != nil {
+				return 0, Send{}, err
+			}
+			messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+		case *p2p.VoteRequest:
+			resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
+			if err != nil {
+				return 0, Send{}, err
+			}
+			toSend = e.unicastVoteResponse(cmd.PeerID, c.MessageID, resp)
+		case *p2p.VoteResponse:
+			if !e.isExpected(cmd.PeerID, c.MessageID) {
+				return e.reactor.Role(), Send{}, nil
+			}
+
+			req, err := e.reactor.ApplyVoteResponse(cmd.PeerID, c)
+			if err != nil {
+				return 0, Send{}, err
+			}
+			messageID, toSend = e.broadcastAppendEntriesRequest(req)
+		case *p2c.ClientRequest:
+			leaderID := e.reactor.LeaderID()
+			if leaderID == types.ZeroServerID {
+				return e.reactor.Role(), Send{}, nil
+			}
+			if leaderID == e.reactor.ID() {
+				req, err := e.reactor.ApplyClientRequest(c)
+				if err != nil {
+					return 0, Send{}, err
+				}
+				messageID, toSend = e.broadcastAppendEntriesRequest(req)
+				break
+			}
+
+			// We redirect request to leader, but only once, to avoid infinite hops.
+			return e.reactor.Role(), Send{}, nil
+		default:
+			return 0, Send{}, errors.Errorf("unexpected message type %T", c)
+		}
 	}
 
 	newRole := e.reactor.Role()
