@@ -9,18 +9,17 @@ import (
 
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/magma/raft/wire/p2c"
-	"github.com/outofforest/magma/raft/wire/p2p"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 var (
-	serverID = types.ServerID(uuid.New())
-	peer1ID  = types.ServerID(uuid.New())
-	peer2ID  = types.ServerID(uuid.New())
-	peer3ID  = types.ServerID(uuid.New())
-	peer4ID  = types.ServerID(uuid.New())
+	serverID = magmatypes.ServerID(uuid.New())
+	peer1ID  = magmatypes.ServerID(uuid.New())
+	peer2ID  = magmatypes.ServerID(uuid.New())
+	peer3ID  = magmatypes.ServerID(uuid.New())
+	peer4ID  = magmatypes.ServerID(uuid.New())
 
-	peers = []types.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
+	peers = []magmatypes.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
 )
 
 func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
@@ -77,11 +76,11 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 0,
 		LastLogTerm:  0,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 1,
 				Data: []byte{0x01},
@@ -91,7 +90,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 1,
 	}, msg)
@@ -101,7 +100,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{
 			Term: 1,
 			Data: []byte{0x01},
@@ -113,7 +112,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 	})
@@ -122,11 +121,11 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 2,
 		LastLogTerm:  1,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 1,
 				Data: []byte{0x01},
@@ -144,7 +143,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 5,
 	}, msg)
@@ -154,7 +153,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{
@@ -176,7 +175,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(3))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -186,11 +185,11 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 3,
 				Data: []byte{0x01},
@@ -208,7 +207,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 6,
 	}, msg)
@@ -218,7 +217,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -241,7 +240,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -251,11 +250,11 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 2,
 		LastLogTerm:  2,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 4,
 				Data: []byte{0x01},
@@ -265,7 +264,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 3,
 	}, msg)
@@ -274,7 +273,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{
@@ -288,7 +287,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -298,11 +297,11 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		LastLogTerm:  3,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 4,
 				Data: []byte{0x01},
@@ -312,7 +311,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 1,
 	}, msg)
@@ -321,7 +320,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 	}, entries)
 }
@@ -330,7 +329,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -343,11 +342,11 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 
 	// First time.
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 5,
 		LastLogTerm:  4,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 5,
 				Data: []byte{0x01},
@@ -357,7 +356,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 3,
 	}, msg)
@@ -367,7 +366,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	requireT.EqualValues(5, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -375,11 +374,11 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 
 	// Second time.
 
-	msg, err = r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err = r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         6,
 		NextLogIndex: 3,
 		LastLogTerm:  3,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 6,
 				Data: []byte{0x01},
@@ -389,7 +388,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         6,
 		NextLogIndex: 1,
 	}, msg)
@@ -399,7 +398,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	requireT.EqualValues(6, s.CurrentTerm())
 	_, entries, err = s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 	}, entries)
 }
@@ -408,7 +407,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -418,11 +417,11 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 1000,
 		LastLogTerm:  3,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 4,
 				Data: []byte{0x01},
@@ -432,7 +431,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 3,
 	}, msg)
@@ -442,7 +441,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -453,7 +452,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -463,7 +462,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
@@ -472,7 +471,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 3,
 	}, msg)
@@ -482,7 +481,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -493,7 +492,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -503,7 +502,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
@@ -512,7 +511,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         2,
 		NextLogIndex: 3,
 	}, msg)
@@ -522,7 +521,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT.EqualValues(2, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -533,7 +532,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(4))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -543,11 +542,11 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer2ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer2ID, &types.AppendEntriesRequest{
 		Term:         3,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 3,
 				Data: []byte{0x01},
@@ -557,7 +556,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
 		NextLogIndex: 3,
 	}, msg)
@@ -567,7 +566,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 2},
@@ -578,7 +577,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -588,11 +587,11 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	r, _ := newReactor(s)
 	r.committedCount = 1
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 1,
 				Data: []byte{0x01},
@@ -602,7 +601,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 4,
 	}, msg)
@@ -610,7 +609,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -627,7 +626,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -637,7 +636,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	r, _ := newReactor(s)
 	r.committedCount = 1
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
@@ -646,7 +645,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 3,
 	}, msg)
@@ -654,7 +653,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -667,7 +666,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -677,11 +676,11 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	r, _ := newReactor(s)
 	r.committedCount = 1
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
-		Entries: []state.LogItem{
+		Entries: []types.LogItem{
 			{
 				Term: 1,
 				Data: []byte{0x01},
@@ -691,7 +690,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 4,
 	}, msg)
@@ -699,7 +698,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -716,7 +715,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -726,7 +725,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	r, _ := newReactor(s)
 	r.committedCount = 1
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
@@ -735,7 +734,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 3,
 	}, msg)
@@ -743,7 +742,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -756,7 +755,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -768,7 +767,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	r, _ := newReactor(s)
 	r.committedCount = 1
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
 		NextLogIndex: 5,
 		LastLogTerm:  3,
@@ -777,7 +776,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         3,
 		NextLogIndex: 3,
 	}, msg)
@@ -785,7 +784,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	requireT.EqualValues(3, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -798,7 +797,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -808,7 +807,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	r, _ := newReactor(s)
 	r.committedCount = 3
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &p2p.AppendEntriesRequest{
+	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
@@ -817,7 +816,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.AppendEntriesResponse{
+	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         1,
 		NextLogIndex: 3,
 	}, msg)
@@ -825,7 +824,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]state.LogItem{
+	requireT.EqualValues([]types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 1},
@@ -841,14 +840,14 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         1,
 		NextLogIndex: 0,
 		LastLogTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        1,
 		VoteGranted: true,
 	}, msg)
@@ -869,7 +868,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -879,14 +878,14 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -907,7 +906,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -917,14 +916,14 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 4,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -949,14 +948,14 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         3,
 		NextLogIndex: 0,
 		LastLogTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        3,
 		VoteGranted: true,
 	}, msg)
@@ -977,7 +976,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -987,14 +986,14 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -1003,14 +1002,14 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 
 	expectedElectionTime = ts.Add(time.Hour)
 
-	msg, err = r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err = r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -1022,7 +1021,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -1032,14 +1031,14 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -1048,14 +1047,14 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 
 	expectedElectionTime = ts.Add(time.Hour)
 
-	msg, err = r.ApplyVoteRequest(peer2ID, &p2p.VoteRequest{
+	msg, err = r.ApplyVoteRequest(peer2ID, &types.VoteRequest{
 		Term:         3,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        3,
 		VoteGranted: true,
 	}, msg)
@@ -1071,14 +1070,14 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         1,
 		NextLogIndex: 0,
 		LastLogTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: false,
 	}, msg)
@@ -1095,7 +1094,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -1105,14 +1104,14 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         3,
 		NextLogIndex: 3,
 		LastLogTerm:  1,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        3,
 		VoteGranted: false,
 	}, msg)
@@ -1129,7 +1128,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -1140,14 +1139,14 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: false,
 	}, msg)
@@ -1164,7 +1163,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []state.LogItem{
+	_, _, err := s.Append(0, 0, []types.LogItem{
 		{Term: 1},
 		{Term: 1},
 		{Term: 2},
@@ -1174,14 +1173,14 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteRequest(peer1ID, &p2p.VoteRequest{
+	msg, err := r.ApplyVoteRequest(peer1ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	}, msg)
@@ -1190,14 +1189,14 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 
 	ts.Add(time.Hour)
 
-	msg, err = r.ApplyVoteRequest(peer2ID, &p2p.VoteRequest{
+	msg, err = r.ApplyVoteRequest(peer2ID, &types.VoteRequest{
 		Term:         2,
 		NextLogIndex: 3,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(&p2p.VoteResponse{
+	requireT.Equal(&types.VoteResponse{
 		Term:        2,
 		VoteGranted: false,
 	}, msg)
@@ -1220,7 +1219,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
-	requireT.Equal(&p2p.VoteRequest{
+	requireT.Equal(&types.VoteRequest{
 		Term:         1,
 		NextLogIndex: 0,
 		LastLogTerm:  0,
@@ -1277,7 +1276,7 @@ func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	s := &state.State{}
 	r, _ := newReactor(s)
 
-	msg, err := r.ApplyPeerConnected(types.ServerID(uuid.New()))
+	msg, err := r.ApplyPeerConnected(magmatypes.ServerID(uuid.New()))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Nil(msg)
@@ -1291,7 +1290,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 
 	notExpectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(&p2c.ClientRequest{
+	msg, err := r.ApplyClientRequest(&types.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)

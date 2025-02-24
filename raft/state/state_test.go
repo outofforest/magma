@@ -6,7 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/types"
+	rafttypes "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/types"
 )
 
 func TestCurrentTerm(t *testing.T) {
@@ -39,7 +40,7 @@ func TestSetCurrentTermResetsVotedFor(t *testing.T) {
 	s.votedFor = types.ServerID(uuid.New())
 
 	requireT.NoError(s.SetCurrentTerm(1))
-	requireT.EqualValues(types.ZeroServerID, s.votedFor)
+	requireT.EqualValues(rafttypes.ZeroServerID, s.votedFor)
 }
 
 func TestVoteFor(t *testing.T) {
@@ -82,11 +83,11 @@ func TestLastLogTerm(t *testing.T) {
 
 	requireT.EqualValues(0, s.LastLogTerm())
 
-	s.log = append(s.log, LogItem{Term: 1})
+	s.log = append(s.log, rafttypes.LogItem{Term: 1})
 
 	requireT.EqualValues(1, s.LastLogTerm())
 
-	s.log = append(s.log, LogItem{Term: 2})
+	s.log = append(s.log, rafttypes.LogItem{Term: 2})
 
 	requireT.EqualValues(2, s.LastLogTerm())
 }
@@ -98,11 +99,11 @@ func TestNextLogIndex(t *testing.T) {
 
 	requireT.EqualValues(0, s.NextLogIndex())
 
-	s.log = append(s.log, LogItem{Term: 1})
+	s.log = append(s.log, rafttypes.LogItem{Term: 1})
 
 	requireT.EqualValues(1, s.NextLogIndex())
 
-	s.log = append(s.log, LogItem{Term: 1})
+	s.log = append(s.log, rafttypes.LogItem{Term: 1})
 
 	requireT.EqualValues(2, s.NextLogIndex())
 }
@@ -123,15 +124,15 @@ func TestEntries(t *testing.T) {
 	requireT.Empty(entries)
 
 	s.log = append(s.log,
-		LogItem{Term: 1},
-		LogItem{Term: 2},
-		LogItem{Term: 3},
+		rafttypes.LogItem{Term: 1},
+		rafttypes.LogItem{Term: 2},
+		rafttypes.LogItem{Term: 3},
 	)
 
 	term, entries, err = s.Entries(0)
 	requireT.NoError(err)
 	requireT.Zero(term)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -140,7 +141,7 @@ func TestEntries(t *testing.T) {
 	term, entries, err = s.Entries(1)
 	requireT.NoError(err)
 	requireT.EqualValues(1, term)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 2},
 		{Term: 3},
 	}, entries)
@@ -148,7 +149,7 @@ func TestEntries(t *testing.T) {
 	term, entries, err = s.Entries(2)
 	requireT.NoError(err)
 	requireT.EqualValues(2, term)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 3},
 	}, entries)
 
@@ -168,19 +169,19 @@ func TestAppend(t *testing.T) {
 
 	s := &State{}
 
-	lastTerm, nextIndex, err := s.Append(0, 1, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err := s.Append(0, 1, []rafttypes.LogItem{{Term: 1}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(1, 0, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(1, 0, []rafttypes.LogItem{{Term: 1}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
 		{Term: 1},
 		{Term: 5},
 		{Term: 2},
@@ -191,7 +192,7 @@ func TestAppend(t *testing.T) {
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(1, 1, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(1, 1, []rafttypes.LogItem{{Term: 1}})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -203,23 +204,23 @@ func TestAppend(t *testing.T) {
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(1, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
 		{Term: 2},
 		{Term: 4},
 		{Term: 3},
@@ -227,38 +228,38 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
 		{Term: 2},
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(1, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 2},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 2},
 	}, s.log)
 
-	s.log = []LogItem{{Term: 1}}
+	s.log = []rafttypes.LogItem{{Term: 1}}
 
-	lastTerm, nextIndex, err = s.Append(1, 1, []LogItem{
+	lastTerm, nextIndex, err = s.Append(1, 1, []rafttypes.LogItem{
 		{Term: 2},
 		{Term: 3},
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -268,38 +269,38 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(2, 2, []LogItem{{Term: 3}})
+	lastTerm, nextIndex, err = s.Append(2, 2, []rafttypes.LogItem{{Term: 3}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []LogItem{{Term: 4}})
+	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 4}})
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 		{Term: 4},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []LogItem{{Term: 5}})
+	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 5}})
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -310,34 +311,34 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(4, 3, []LogItem{{Term: 4}})
+	lastTerm, nextIndex, err = s.Append(4, 3, []rafttypes.LogItem{{Term: 4}})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []LogItem{{Term: 3}})
+	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 3}})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []LogItem{
+	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{
 		{Term: 4},
 		{Term: 5},
 		{Term: 4},
@@ -346,14 +347,14 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(4, 3, []LogItem{
+	lastTerm, nextIndex, err = s.Append(4, 3, []rafttypes.LogItem{
 		{Term: 3},
 		{Term: 3},
 		{Term: 4},
@@ -365,7 +366,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(11, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -379,11 +380,11 @@ func TestAppend(t *testing.T) {
 		{Term: 6},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(11, 7, []LogItem{{Term: 7}})
+	lastTerm, nextIndex, err = s.Append(11, 7, []rafttypes.LogItem{{Term: 7}})
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -396,11 +397,11 @@ func TestAppend(t *testing.T) {
 		{Term: 5},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(9, 4, []LogItem{{Term: 4}})
+	lastTerm, nextIndex, err = s.Append(9, 4, []rafttypes.LogItem{{Term: 4}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -413,11 +414,11 @@ func TestAppend(t *testing.T) {
 		{Term: 5},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(9, 4, []LogItem{{Term: 5}})
+	lastTerm, nextIndex, err = s.Append(9, 4, []rafttypes.LogItem{{Term: 5}})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -430,11 +431,11 @@ func TestAppend(t *testing.T) {
 		{Term: 5},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(8, 5, []LogItem{{Term: 6}})
+	lastTerm, nextIndex, err = s.Append(8, 5, []rafttypes.LogItem{{Term: 6}})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
-	requireT.EqualValues([]LogItem{
+	requireT.EqualValues([]rafttypes.LogItem{
 		{Term: 1},
 		{Term: 2},
 		{Term: 3},
@@ -443,7 +444,7 @@ func TestAppend(t *testing.T) {
 		{Term: 3},
 	}, s.log)
 
-	lastTerm, nextIndex, err = s.Append(1, 2, []LogItem{{Term: 3}})
+	lastTerm, nextIndex, err = s.Append(1, 2, []rafttypes.LogItem{{Term: 3}})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
