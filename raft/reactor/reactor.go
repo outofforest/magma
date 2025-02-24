@@ -90,19 +90,19 @@ func (r *Reactor) LeaderID() types.ServerID {
 // it returns an appropriate error.
 func (r *Reactor) ApplyAppendEntriesRequest(
 	peerID types.ServerID,
-	m p2p.AppendEntriesRequest,
-) (p2p.AppendEntriesResponse, error) {
+	m *p2p.AppendEntriesRequest,
+) (*p2p.AppendEntriesResponse, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
-		return p2p.AppendEntriesResponse{}, errors.New("bug in protocol")
+		return nil, errors.New("bug in protocol")
 	}
 
 	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
-		return p2p.AppendEntriesResponse{}, err
+		return nil, err
 	}
 
 	resp, err := r.handleAppendEntriesRequest(m)
 	if err != nil {
-		return p2p.AppendEntriesResponse{}, err
+		return nil, err
 	}
 	return resp, nil
 }
@@ -114,14 +114,14 @@ func (r *Reactor) ApplyAppendEntriesRequest(
 // Returns an empty request if no further action is required or an error occurred.
 func (r *Reactor) ApplyAppendEntriesResponse(
 	peerID types.ServerID,
-	m p2p.AppendEntriesResponse,
-) (p2p.AppendEntriesRequest, error) {
+	m *p2p.AppendEntriesResponse,
+) (*p2p.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	if r.role != types.RoleLeader {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	if m.NextLogIndex > r.getNextIndex(peerID) {
@@ -131,12 +131,12 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 
 	r.nextIndex[peerID] = m.NextLogIndex
 	if m.NextLogIndex >= r.nextLogIndex {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	resp, err := r.newAppendEntriesRequest(m.NextLogIndex)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	return resp, nil
@@ -146,14 +146,14 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 // It ensures the reactor transitions to a follower if necessary,
 // based on the term in the request, and then handles the vote request.
 // The function returns a VoteResponse and an error if any issues occur during processing.
-func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m p2p.VoteRequest) (p2p.VoteResponse, error) {
+func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m *p2p.VoteRequest) (*p2p.VoteResponse, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return p2p.VoteResponse{}, err
+		return nil, err
 	}
 
 	resp, err := r.handleVoteRequest(peerID, m)
 	if err != nil {
-		return p2p.VoteResponse{}, err
+		return nil, err
 	}
 	return resp, nil
 }
@@ -166,23 +166,23 @@ func (r *Reactor) ApplyVoteRequest(peerID types.ServerID, m p2p.VoteRequest) (p2
 // If no action is required or conditions aren't met, it returns an empty AppendEntriesRequest.
 func (r *Reactor) ApplyVoteResponse(
 	peerID types.ServerID,
-	m p2p.VoteResponse,
-) (p2p.AppendEntriesRequest, error) {
+	m *p2p.VoteResponse,
+) (*p2p.AppendEntriesRequest, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	if r.role != types.RoleCandidate || m.Term != r.state.CurrentTerm() {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	if !m.VoteGranted {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	r.votedForMe++
 	if r.votedForMe < r.majority {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	return r.transitionToLeader()
@@ -192,14 +192,14 @@ func (r *Reactor) ApplyVoteResponse(
 // It ensures the reactor can only process the request if it is in the Leader role.
 // It appends the client's data as a new log entry, and returns an AppendEntriesRequest to replicate
 // the log entry to peers.
-func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyClientRequest(m *p2c.ClientRequest) (*p2p.AppendEntriesRequest, error) {
 	// ApplyClientRequest processes a client request to append a log item.
 	// If the reactor is not in the Leader role, it returns an empty AppendEntriesRequest.
 	// As the leader, it appends the client's data as a new log item, updates the heartbeat time,
 	// and returns an AppendEntriesRequest if there are peers to replicate to,
 	// or updates the committed count if there are no peers.
 	if r.role != types.RoleLeader {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	newLogIndex, err := r.appendLogItem(state.LogItem{
@@ -207,19 +207,19 @@ func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest) (p2p.AppendEntriesRequ
 		Data: m.Data,
 	})
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
 		r.committedCount = r.nextLogIndex
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	msg, err := r.newAppendEntriesRequest(newLogIndex)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	return msg, nil
@@ -229,20 +229,20 @@ func (r *Reactor) ApplyClientRequest(m p2c.ClientRequest) (p2p.AppendEntriesRequ
 // sends a heartbeat to other peers if the timeout has expired. The function checks
 // if the reactor is still in the Leader role and whether the provided timeout is
 // valid (i.e., after the last recorded heartbeat).
-func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*p2p.AppendEntriesRequest, error) {
 	if r.role != types.RoleLeader || t.Before(r.heartBeatTime) {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	msg, err := r.newAppendEntriesRequest(r.nextLogIndex)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	return msg, nil
@@ -251,9 +251,9 @@ func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (p2p.AppendEntriesRequest, 
 // ApplyElectionTimeout processes an election timeout event, transitioning the reactor
 // to a candidate state if the timeout has expired and the reactor is not already a leader.
 // It then sends a VoteRequest to peers to begin a new election.
-func (r *Reactor) ApplyElectionTimeout(t time.Time) (p2p.VoteRequest, error) {
+func (r *Reactor) ApplyElectionTimeout(t time.Time) (*p2p.VoteRequest, error) {
 	if r.role == types.RoleLeader || t.Before(r.electionTime) {
-		return p2p.VoteRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	return r.transitionToCandidate()
@@ -263,14 +263,14 @@ func (r *Reactor) ApplyElectionTimeout(t time.Time) (p2p.VoteRequest, error) {
 // If the reactor is in the Leader role, it prepares an AppendEntriesRequest
 // for the newly connected peer. It also initializes the peer's nextIndex and
 // matchIndex to track replication state.
-func (r *Reactor) ApplyPeerConnected(peerID types.ServerID) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyPeerConnected(peerID types.ServerID) (*p2p.AppendEntriesRequest, error) {
 	if r.role != types.RoleLeader {
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	msg, err := r.newAppendEntriesRequest(r.nextLogIndex)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	r.nextIndex[peerID] = r.nextLogIndex
@@ -309,16 +309,16 @@ func (r *Reactor) transitionToFollower() {
 	clear(r.matchIndex)
 }
 
-func (r *Reactor) transitionToCandidate() (p2p.VoteRequest, error) {
+func (r *Reactor) transitionToCandidate() (*p2p.VoteRequest, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
-		return p2p.VoteRequest{}, err
+		return nil, err
 	}
 	granted, err := r.state.VoteFor(r.id)
 	if err != nil {
-		return p2p.VoteRequest{}, err
+		return nil, err
 	}
 	if !granted {
-		return p2p.VoteRequest{}, errors.New("bug in protocol")
+		return nil, errors.New("bug in protocol")
 	}
 
 	r.role = types.RoleCandidate
@@ -330,18 +330,17 @@ func (r *Reactor) transitionToCandidate() (p2p.VoteRequest, error) {
 
 	if r.majority == 1 {
 		_, err := r.transitionToLeader()
-		return p2p.VoteRequest{}, err
+		return nil, err
 	}
 
-	return p2p.VoteRequest{
-		MessageID:    p2p.NewMessageID(),
+	return &p2p.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 	}, nil
 }
 
-func (r *Reactor) transitionToLeader() (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) transitionToLeader() (*p2p.AppendEntriesRequest, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
 	clear(r.nextIndex)
@@ -353,31 +352,30 @@ func (r *Reactor) transitionToLeader() (p2p.AppendEntriesRequest, error) {
 		Term: r.state.CurrentTerm(),
 	})
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
 		r.committedCount = r.nextLogIndex
-		return p2p.AppendEntriesRequest{}, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	msg, err := r.newAppendEntriesRequest(r.indexTermStarted)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
 
 	return msg, nil
 }
 
-func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (p2p.AppendEntriesRequest, error) {
+func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*p2p.AppendEntriesRequest, error) {
 	lastLogTerm, entries, err := r.state.Entries(nextLogIndex)
 	if err != nil {
-		return p2p.AppendEntriesRequest{}, err
+		return nil, err
 	}
-	return p2p.AppendEntriesRequest{
-		MessageID:    p2p.NewMessageID(),
+	return &p2p.AppendEntriesRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  lastLogTerm,
@@ -386,9 +384,8 @@ func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (p2p.AppendE
 	}, nil
 }
 
-func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.AppendEntriesResponse, error) {
-	resp := p2p.AppendEntriesResponse{
-		MessageID:    req.MessageID,
+func (r *Reactor) handleAppendEntriesRequest(req *p2p.AppendEntriesRequest) (*p2p.AppendEntriesResponse, error) {
+	resp := &p2p.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 	}
@@ -399,7 +396,7 @@ func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.
 	var err error
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Entries)
 	if err != nil {
-		return p2p.AppendEntriesResponse{}, err
+		return nil, err
 	}
 
 	if r.nextLogIndex >= req.NextLogIndex {
@@ -416,25 +413,23 @@ func (r *Reactor) handleAppendEntriesRequest(req p2p.AppendEntriesRequest) (p2p.
 	return resp, nil
 }
 
-func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req p2p.VoteRequest) (p2p.VoteResponse, error) {
+func (r *Reactor) handleVoteRequest(candidateID types.ServerID, req *p2p.VoteRequest) (*p2p.VoteResponse, error) {
 	if req.Term < r.state.CurrentTerm() || r.lastLogTerm > req.LastLogTerm ||
 		(r.lastLogTerm == req.LastLogTerm && r.nextLogIndex > req.NextLogIndex) {
-		return p2p.VoteResponse{
-			MessageID: req.MessageID,
-			Term:      r.state.CurrentTerm(),
+		return &p2p.VoteResponse{
+			Term: r.state.CurrentTerm(),
 		}, nil
 	}
 
 	granted, err := r.state.VoteFor(candidateID)
 	if err != nil {
-		return p2p.VoteResponse{}, err
+		return nil, err
 	}
 	if granted {
 		r.electionTime = r.timeSource.Now()
 	}
 
-	return p2p.VoteResponse{
-		MessageID:   req.MessageID,
+	return &p2p.VoteResponse{
 		Term:        r.state.CurrentTerm(),
 		VoteGranted: granted,
 	}, nil

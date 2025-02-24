@@ -48,7 +48,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 	messageID := p2p.NewMessageID()
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.AppendEntriesRequest{
+		Cmd: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -67,7 +67,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer1ID},
-		Message: p2p.AppendEntriesResponse{
+		Message: &p2p.AppendEntriesResponse{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -88,7 +88,7 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.AppendEntriesResponse{
+		Cmd: &p2p.AppendEntriesResponse{
 			MessageID:    messageID,
 			Term:         0,
 			NextLogIndex: 0,
@@ -98,10 +98,11 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID = toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID = toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer1ID},
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -130,7 +131,7 @@ func TestApplyAppendEntriesResponseIgnore(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.AppendEntriesResponse{
+		Cmd: &p2p.AppendEntriesResponse{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -153,7 +154,7 @@ func TestApplyVoteRequest(t *testing.T) {
 	messageID := p2p.NewMessageID()
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.VoteRequest{
+		Cmd: &p2p.VoteRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -165,7 +166,7 @@ func TestApplyVoteRequest(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer1ID},
-		Message: p2p.VoteResponse{
+		Message: &p2p.VoteResponse{
 			MessageID:   messageID,
 			Term:        1,
 			VoteGranted: true,
@@ -192,7 +193,7 @@ func TestApplyVoteResponseIgnore(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.VoteResponse{
+		Cmd: &p2p.VoteResponse{
 			MessageID:   messageID,
 			Term:        1,
 			VoteGranted: true,
@@ -217,7 +218,7 @@ func TestApplyClientRequestIfNoLeader(t *testing.T) {
 	e, _ := newEngine(s)
 
 	role, toSend, err := e.Apply(types.Command{
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -236,7 +237,7 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
 	role, toSend, err := e.Apply(types.Command{
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -244,10 +245,11 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -279,7 +281,7 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -287,10 +289,11 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -321,7 +324,7 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 	// To set leader.
 	_, _, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.AppendEntriesRequest{
+		Cmd: &p2p.AppendEntriesRequest{
 			MessageID:    p2p.NewMessageID(),
 			Term:         1,
 			NextLogIndex: 0,
@@ -334,7 +337,7 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 	requireT.NoError(err)
 
 	role, toSend, err := e.Apply(types.Command{
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -342,7 +345,7 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 	requireT.Equal(types.RoleFollower, role)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer1ID},
-		Message: p2c.ClientRequest{
+		Message: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	}, toSend)
@@ -358,7 +361,7 @@ func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 	// To set leader.
 	_, _, err := e.Apply(types.Command{
 		PeerID: peer1ID,
-		Cmd: p2p.AppendEntriesRequest{
+		Cmd: &p2p.AppendEntriesRequest{
 			MessageID:    p2p.NewMessageID(),
 			Term:         1,
 			NextLogIndex: 0,
@@ -372,7 +375,7 @@ func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 
 	role, toSend, err := e.Apply(types.Command{
 		PeerID: peer2ID,
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -397,7 +400,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 	}
 
 	role, toSend, err := e.Apply(types.Command{
-		Cmd: p2c.ClientRequest{
+		Cmd: &p2c.ClientRequest{
 			Data: []byte{0x01},
 		},
 	})
@@ -405,10 +408,11 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer3ID, peer4ID},
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -445,10 +449,11 @@ func TestApplyHeartbeatTimeout(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -483,10 +488,11 @@ func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer2ID, peer3ID, peer4ID},
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -538,10 +544,11 @@ func TestApplyElectionTimeout(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.VoteRequest).MessageID
+	messageID := toSend.Message.(*p2p.VoteRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.VoteRequest{
+		Message: &p2p.VoteRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -577,10 +584,11 @@ func TestApplyElectionTimeoutExpectationsIgnored(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.VoteRequest).MessageID
+	messageID := toSend.Message.(*p2p.VoteRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.VoteRequest{
+		Message: &p2p.VoteRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -628,10 +636,11 @@ func TestApplyPeerConnected(t *testing.T) {
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID := toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: []types.ServerID{peer1ID},
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
@@ -667,10 +676,11 @@ func transitionToCandidate(requireT *require.Assertions, e *Engine, ts reactor.T
 	requireT.Equal(types.RoleCandidate, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID := toSend.Message.(p2p.VoteRequest).MessageID
+	messageID := toSend.Message.(*p2p.VoteRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.VoteRequest{
+		Message: &p2p.VoteRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -694,7 +704,7 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID p2p.M
 		var err error
 		role, toSend, err = e.Apply(types.Command{
 			PeerID: peer,
-			Cmd: p2p.VoteResponse{
+			Cmd: &p2p.VoteResponse{
 				MessageID:   messageID,
 				Term:        1,
 				VoteGranted: true,
@@ -710,10 +720,11 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID p2p.M
 	requireT.Equal(types.RoleLeader, role)
 	requireT.NotNil(toSend.Message)
 
-	messageID = toSend.Message.(p2p.AppendEntriesRequest).MessageID
+	messageID = toSend.Message.(*p2p.AppendEntriesRequest).MessageID
+	requireT.NotEqual(p2p.ZeroMessageID, messageID)
 	requireT.Equal(Send{
 		Recipients: peers,
-		Message: p2p.AppendEntriesRequest{
+		Message: &p2p.AppendEntriesRequest{
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
@@ -736,7 +747,7 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID p2p.M
 		var err error
 		role, toSend, err = e.Apply(types.Command{
 			PeerID: peer,
-			Cmd: p2p.AppendEntriesResponse{
+			Cmd: &p2p.AppendEntriesResponse{
 				MessageID:    messageID,
 				Term:         1,
 				NextLogIndex: 1,
