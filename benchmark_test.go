@@ -95,7 +95,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	err = resonance.RunClient[p2c.Marshaller](ctx, p2c1.Addr().String(), gossip.P2CConfig,
+	_ = resonance.RunClient[p2c.Marshaller](ctx, p2c1.Addr().String(), gossip.P2CConfig,
 		func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2c.Marshaller]) error {
 			fmt.Println("Connected")
 			for i := range 1000 {
@@ -108,7 +108,6 @@ func TestCluster(t *testing.T) {
 			return nil
 		},
 	)
-	fmt.Println(err)
 
 	time.Sleep(5 * time.Second)
 
