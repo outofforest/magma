@@ -12,14 +12,16 @@ import (
 	"github.com/outofforest/parallel"
 )
 
+const queueCapacity = 100
+
 // GossipFunc is the declaration of the function responsible for gossiping messages between peers.
 type GossipFunc func(ctx context.Context, cmdCh chan<- types.Command, sendCh <-chan engine.Send) error
 
 // Run runs Raft processor.
 func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-		cmdCh := make(chan types.Command, 10)
-		sendCh := make(chan engine.Send, 10)
+		cmdCh := make(chan types.Command, queueCapacity)
+		sendCh := make(chan engine.Send, 1)
 		roleCh := make(chan types.Role, 1)
 
 		spawn("producers", parallel.Fail, func(ctx context.Context) error {
@@ -122,5 +124,5 @@ func electionTimeout() time.Duration {
 }
 
 func heartbeatTimeout() time.Duration {
-	return 200 * time.Millisecond
+	return 500 * time.Millisecond
 }
