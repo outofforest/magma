@@ -102,7 +102,7 @@ func TestCluster(t *testing.T) {
 				c.Send(&rafttypes.ClientRequest{
 					Data: []byte{byte(i)},
 				})
-				for range 10000 {
+				for range 100000 {
 				}
 			}
 			return nil

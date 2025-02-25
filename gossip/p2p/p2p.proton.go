@@ -416,7 +416,7 @@ func unmarshal1(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o:o+l]
+			m.Data = b[o : o+l]
 			o += l
 		} else {
 			m.Data = nil
@@ -1851,7 +1851,7 @@ func unmarshal4(
 }
 
 func size6(m *types.AppendEntriesRequest) uint64 {
-	var n uint64 = 21
+	var n uint64 = 22
 	{
 		// Term
 
@@ -1883,6 +1883,32 @@ func size6(m *types.AppendEntriesRequest) uint64 {
 
 		{
 			vi := m.NextLogIndex
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
+	{
+		// NextLogTerm
+
+		{
+			vi := m.NextLogTerm
 			switch {
 			case vi <= 0x7F:
 			case vi <= 0x3FFF:
@@ -2146,6 +2172,150 @@ func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
 
 		{
 			vi := m.NextLogIndex
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
+	}
+	{
+		// NextLogTerm
+
+		{
+			vi := m.NextLogTerm
 			switch {
 			case vi <= 0x7F:
 				b[o] = byte(vi)
@@ -2835,6 +3005,55 @@ func unmarshal6(
 		}
 	}
 	{
+		// NextLogTerm
+
+		{
+			vi := types.Term(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.Term(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.Term(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.Term(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.Term(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.Term(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.Term(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.Term(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.Term(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.NextLogTerm = vi
+		}
+	}
+	{
 		// LastLogTerm
 
 		{
@@ -2998,33 +3217,7 @@ func unmarshal6(
 }
 
 func size5(m *types.LogItem) uint64 {
-	var n uint64 = 2
-	{
-		// Term
-
-		{
-			vi := m.Term
-			switch {
-			case vi <= 0x7F:
-			case vi <= 0x3FFF:
-				n++
-			case vi <= 0x1FFFFF:
-				n += 2
-			case vi <= 0xFFFFFFF:
-				n += 3
-			case vi <= 0x7FFFFFFFF:
-				n += 4
-			case vi <= 0x3FFFFFFFFFF:
-				n += 5
-			case vi <= 0x1FFFFFFFFFFFF:
-				n += 6
-			case vi <= 0xFFFFFFFFFFFFFF:
-				n += 7
-			default:
-				n += 8
-			}
-		}
-	}
+	var n uint64 = 1
 	{
 		// Data
 
@@ -3058,150 +3251,6 @@ func size5(m *types.LogItem) uint64 {
 
 func marshal5(m *types.LogItem, b []byte) uint64 {
 	var o uint64
-	{
-		// Term
-
-		{
-			vi := m.Term
-			switch {
-			case vi <= 0x7F:
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x7FFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			default:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			}
-		}
-	}
 	{
 		// Data
 
@@ -3361,55 +3410,6 @@ func unmarshal5(
 ) uint64 {
 	var o uint64
 	{
-		// Term
-
-		{
-			vi := types.Term(b[o] & 0x7F)
-			if b[o]&0x80 == 0 {
-				o++
-			} else {
-				vi |= types.Term(b[o+1]&0x7F) << 7
-				if b[o+1]&0x80 == 0 {
-					o += 2
-				} else {
-					vi |= types.Term(b[o+2]&0x7F) << 14
-					if b[o+2]&0x80 == 0 {
-						o += 3
-					} else {
-						vi |= types.Term(b[o+3]&0x7F) << 21
-						if b[o+3]&0x80 == 0 {
-							o += 4
-						} else {
-							vi |= types.Term(b[o+4]&0x7F) << 28
-							if b[o+4]&0x80 == 0 {
-								o += 5
-							} else {
-								vi |= types.Term(b[o+5]&0x7F) << 35
-								if b[o+5]&0x80 == 0 {
-									o += 6
-								} else {
-									vi |= types.Term(b[o+6]&0x7F) << 42
-									if b[o+6]&0x80 == 0 {
-										o += 7
-									} else {
-										vi |= types.Term(b[o+7]&0x7F) << 49
-										if b[o+7]&0x80 == 0 {
-											o += 8
-										} else {
-											vi |= types.Term(b[o+8]) << 56
-											o += 9
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			m.Term = vi
-		}
-	}
-	{
 		// Data
 
 		var l uint64
@@ -3459,7 +3459,7 @@ func unmarshal5(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o:o+l]
+			m.Data = b[o : o+l]
 			o += l
 		} else {
 			m.Data = nil

@@ -58,19 +58,22 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	_, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.Nil(entries)
+	requireT.Empty(entries)
 }
 
 func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 
@@ -84,20 +87,11 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
+		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Entries: []types.LogItem{
-			{
-				Term: 3,
-				Data: []byte{0x01},
-			},
-			{
-				Term: 3,
-				Data: []byte{0x02},
-			},
-			{
-				Term: 4,
-				Data: []byte{0x03},
-			},
+			{Data: []byte{0x01}},
+			{Data: []byte{0x02}},
 		},
 		LeaderCommit: 0,
 	})
@@ -105,30 +99,28 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
-		NextLogIndex: 6,
+		NextLogIndex: 5,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
 	requireT.EqualValues([]types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
-		{
-			Term: 3,
-			Data: []byte{0x01},
-		},
-		{
-			Term: 3,
-			Data: []byte{0x02},
-		},
-		{
-			Term: 4,
-			Data: []byte{0x03},
-		},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(1)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(3)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
 	}, entries)
 }
 
@@ -355,12 +347,10 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         2,
 		NextLogIndex: 0,
+		NextLogTerm:  2,
 		LastLogTerm:  0,
 		Entries: []types.LogItem{
-			{
-				Term: 2,
-				Data: nil,
-			},
+			{},
 		},
 		LeaderCommit: 0,
 	}, msg)

@@ -51,12 +51,10 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
+			NextLogTerm:  1,
 			LastLogTerm:  0,
 			Entries: []types.LogItem{
-				{
-					Term: 1,
-					Data: []byte{0x01},
-				},
+				{Data: []byte{0x01}},
 			},
 			LeaderCommit: 1,
 		},
@@ -105,9 +103,10 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
+			NextLogTerm:  1,
 			LastLogTerm:  0,
 			Entries: []types.LogItem{
-				{Term: 1},
+				{},
 			},
 			LeaderCommit: 1,
 		},
@@ -252,12 +251,10 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
 			Entries: []types.LogItem{
-				{
-					Term: 1,
-					Data: []byte{0x01},
-				},
+				{Data: []byte{0x01}},
 			},
 			LeaderCommit: 1,
 		},
@@ -296,12 +293,10 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
 			Entries: []types.LogItem{
-				{
-					Term: 1,
-					Data: []byte{0x01},
-				},
+				{Data: []byte{0x01}},
 			},
 			LeaderCommit: 1,
 		},
@@ -327,9 +322,10 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 			MessageID:    types.NewMessageID(),
 			Term:         1,
 			NextLogIndex: 0,
+			NextLogTerm:  1,
 			LastLogTerm:  0,
 			Entries: []types.LogItem{
-				{Term: 1},
+				{},
 			},
 		},
 	})
@@ -364,9 +360,10 @@ func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 			MessageID:    types.NewMessageID(),
 			Term:         1,
 			NextLogIndex: 0,
+			NextLogTerm:  1,
 			LastLogTerm:  0,
 			Entries: []types.LogItem{
-				{Term: 1},
+				{},
 			},
 		},
 	})
@@ -415,12 +412,10 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
 			Entries: []types.LogItem{
-				{
-					Term: 1,
-					Data: []byte{0x01},
-				},
+				{Data: []byte{0x01}},
 			},
 			LeaderCommit: 1,
 		},
@@ -456,8 +451,9 @@ func TestApplyHeartbeatTimeout(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      []types.LogItem{},
+			Entries:      nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -495,8 +491,9 @@ func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      []types.LogItem{},
+			Entries:      nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -642,8 +639,9 @@ func TestApplyPeerConnected(t *testing.T) {
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 1,
+			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      []types.LogItem{},
+			Entries:      nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -725,9 +723,10 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID types
 			MessageID:    messageID,
 			Term:         1,
 			NextLogIndex: 0,
+			NextLogTerm:  1,
 			LastLogTerm:  0,
 			Entries: []types.LogItem{
-				{Term: 1},
+				{},
 			},
 			LeaderCommit: 0,
 		},
