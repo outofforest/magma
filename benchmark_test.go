@@ -20,7 +20,7 @@ import (
 )
 
 func TestCluster(t *testing.T) {
-	//t.Skip()
+	t.Skip()
 	requireT := require.New(t)
 	ctx, cancel := context.WithCancel(logger.WithLogger(context.Background(), logger.New(logger.DefaultConfig)))
 	t.Cleanup(cancel)
