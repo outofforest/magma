@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/gossip/p2c"
@@ -56,8 +55,6 @@ func New(config types.Config, p2pListener, p2cListener net.Listener) raft.Gossip
 		activeConns: map[types.ServerID]*context.CancelFunc{},
 	}).Run
 }
-
-type connectionID uuid.UUID
 
 type gossip struct {
 	config                   types.Config
