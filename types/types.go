@@ -7,6 +7,9 @@ import (
 // ServerID represents the unique identifier of a server.
 type ServerID uuid.UUID
 
+// ZeroServerID represents an uninitialized ServerID with a zero value.
+var ZeroServerID ServerID
+
 // Config is the config of magma.
 type Config struct {
 	ServerID ServerID

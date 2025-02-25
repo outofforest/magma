@@ -561,7 +561,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		NextLogIndex: 3,
 	}, msg)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, entries, err := s.Entries(0)
@@ -852,7 +852,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 
@@ -890,7 +890,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -928,7 +928,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -960,7 +960,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -1014,7 +1014,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 
@@ -1059,7 +1059,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(3, s.CurrentTerm())
 }
 
@@ -1082,7 +1082,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 		VoteGranted: false,
 	}, msg)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -1116,7 +1116,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 		VoteGranted: false,
 	}, msg)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -1151,7 +1151,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		VoteGranted: false,
 	}, msg)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -1201,7 +1201,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		VoteGranted: false,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(types.ZeroServerID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 

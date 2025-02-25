@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/state"
@@ -327,7 +328,7 @@ func (r *Reactor) transitionToCandidate() (*types.VoteRequest, error) {
 	}
 
 	r.role = types.RoleCandidate
-	r.leaderID = types.ZeroServerID
+	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
 	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
