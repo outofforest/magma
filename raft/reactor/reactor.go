@@ -125,7 +125,9 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 
 	if m.NextLogIndex > r.getNextIndex(peerID) {
 		r.matchIndex[peerID] = m.NextLogIndex
-		r.committedCount = r.computeCommittedCount()
+		if m.NextLogIndex > r.committedCount {
+			r.committedCount = r.computeCommittedCount()
+		}
 	}
 
 	r.nextIndex[peerID] = m.NextLogIndex

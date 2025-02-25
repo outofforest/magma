@@ -2,6 +2,7 @@ package magma
 
 import (
 	"context"
+	"net"
 
 	"github.com/outofforest/magma/gossip"
 	"github.com/outofforest/magma/helpers"
@@ -13,13 +14,13 @@ import (
 )
 
 // Run runs magma.
-func Run(ctx context.Context, config types.Config) error {
+func Run(ctx context.Context, config types.Config, p2pListener, p2cListener net.Listener) error {
 	return raft.Run(
 		ctx,
 		engine.New(
-			reactor.New(config.ServerID, len(config.Servers)/2, &state.State{}, &reactor.RealTimeSource{}),
-			helpers.Peers(config.ServerID, config.Servers),
+			reactor.New(config.ServerID, len(config.Servers)/2+1, &state.State{}, &reactor.RealTimeSource{}),
+			helpers.Peers(config),
 		),
-		gossip.New(config),
+		gossip.New(config, p2pListener, p2cListener),
 	)
 }
