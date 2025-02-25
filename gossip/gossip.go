@@ -66,7 +66,12 @@ type gossip struct {
 	activeConns map[types.ServerID]*context.CancelFunc
 }
 
-func (g *gossip) Run(ctx context.Context, cmdCh chan<- rafttypes.Command, sendCh <-chan engine.Send) error {
+func (g *gossip) Run(
+	ctx context.Context,
+	cmdCh chan<- rafttypes.Command,
+	sendCh <-chan engine.Send,
+	controlCh chan<- rafttypes.PeerEvent,
+) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
 			return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
@@ -78,7 +83,7 @@ func (g *gossip) Run(ctx context.Context, cmdCh chan<- rafttypes.Command, sendCh
 		spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
 			return resonance.RunServer(ctx, g.p2pListener, P2PConfig,
 				func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2p.Marshaller]) error {
-					return g.handlePeer(ctx, types.ZeroServerID, cmdCh, recvCh, c)
+					return g.handlePeer(ctx, types.ZeroServerID, cmdCh, recvCh, controlCh, c)
 				},
 			)
 		})
@@ -91,7 +96,7 @@ func (g *gossip) Run(ctx context.Context, cmdCh chan<- rafttypes.Command, sendCh
 				for {
 					err := resonance.RunClient[p2p.Marshaller](ctx, s.P2PAddress, P2PConfig,
 						func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2p.Marshaller]) error {
-							return g.handlePeer(ctx, s.ID, cmdCh, recvCh, c)
+							return g.handlePeer(ctx, s.ID, cmdCh, recvCh, controlCh, c)
 						},
 					)
 					if err != nil && errors.Is(err, ctx.Err()) {
@@ -130,6 +135,7 @@ func (g *gossip) handlePeer(
 	expectedPeerID types.ServerID,
 	cmdCh chan<- rafttypes.Command,
 	recvCh <-chan any,
+	controlCh chan<- rafttypes.PeerEvent,
 	c *resonance.Connection[p2p.Marshaller],
 ) error {
 	if sent := c.Send(&p2p.Hello{
@@ -175,13 +181,22 @@ func (g *gossip) handlePeer(
 
 	g.replaceConnection(peerID, &cancel)
 
-	select {
-	case <-ctx.Done():
-		return errors.WithStack(ctx.Err())
-	case cmdCh <- rafttypes.Command{
+	cmdCh <- rafttypes.Command{
 		PeerID: peerID,
-	}:
 	}
+
+	connectionID := rafttypes.NewConnectionID()
+	controlCh <- rafttypes.PeerEvent{
+		PeerID:       peerID,
+		ConnectionID: connectionID,
+		Connected:    true,
+	}
+	defer func() {
+		controlCh <- rafttypes.PeerEvent{
+			PeerID:       peerID,
+			ConnectionID: connectionID,
+		}
+	}()
 
 	for {
 		select {

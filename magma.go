@@ -15,12 +15,14 @@ import (
 
 // Run runs magma.
 func Run(ctx context.Context, config types.Config, p2pListener, p2cListener net.Listener) error {
+	majority := len(config.Servers)/2 + 1
 	return raft.Run(
 		ctx,
 		engine.New(
-			reactor.New(config.ServerID, len(config.Servers)/2+1, &state.State{}, &reactor.RealTimeSource{}),
+			reactor.New(config.ServerID, majority, &state.State{}, &reactor.RealTimeSource{}),
 			helpers.Peers(config),
 		),
+		majority,
 		gossip.New(config, p2pListener, p2cListener),
 	)
 }

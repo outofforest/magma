@@ -2,12 +2,11 @@ package raft
 
 import (
 	"context"
-	"math/rand"
-	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/engine"
+	"github.com/outofforest/magma/raft/timeouts"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
 )
@@ -15,29 +14,40 @@ import (
 const queueCapacity = 100
 
 // GossipFunc is the declaration of the function responsible for gossiping messages between peers.
-type GossipFunc func(ctx context.Context, cmdCh chan<- types.Command, sendCh <-chan engine.Send) error
+type GossipFunc func(
+	ctx context.Context,
+	cmdCh chan<- types.Command,
+	sendCh <-chan engine.Send,
+	controlCh chan<- types.PeerEvent,
+) error
 
 // Run runs Raft processor.
-func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
+func Run(ctx context.Context, e *engine.Engine, majority int, gossipFunc GossipFunc) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		cmdCh := make(chan types.Command, queueCapacity)
 		sendCh := make(chan engine.Send, 1)
 		roleCh := make(chan types.Role, 1)
+		controlCh := make(chan types.PeerEvent, 1)
+
+		t := timeouts.New(majority, roleCh, controlCh)
 
 		spawn("producers", parallel.Fail, func(ctx context.Context) error {
 			defer close(cmdCh)
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-				spawn("timeouts", parallel.Fail, func(ctx context.Context) error {
-					return runTimeouts(ctx, roleCh, cmdCh)
+				spawn("timeoutProducer", parallel.Fail, t.Run)
+				spawn("timeoutConsumer", parallel.Fail, func(ctx context.Context) error {
+					return runTimeoutConsumer(ctx, t, cmdCh)
 				})
 				spawn("gossip", parallel.Fail, func(ctx context.Context) error {
-					return gossipFunc(ctx, cmdCh, sendCh)
+					defer close(controlCh)
+
+					return gossipFunc(ctx, cmdCh, sendCh, controlCh)
 				})
 				return nil
 			})
 		})
-		spawn("consumer", parallel.Fail, func(ctx context.Context) error {
+		spawn("engine", parallel.Fail, func(ctx context.Context) error {
 			defer close(sendCh)
 
 			return runEngine(ctx, e, cmdCh, sendCh, roleCh)
@@ -47,41 +57,17 @@ func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 	})
 }
 
-func runTimeouts(ctx context.Context, roleCh <-chan types.Role, cmdCh chan<- types.Command) error {
-	heartbeatDuration := heartbeatTimeout()
-	electionDuration := electionTimeout()
-
-	tickerHeartbeat := time.NewTicker(time.Hour)
-	defer tickerHeartbeat.Stop()
-
-	tickerElection := time.NewTicker(time.Hour)
-	defer tickerElection.Stop()
-
-	tickerHeartbeat.Stop()
-	tickerElection.Stop()
-
+func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- types.Command) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
-		case <-tickerHeartbeat.C:
+		case tm := <-t.Heartbeat():
 			// FIXME (wojciech): Using types.Message here is strange.
-			cmdCh <- types.Command{Cmd: types.HeartbeatTimeout(time.Now().Add(-heartbeatDuration))}
-		case <-tickerElection.C:
+			cmdCh <- types.Command{Cmd: types.HeartbeatTimeout(tm.Add(-t.HeartbeatInterval()))}
+		case tm := <-t.Election():
 			// FIXME (wojciech): Using types.Message here is strange.
-			cmdCh <- types.Command{Cmd: types.ElectionTimeout(time.Now().Add(-electionDuration))}
-		case role := <-roleCh:
-			switch role {
-			case types.RoleFollower:
-				tickerHeartbeat.Stop()
-				tickerElection.Reset(electionDuration)
-			case types.RoleCandidate:
-				tickerHeartbeat.Stop()
-				tickerElection.Reset(electionDuration)
-			case types.RoleLeader:
-				tickerHeartbeat.Reset(heartbeatDuration)
-				tickerElection.Stop()
-			}
+			cmdCh <- types.Command{Cmd: types.ElectionTimeout(tm.Add(-t.ElectionInterval()))}
 		}
 	}
 }
@@ -117,12 +103,4 @@ func runEngine(
 	}
 
 	return errors.WithStack(ctx.Err())
-}
-
-func electionTimeout() time.Duration {
-	return 2*time.Second + time.Duration(rand.Intn(500))*time.Millisecond
-}
-
-func heartbeatTimeout() time.Duration {
-	return 500 * time.Millisecond
 }
