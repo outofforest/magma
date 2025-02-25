@@ -30,7 +30,7 @@ func (s *State) SetCurrentTerm(term rafttypes.Term) error {
 		return errors.New("bug in protocol")
 	}
 	s.currentTerm = term
-	s.votedFor = rafttypes.ZeroServerID
+	s.votedFor = types.ZeroServerID
 	return nil
 }
 
@@ -41,10 +41,10 @@ func (s *State) SetCurrentTerm(term rafttypes.Term) error {
 // Returns true if the vote was successfully recorded, or false if the vote
 // was not recorded due to a prior vote for a different candidate.
 func (s *State) VoteFor(candidate types.ServerID) (bool, error) {
-	if candidate == rafttypes.ZeroServerID {
+	if candidate == types.ZeroServerID {
 		return false, errors.New("bug in protocol")
 	}
-	if s.votedFor != rafttypes.ZeroServerID && s.votedFor != candidate {
+	if s.votedFor != types.ZeroServerID && s.votedFor != candidate {
 		return false, nil
 	}
 

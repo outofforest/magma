@@ -43,11 +43,11 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 	role := e.reactor.Role()
 
 	switch {
-	case cmd.PeerID == types.ZeroServerID:
+	case cmd.PeerID == magmatypes.ZeroServerID:
 		switch c := cmd.Cmd.(type) {
 		case *types.ClientRequest:
 			leaderID := e.reactor.LeaderID()
-			if leaderID == types.ZeroServerID {
+			if leaderID == magmatypes.ZeroServerID {
 				return e.reactor.Role(), Send{}, nil
 			}
 			if leaderID == e.reactor.ID() {
@@ -121,7 +121,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			messageID, toSend = e.broadcastAppendEntriesRequest(req)
 		case *types.ClientRequest:
 			leaderID := e.reactor.LeaderID()
-			if leaderID == types.ZeroServerID {
+			if leaderID == magmatypes.ZeroServerID {
 				return e.reactor.Role(), Send{}, nil
 			}
 			if leaderID == e.reactor.ID() {

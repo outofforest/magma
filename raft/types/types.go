@@ -28,9 +28,6 @@ type (
 	Index uint64
 )
 
-// ZeroServerID represents an uninitialized ServerID with a zero value.
-var ZeroServerID types.ServerID
-
 // Command represents a command executed by state machine.
 type Command struct {
 	PeerID types.ServerID

@@ -40,7 +40,7 @@ func TestSetCurrentTermResetsVotedFor(t *testing.T) {
 	s.votedFor = types.ServerID(uuid.New())
 
 	requireT.NoError(s.SetCurrentTerm(1))
-	requireT.EqualValues(rafttypes.ZeroServerID, s.votedFor)
+	requireT.EqualValues(types.ZeroServerID, s.votedFor)
 }
 
 func TestVoteFor(t *testing.T) {
@@ -48,7 +48,7 @@ func TestVoteFor(t *testing.T) {
 
 	s := &State{}
 
-	granted, err := s.VoteFor(types.ServerID{})
+	granted, err := s.VoteFor(types.ZeroServerID)
 	requireT.Error(err)
 	requireT.False(granted)
 

@@ -327,7 +327,7 @@ func (r *Reactor) transitionToCandidate() (*types.VoteRequest, error) {
 	}
 
 	r.role = types.RoleCandidate
-	r.leaderID = types.ZeroServerID
+	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
 	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
