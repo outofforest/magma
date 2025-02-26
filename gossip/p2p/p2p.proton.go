@@ -4,7 +4,6 @@ import (
 	"unsafe"
 
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/mass"
 	"github.com/outofforest/proton"
 	"github.com/pkg/errors"
 )
@@ -21,42 +20,30 @@ const (
 var _ proton.Marshaller = Marshaller{}
 
 // NewMarshaller creates marshaller.
-func NewMarshaller(capacity uint64) Marshaller {
+func NewMarshaller() Marshaller {
 	return Marshaller{
-		mass0: mass.New[Hello](capacity),
-		mass1: mass.New[types.ClientRequest](capacity),
-		mass2: mass.New[types.VoteResponse](capacity),
-		mass3: mass.New[types.VoteRequest](capacity),
-		mass4: mass.New[types.AppendEntriesResponse](capacity),
-		mass5: mass.New[types.AppendEntriesRequest](capacity),
 	}
 }
 
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {
-	mass0 *mass.Mass[Hello]
-	mass1 *mass.Mass[types.ClientRequest]
-	mass2 *mass.Mass[types.VoteResponse]
-	mass3 *mass.Mass[types.VoteRequest]
-	mass4 *mass.Mass[types.AppendEntriesResponse]
-	mass5 *mass.Mass[types.AppendEntriesRequest]
 }
 
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
-	case *Hello:
-		return size0(msg2), nil
-	case *types.ClientRequest:
-		return size1(msg2), nil
-	case *types.VoteResponse:
-		return size2(msg2), nil
-	case *types.VoteRequest:
-		return size3(msg2), nil
-	case *types.AppendEntriesResponse:
-		return size4(msg2), nil
 	case *types.AppendEntriesRequest:
 		return size5(msg2), nil
+	case *types.AppendEntriesResponse:
+		return size4(msg2), nil
+	case *types.VoteRequest:
+		return size3(msg2), nil
+	case *types.VoteResponse:
+		return size2(msg2), nil
+	case *types.ClientRequest:
+		return size1(msg2), nil
+	case *Hello:
+		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
 	}
@@ -71,18 +58,18 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	}()
 
 	switch msg2 := msg.(type) {
-	case *Hello:
-		return id0, marshal0(msg2, buf), nil
-	case *types.ClientRequest:
-		return id1, marshal1(msg2, buf), nil
-	case *types.VoteResponse:
-		return id2, marshal2(msg2, buf), nil
-	case *types.VoteRequest:
-		return id3, marshal3(msg2, buf), nil
-	case *types.AppendEntriesResponse:
-		return id4, marshal4(msg2, buf), nil
 	case *types.AppendEntriesRequest:
 		return id5, marshal5(msg2, buf), nil
+	case *types.AppendEntriesResponse:
+		return id4, marshal4(msg2, buf), nil
+	case *types.VoteRequest:
+		return id3, marshal3(msg2, buf), nil
+	case *types.VoteResponse:
+		return id2, marshal2(msg2, buf), nil
+	case *types.ClientRequest:
+		return id1, marshal1(msg2, buf), nil
+	case *Hello:
+		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
 	}
@@ -97,42 +84,24 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}()
 
 	switch id {
-	case id0:
-		msg := m.mass0.New()
-		return msg, unmarshal0(
-			msg,
-			buf,
-		), nil
-	case id1:
-		msg := m.mass1.New()
-		return msg, unmarshal1(
-			msg,
-			buf,
-		), nil
-	case id2:
-		msg := m.mass2.New()
-		return msg, unmarshal2(
-			msg,
-			buf,
-		), nil
-	case id3:
-		msg := m.mass3.New()
-		return msg, unmarshal3(
-			msg,
-			buf,
-		), nil
-	case id4:
-		msg := m.mass4.New()
-		return msg, unmarshal4(
-			msg,
-			buf,
-		), nil
 	case id5:
-		msg := m.mass5.New()
-		return msg, unmarshal5(
-			msg,
-			buf,
-		), nil
+		msg := &types.AppendEntriesRequest{}
+		return msg, unmarshal5(msg, buf), nil
+	case id4:
+		msg := &types.AppendEntriesResponse{}
+		return msg, unmarshal4(msg, buf), nil
+	case id3:
+		msg := &types.VoteRequest{}
+		return msg, unmarshal3(msg, buf), nil
+	case id2:
+		msg := &types.VoteResponse{}
+		return msg, unmarshal2(msg, buf), nil
+	case id1:
+		msg := &types.ClientRequest{}
+		return msg, unmarshal1(msg, buf), nil
+	case id0:
+		msg := &Hello{}
+		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
@@ -155,10 +124,7 @@ func marshal0(m *Hello, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(
-	m *Hello,
-	b []byte,
-) uint64 {
+func unmarshal0(m *Hello, b []byte) uint64 {
 	var o uint64
 	{
 		// ServerID
@@ -358,10 +324,7 @@ func marshal1(m *types.ClientRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal1(
-	m *types.ClientRequest,
-	b []byte,
-) uint64 {
+func unmarshal1(m *types.ClientRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Data
@@ -413,10 +376,9 @@ func unmarshal1(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o:o+l]
+			m.Data = make([]uint8, l)
+			copy(m.Data, b[o:o+l])
 			o += l
-		} else {
-			m.Data = nil
 		}
 	}
 
@@ -619,10 +581,7 @@ func marshal2(m *types.VoteResponse, b []byte) uint64 {
 	return o
 }
 
-func unmarshal2(
-	m *types.VoteResponse,
-	b []byte,
-) uint64 {
+func unmarshal2(m *types.VoteResponse, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// MessageID
@@ -1215,10 +1174,7 @@ func marshal3(m *types.VoteRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal3(
-	m *types.VoteRequest,
-	b []byte,
-) uint64 {
+func unmarshal3(m *types.VoteRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -1734,10 +1690,7 @@ func marshal4(m *types.AppendEntriesResponse, b []byte) uint64 {
 	return o
 }
 
-func unmarshal4(
-	m *types.AppendEntriesResponse,
-	b []byte,
-) uint64 {
+func unmarshal4(m *types.AppendEntriesResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -2891,10 +2844,7 @@ func marshal5(m *types.AppendEntriesRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal5(
-	m *types.AppendEntriesRequest,
-	b []byte,
-) uint64 {
+func unmarshal5(m *types.AppendEntriesRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -3148,10 +3098,9 @@ func unmarshal5(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o:o+l]
+			m.Data = make([]uint8, l)
+			copy(m.Data, b[o:o+l])
 			o += l
-		} else {
-			m.Data = nil
 		}
 	}
 	{
