@@ -50,27 +50,17 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00}, entries)
 }
 
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, 1, []types.LogItem{
-		{},
-	})
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []types.LogItem{
-		{},
-		{},
-	})
+	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(3, 2, 3, []types.LogItem{
-		{},
-		{},
-	})
+	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactorSingleMode(s)
@@ -98,45 +88,26 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00}, entries)
 	_, _, entries, err = s.Entries(1)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(3)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(5)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{Data: []byte{0x01}},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x01}, entries)
 }
 
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, 1, []types.LogItem{
-		{},
-	})
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []types.LogItem{
-		{},
-		{},
-	})
+	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(3, 2, 3, []types.LogItem{
-		{},
-		{},
-	})
+	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactorSingleMode(s)
@@ -163,24 +134,14 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00}, entries)
 	_, _, entries, err = s.Entries(1)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(3)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(5)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00}, entries)
 }

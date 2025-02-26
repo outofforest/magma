@@ -53,9 +53,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 			NextLogIndex: 0,
 			NextLogTerm:  1,
 			LastLogTerm:  0,
-			Entries: []types.LogItem{
-				{Data: []byte{0x01}},
-			},
+			Data:         []byte{0x01},
 			LeaderCommit: 1,
 		},
 	})
@@ -105,9 +103,7 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 			NextLogIndex: 0,
 			NextLogTerm:  1,
 			LastLogTerm:  0,
-			Entries: []types.LogItem{
-				{},
-			},
+			Data:         []byte{0x00},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -253,9 +249,7 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries: []types.LogItem{
-				{Data: []byte{0x01}},
-			},
+			Data:         []byte{0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -295,9 +289,7 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries: []types.LogItem{
-				{Data: []byte{0x01}},
-			},
+			Data:         []byte{0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -324,9 +316,7 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 			NextLogIndex: 0,
 			NextLogTerm:  1,
 			LastLogTerm:  0,
-			Entries: []types.LogItem{
-				{},
-			},
+			Data:         []byte{0x00},
 		},
 	})
 	requireT.NoError(err)
@@ -362,9 +352,7 @@ func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 			NextLogIndex: 0,
 			NextLogTerm:  1,
 			LastLogTerm:  0,
-			Entries: []types.LogItem{
-				{},
-			},
+			Data:         []byte{0x00},
 		},
 	})
 	requireT.NoError(err)
@@ -414,9 +402,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries: []types.LogItem{
-				{Data: []byte{0x01}},
-			},
+			Data:         []byte{0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -453,7 +439,7 @@ func TestApplyHeartbeatTimeout(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      nil,
+			Data:         nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -493,7 +479,7 @@ func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      nil,
+			Data:         nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -641,7 +627,7 @@ func TestApplyPeerConnected(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Entries:      nil,
+			Data:         nil,
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -725,9 +711,7 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID types
 			NextLogIndex: 0,
 			NextLogTerm:  1,
 			LastLogTerm:  0,
-			Entries: []types.LogItem{
-				{},
-			},
+			Data:         []byte{0x00},
 			LeaderCommit: 0,
 		},
 	}, toSend)

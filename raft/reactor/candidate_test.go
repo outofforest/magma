@@ -67,14 +67,9 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []types.LogItem{
-		{},
-	})
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []types.LogItem{
-		{},
-		{},
-	})
+	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
 	r, ts := newReactor(s)
@@ -89,10 +84,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		NextLogIndex: 3,
 		NextLogTerm:  3,
 		LastLogTerm:  2,
-		Entries: []types.LogItem{
-			{Data: []byte{0x01}},
-			{Data: []byte{0x02}},
-		},
+		Data:         []byte{0x01, 0x02},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -107,21 +99,13 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00}, entries)
 	_, _, entries, err = s.Entries(1)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{},
-		{},
-	}, entries)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(3)
 	requireT.NoError(err)
-	requireT.EqualValues([]types.LogItem{
-		{Data: []byte{0x01}},
-		{Data: []byte{0x02}},
-	}, entries)
+	requireT.EqualValues([]byte{0x01, 0x02}, entries)
 }
 
 func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
@@ -349,9 +333,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		NextLogIndex: 0,
 		NextLogTerm:  2,
 		LastLogTerm:  0,
-		Entries: []types.LogItem{
-			{},
-		},
+		Data:         []byte{0x00},
 		LeaderCommit: 0,
 	}, msg)
 	requireT.Empty(r.nextIndex)
