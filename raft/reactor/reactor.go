@@ -203,9 +203,7 @@ func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntri
 		return nil, nil //nolint:nilnil
 	}
 
-	newLogIndex, err := r.appendLogItem(types.LogItem{
-		Data: m.Data,
-	})
+	newLogIndex, err := r.appendData(m.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +350,7 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
-	r.indexTermStarted, err = r.appendLogItem(types.LogItem{})
+	r.indexTermStarted, err = r.appendData([]byte{0x00})
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +371,7 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 }
 
 func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
-	lastLogTerm, nextLogTerm, entries, err := r.state.Entries(nextLogIndex)
+	lastLogTerm, nextLogTerm, data, err := r.state.Entries(nextLogIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +380,7 @@ func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.Appe
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  lastLogTerm,
 		NextLogTerm:  nextLogTerm,
-		Entries:      entries,
+		Data:         data,
 		LeaderCommit: r.committedCount,
 	}, nil
 }
@@ -397,7 +395,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Entries)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -461,15 +459,14 @@ func (r *Reactor) computeCommittedCount() types.Index {
 	return indexes[r.majority-1]
 }
 
-func (r *Reactor) appendLogItem(item types.LogItem) (types.Index, error) {
+func (r *Reactor) appendData(data []byte) (types.Index, error) {
 	nextLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(),
-		[]types.LogItem{item})
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(), data)
 	if err != nil {
 		return 0, err
 	}
-	if r.nextLogIndex != nextLogIndex+1 {
+	if r.nextLogIndex != nextLogIndex+types.Index(len(data)) {
 		return 0, errors.New("bug in protocol")
 	}
 	r.matchIndex[r.id] = r.nextLogIndex

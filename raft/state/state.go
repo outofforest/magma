@@ -12,7 +12,7 @@ type State struct {
 	currentTerm rafttypes.Term
 	votedFor    types.ServerID
 	terms       []rafttypes.Index
-	log         []rafttypes.LogItem
+	log         []byte
 }
 
 // CurrentTerm returns the current term of the state.
@@ -70,7 +70,7 @@ func (s *State) NextLogIndex() rafttypes.Index {
 // If nextLogIndex is greater than the length of the log, it returns an error indicating a protocol bug.
 // For a valid nextLogIndex, it returns the term of the log entry preceding nextLogIndex (or 0 if nextLogIndex is 0),
 // the slice of log entries starting at nextLogIndex, and no error.
-func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []rafttypes.LogItem, error) {
+func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []byte, error) {
 	if nextLogIndex > rafttypes.Index(len(s.log)) {
 		return 0, 0, nil, errors.New("bug in protocol")
 	}
@@ -118,7 +118,7 @@ func (s *State) Append(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
 	term rafttypes.Term,
-	entries []rafttypes.LogItem,
+	data []byte,
 ) (rafttypes.Term, rafttypes.Index, error) {
 	if term < lastLogTerm {
 		return 0, 0, errors.New("bug in protocol")
@@ -134,7 +134,7 @@ func (s *State) Append(
 		if rafttypes.Index(len(s.log)) > 0 && term <= s.previousTerm(1) {
 			return 0, 0, errors.New("bug in protocol")
 		}
-		s.log = entries
+		s.log = data
 		s.terms = s.terms[:0]
 		if len(s.log) == 0 {
 			return 0, 0, nil
@@ -159,7 +159,7 @@ func (s *State) Append(
 		if rafttypes.Index(len(s.log)) > nextLogIndex && term <= s.previousTerm(nextLogIndex+1) {
 			return 0, 0, errors.New("bug in protocol")
 		}
-		s.log = append(s.log[:nextLogIndex], entries...)
+		s.log = append(s.log[:nextLogIndex], data...)
 		s.terms = s.terms[:lastLogTerm]
 		for range term - lastLogTerm {
 			s.terms = append(s.terms, nextLogIndex)

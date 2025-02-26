@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	id6 uint64 = iota + 1
+	id5 uint64 = iota + 1
 	id4
 	id3
 	id2
@@ -28,8 +28,7 @@ func NewMarshaller(capacity uint64) Marshaller {
 		mass2: mass.New[types.VoteResponse](capacity),
 		mass3: mass.New[types.VoteRequest](capacity),
 		mass4: mass.New[types.AppendEntriesResponse](capacity),
-		mass6: mass.New[types.AppendEntriesRequest](capacity),
-		mass5: mass.New[types.LogItem](capacity),
+		mass5: mass.New[types.AppendEntriesRequest](capacity),
 	}
 }
 
@@ -40,8 +39,7 @@ type Marshaller struct {
 	mass2 *mass.Mass[types.VoteResponse]
 	mass3 *mass.Mass[types.VoteRequest]
 	mass4 *mass.Mass[types.AppendEntriesResponse]
-	mass6 *mass.Mass[types.AppendEntriesRequest]
-	mass5 *mass.Mass[types.LogItem]
+	mass5 *mass.Mass[types.AppendEntriesRequest]
 }
 
 // Size computes the size of marshalled message.
@@ -58,7 +56,7 @@ func (m Marshaller) Size(msg any) (uint64, error) {
 	case *types.AppendEntriesResponse:
 		return size4(msg2), nil
 	case *types.AppendEntriesRequest:
-		return size6(msg2), nil
+		return size5(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
 	}
@@ -84,7 +82,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	case *types.AppendEntriesResponse:
 		return id4, marshal4(msg2, buf), nil
 	case *types.AppendEntriesRequest:
-		return id6, marshal6(msg2, buf), nil
+		return id5, marshal5(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
 	}
@@ -129,12 +127,11 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 			msg,
 			buf,
 		), nil
-	case id6:
-		msg := m.mass6.New()
-		return msg, unmarshal6(
+	case id5:
+		msg := m.mass5.New()
+		return msg, unmarshal5(
 			msg,
 			buf,
-			m.mass5,
 		), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
@@ -1850,7 +1847,7 @@ func unmarshal4(
 	return o
 }
 
-func size6(m *types.AppendEntriesRequest) uint64 {
+func size5(m *types.AppendEntriesRequest) uint64 {
 	var n uint64 = 22
 	{
 		// Term
@@ -1957,9 +1954,9 @@ func size6(m *types.AppendEntriesRequest) uint64 {
 		}
 	}
 	{
-		// Entries
+		// Data
 
-		l := uint64(len(m.Entries))
+		l := uint64(len(m.Data))
 		{
 			vi := l
 			switch {
@@ -1982,9 +1979,7 @@ func size6(m *types.AppendEntriesRequest) uint64 {
 				n += 8
 			}
 		}
-		for _, sv1 := range m.Entries {
-			n += size5(&sv1)
-		}
+		n += l
 	}
 	{
 		// LeaderCommit
@@ -2015,7 +2010,7 @@ func size6(m *types.AppendEntriesRequest) uint64 {
 	return n
 }
 
-func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
+func marshal5(m *types.AppendEntriesRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// MessageID
@@ -2600,10 +2595,11 @@ func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Entries
+		// Data
 
+		l := uint64(len(m.Data))
 		{
-			vi := uint64(len(m.Entries))
+			vi := l
 			switch {
 			case vi <= 0x7F:
 				b[o] = byte(vi)
@@ -2742,8 +2738,9 @@ func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
 				o++
 			}
 		}
-		for _, sv1 := range m.Entries {
-			o += marshal5(&sv1, b[o:])
+		if l > 0 {
+			copy(b[o:o+l], unsafe.Slice(&m.Data[0], l))
+			o += l
 		}
 	}
 	{
@@ -2894,10 +2891,9 @@ func marshal6(m *types.AppendEntriesRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal6(
+func unmarshal5(
 	m *types.AppendEntriesRequest,
 	b []byte,
-	mass5 *mass.Mass[types.LogItem],
 ) uint64 {
 	var o uint64
 	{
@@ -3103,313 +3099,6 @@ func unmarshal6(
 		}
 	}
 	{
-		// Entries
-
-		var l uint64
-		{
-			vi := uint64(b[o] & 0x7F)
-			if b[o]&0x80 == 0 {
-				o++
-			} else {
-				vi |= uint64(b[o+1]&0x7F) << 7
-				if b[o+1]&0x80 == 0 {
-					o += 2
-				} else {
-					vi |= uint64(b[o+2]&0x7F) << 14
-					if b[o+2]&0x80 == 0 {
-						o += 3
-					} else {
-						vi |= uint64(b[o+3]&0x7F) << 21
-						if b[o+3]&0x80 == 0 {
-							o += 4
-						} else {
-							vi |= uint64(b[o+4]&0x7F) << 28
-							if b[o+4]&0x80 == 0 {
-								o += 5
-							} else {
-								vi |= uint64(b[o+5]&0x7F) << 35
-								if b[o+5]&0x80 == 0 {
-									o += 6
-								} else {
-									vi |= uint64(b[o+6]&0x7F) << 42
-									if b[o+6]&0x80 == 0 {
-										o += 7
-									} else {
-										vi |= uint64(b[o+7]&0x7F) << 49
-										if b[o+7]&0x80 == 0 {
-											o += 8
-										} else {
-											vi |= uint64(b[o+8]) << 56
-											o += 9
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			l = vi
-		}
-		if l > 0 {
-			m.Entries = mass5.NewSlice(l)
-			for i1 := range l {
-				o += unmarshal5(
-					&m.Entries[i1],
-					b[o:],
-				)
-			}
-		} else {
-			m.Entries = nil
-		}
-	}
-	{
-		// LeaderCommit
-
-		{
-			vi := types.Index(b[o] & 0x7F)
-			if b[o]&0x80 == 0 {
-				o++
-			} else {
-				vi |= types.Index(b[o+1]&0x7F) << 7
-				if b[o+1]&0x80 == 0 {
-					o += 2
-				} else {
-					vi |= types.Index(b[o+2]&0x7F) << 14
-					if b[o+2]&0x80 == 0 {
-						o += 3
-					} else {
-						vi |= types.Index(b[o+3]&0x7F) << 21
-						if b[o+3]&0x80 == 0 {
-							o += 4
-						} else {
-							vi |= types.Index(b[o+4]&0x7F) << 28
-							if b[o+4]&0x80 == 0 {
-								o += 5
-							} else {
-								vi |= types.Index(b[o+5]&0x7F) << 35
-								if b[o+5]&0x80 == 0 {
-									o += 6
-								} else {
-									vi |= types.Index(b[o+6]&0x7F) << 42
-									if b[o+6]&0x80 == 0 {
-										o += 7
-									} else {
-										vi |= types.Index(b[o+7]&0x7F) << 49
-										if b[o+7]&0x80 == 0 {
-											o += 8
-										} else {
-											vi |= types.Index(b[o+8]) << 56
-											o += 9
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			m.LeaderCommit = vi
-		}
-	}
-
-	return o
-}
-
-func size5(m *types.LogItem) uint64 {
-	var n uint64 = 1
-	{
-		// Data
-
-		l := uint64(len(m.Data))
-		{
-			vi := l
-			switch {
-			case vi <= 0x7F:
-			case vi <= 0x3FFF:
-				n++
-			case vi <= 0x1FFFFF:
-				n += 2
-			case vi <= 0xFFFFFFF:
-				n += 3
-			case vi <= 0x7FFFFFFFF:
-				n += 4
-			case vi <= 0x3FFFFFFFFFF:
-				n += 5
-			case vi <= 0x1FFFFFFFFFFFF:
-				n += 6
-			case vi <= 0xFFFFFFFFFFFFFF:
-				n += 7
-			default:
-				n += 8
-			}
-		}
-		n += l
-	}
-	return n
-}
-
-func marshal5(m *types.LogItem, b []byte) uint64 {
-	var o uint64
-	{
-		// Data
-
-		l := uint64(len(m.Data))
-		{
-			vi := l
-			switch {
-			case vi <= 0x7F:
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x7FFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			default:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			}
-		}
-		if l > 0 {
-			copy(b[o:o+l], unsafe.Slice(&m.Data[0], l))
-			o += l
-		}
-	}
-
-	return o
-}
-
-func unmarshal5(
-	m *types.LogItem,
-	b []byte,
-) uint64 {
-	var o uint64
-	{
 		// Data
 
 		var l uint64
@@ -3463,6 +3152,55 @@ func unmarshal5(
 			o += l
 		} else {
 			m.Data = nil
+		}
+	}
+	{
+		// LeaderCommit
+
+		{
+			vi := types.Index(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.Index(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.Index(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.Index(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.Index(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.Index(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.Index(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.Index(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.Index(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.LeaderCommit = vi
 		}
 	}
 

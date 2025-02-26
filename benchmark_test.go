@@ -82,6 +82,7 @@ func TestCluster(t *testing.T) {
 	}
 
 	group := parallel.NewGroup(ctx)
+
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
 		return Run(ctx, types.Config{ServerID: peer1, Servers: servers}, p2p1, p2c1)
 	})
@@ -100,9 +101,9 @@ func TestCluster(t *testing.T) {
 			fmt.Println("Connected")
 			for i := range 1000 {
 				c.Send(&rafttypes.ClientRequest{
-					Data: []byte{byte(i)},
+					Data: []byte{byte(i), byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)},
 				})
-				for range 100000 {
+				for range 10000 {
 				}
 			}
 			return nil

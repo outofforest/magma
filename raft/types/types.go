@@ -64,8 +64,8 @@ type AppendEntriesRequest struct {
 	NextLogTerm Term
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
-	// Entries are the log entries to store (empty for a heartbeat).
-	Entries []LogItem
+	// Data are the bytes to store (empty for a heartbeat).
+	Data []byte
 	// LeaderCommit is the leader's commit index.
 	LeaderCommit Index
 }
@@ -107,11 +107,6 @@ type VoteResponse struct {
 
 // ClientRequest represents a client's request to append item to the log.
 type ClientRequest struct {
-	Data []byte
-}
-
-// LogItem represents a single entry in the log.
-type LogItem struct {
 	Data []byte
 }
 
