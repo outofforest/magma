@@ -4,7 +4,6 @@ import (
 	"unsafe"
 
 	"github.com/outofforest/magma/raft/types"
-	"github.com/outofforest/mass"
 	"github.com/outofforest/proton"
 	"github.com/pkg/errors"
 )
@@ -16,15 +15,13 @@ const (
 var _ proton.Marshaller = Marshaller{}
 
 // NewMarshaller creates marshaller.
-func NewMarshaller(capacity uint64) Marshaller {
+func NewMarshaller() Marshaller {
 	return Marshaller{
-		mass0: mass.New[types.ClientRequest](capacity),
 	}
 }
 
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {
-	mass0 *mass.Mass[types.ClientRequest]
 }
 
 // Size computes the size of marshalled message.
@@ -63,11 +60,8 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 
 	switch id {
 	case id0:
-		msg := m.mass0.New()
-		return msg, unmarshal0(
-			msg,
-			buf,
-		), nil
+		msg := &types.ClientRequest{}
+		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
@@ -261,10 +255,7 @@ func marshal0(m *types.ClientRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(
-	m *types.ClientRequest,
-	b []byte,
-) uint64 {
+func unmarshal0(m *types.ClientRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Data
@@ -316,10 +307,9 @@ func unmarshal0(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o:o+l]
+			m.Data = make([]uint8, l)
+			copy(m.Data, b[o:o+l])
 			o += l
-		} else {
-			m.Data = nil
 		}
 	}
 
