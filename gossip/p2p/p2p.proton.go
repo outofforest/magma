@@ -416,7 +416,7 @@ func unmarshal1(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o : o+l]
+			m.Data = b[o:o+l]
 			o += l
 		} else {
 			m.Data = nil
@@ -3459,7 +3459,7 @@ func unmarshal5(
 			l = vi
 		}
 		if l > 0 {
-			m.Data = b[o : o+l]
+			m.Data = b[o:o+l]
 			o += l
 		} else {
 			m.Data = nil
