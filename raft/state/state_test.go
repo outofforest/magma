@@ -83,13 +83,70 @@ func TestLastLogTerm(t *testing.T) {
 
 	requireT.EqualValues(0, s.LastLogTerm())
 
-	s.log = append(s.log, rafttypes.LogItem{Term: 1})
+	s.terms = []rafttypes.Index{0, 0, 1, 2, 2, 4, 5, 5, 5, 6, 6}
+	requireT.EqualValues(0, s.LastLogTerm())
 
+	s.log = []rafttypes.LogItem{{}}
+
+	s.terms = []rafttypes.Index{0}
+	requireT.EqualValues(1, s.LastLogTerm())
+	s.terms = []rafttypes.Index{0, 0, 0}
+	requireT.EqualValues(3, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 0, 1}
+	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 0, 1, 1}
+	requireT.EqualValues(2, s.LastLogTerm())
+	s.terms = []rafttypes.Index{0, 0, 1, 2}
+	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.log = []rafttypes.LogItem{{}, {}, {}}
+
+	s.terms = []rafttypes.Index{}
+	requireT.EqualValues(0, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0}
 	requireT.EqualValues(1, s.LastLogTerm())
 
-	s.log = append(s.log, rafttypes.LogItem{Term: 2})
+	s.terms = []rafttypes.Index{0, 0, 0}
+	requireT.EqualValues(3, s.LastLogTerm())
 
+	s.terms = []rafttypes.Index{0, 1}
 	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 1}
+	requireT.EqualValues(3, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 2}
+	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 2, 2}
+	requireT.EqualValues(3, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 2, 3}
+	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 2, 3}
+	requireT.EqualValues(3, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 2, 2, 3}
+	requireT.EqualValues(4, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 10, 12, 12, 13}
+	requireT.EqualValues(1, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 10, 12, 12, 13}
+	requireT.EqualValues(2, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 3, 10, 12, 12, 13}
+	requireT.EqualValues(1, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 1, 10, 12, 12, 13}
+	requireT.EqualValues(3, s.LastLogTerm())
+
+	s.terms = []rafttypes.Index{0, 1, 1, 2, 2, 10, 12, 12, 13}
+	requireT.EqualValues(5, s.LastLogTerm())
 }
 
 func TestNextLogIndex(t *testing.T) {
@@ -99,11 +156,11 @@ func TestNextLogIndex(t *testing.T) {
 
 	requireT.EqualValues(0, s.NextLogIndex())
 
-	s.log = append(s.log, rafttypes.LogItem{Term: 1})
+	s.log = append(s.log, rafttypes.LogItem{})
 
 	requireT.EqualValues(1, s.NextLogIndex())
 
-	s.log = append(s.log, rafttypes.LogItem{Term: 1})
+	s.log = append(s.log, rafttypes.LogItem{})
 
 	requireT.EqualValues(2, s.NextLogIndex())
 }
@@ -113,54 +170,125 @@ func TestEntries(t *testing.T) {
 
 	s := &State{}
 
-	term, entries, err := s.Entries(1)
+	lastLogTerm, nextLogTerm, entries, err := s.Entries(1)
 	requireT.Error(err)
-	requireT.Zero(term)
+	requireT.Zero(lastLogTerm)
+	requireT.Zero(nextLogTerm)
 	requireT.Empty(entries)
 
-	term, entries, err = s.Entries(0)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(0)
 	requireT.NoError(err)
-	requireT.Zero(term)
+	requireT.Zero(lastLogTerm)
+	requireT.Zero(nextLogTerm)
 	requireT.Empty(entries)
 
+	// 0x01 0x02 0x03
 	s.log = append(s.log,
-		rafttypes.LogItem{Term: 1},
-		rafttypes.LogItem{Term: 2},
-		rafttypes.LogItem{Term: 3},
+		rafttypes.LogItem{Data: []byte{0x01}},
+		rafttypes.LogItem{Data: []byte{0x02}},
+		rafttypes.LogItem{Data: []byte{0x03}},
 	)
+	s.terms = []rafttypes.Index{0, 1, 2}
 
-	term, entries, err = s.Entries(0)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(0)
 	requireT.NoError(err)
-	requireT.Zero(term)
-	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
+	requireT.Zero(lastLogTerm)
+	requireT.EqualValues(1, nextLogTerm)
+	requireT.Equal([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
 	}, entries)
 
-	term, entries, err = s.Entries(1)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(1)
 	requireT.NoError(err)
-	requireT.EqualValues(1, term)
+	requireT.EqualValues(1, lastLogTerm)
+	requireT.EqualValues(2, nextLogTerm)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 2},
-		{Term: 3},
+		{Data: []byte{0x02}},
 	}, entries)
 
-	term, entries, err = s.Entries(2)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(2)
 	requireT.NoError(err)
-	requireT.EqualValues(2, term)
+	requireT.EqualValues(2, lastLogTerm)
+	requireT.EqualValues(3, nextLogTerm)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 3},
+		{Data: []byte{0x03}},
 	}, entries)
 
-	term, entries, err = s.Entries(3)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(3)
 	requireT.NoError(err)
-	requireT.EqualValues(3, term)
+	requireT.EqualValues(3, lastLogTerm)
+	requireT.EqualValues(3, nextLogTerm)
 	requireT.Empty(entries)
 
-	term, entries, err = s.Entries(4)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(4)
 	requireT.Error(err)
-	requireT.Zero(term)
+	requireT.Zero(lastLogTerm)
+	requireT.Zero(nextLogTerm)
+	requireT.Empty(entries)
+
+	// 0x01 0x02 0x03 0x03 0x03 0x04 0x04
+	s.log = append(s.log,
+		rafttypes.LogItem{Data: []byte{0x03}},
+		rafttypes.LogItem{Data: []byte{0x03}},
+		rafttypes.LogItem{Data: []byte{0x04}},
+		rafttypes.LogItem{Data: []byte{0x04}},
+	)
+	s.terms = []rafttypes.Index{0, 1, 2, 5, 5}
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(2)
+	requireT.NoError(err)
+	requireT.EqualValues(2, lastLogTerm)
+	requireT.EqualValues(3, nextLogTerm)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+	}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(3)
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastLogTerm)
+	requireT.EqualValues(3, nextLogTerm)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+	}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(4)
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastLogTerm)
+	requireT.EqualValues(3, nextLogTerm)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x03}},
+	}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(5)
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastLogTerm)
+	requireT.EqualValues(5, nextLogTerm)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+	}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(6)
+	requireT.NoError(err)
+	requireT.EqualValues(5, lastLogTerm)
+	requireT.EqualValues(5, nextLogTerm)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x04}},
+	}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(7)
+	requireT.NoError(err)
+	requireT.EqualValues(5, lastLogTerm)
+	requireT.EqualValues(5, nextLogTerm)
+	requireT.Empty(entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(8)
+	requireT.Error(err)
+	requireT.Zero(lastLogTerm)
+	requireT.Zero(nextLogTerm)
 	requireT.Empty(entries)
 }
 
@@ -169,284 +297,485 @@ func TestAppend(t *testing.T) {
 
 	s := &State{}
 
-	lastTerm, nextIndex, err := s.Append(0, 1, []rafttypes.LogItem{{Term: 1}})
-	requireT.Error(err)
-	requireT.Zero(lastTerm)
-	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
-
-	lastTerm, nextIndex, err = s.Append(1, 0, []rafttypes.LogItem{{Term: 1}})
-	requireT.Error(err)
-	requireT.Zero(lastTerm)
-	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
-
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
-		{Term: 1},
-		{Term: 5},
-		{Term: 2},
-		{Term: 10},
+	lastTerm, nextIndex, err := s.Append(0, 1, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
 	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(1, 1, []rafttypes.LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(1, 0, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+	requireT.Empty(s.log)
+
+	lastTerm, nextIndex, err = s.Append(0, 0, 0, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+	requireT.Empty(s.log)
+
+	lastTerm, nextIndex, err = s.Append(1, 1, 0, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+	requireT.Empty(s.log)
+
+	lastTerm, nextIndex, err = s.Append(1, 1, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, nil)
+	lastTerm, nextIndex, err = s.Append(0, 0, 1, nil)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(0, 0, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(1, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
+		{Data: []byte{0x01}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
-	requireT.Error(err)
-	requireT.Zero(lastTerm)
-	requireT.Zero(nextIndex)
-	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-	}, s.log)
-
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
-		{Term: 2},
-		{Term: 4},
-		{Term: 3},
+	lastTerm, nextIndex, err = s.Append(0, 0, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
 	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
+		{Data: []byte{0x01}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{
-		{Term: 2},
+	lastTerm, nextIndex, err = s.Append(0, 0, 2, []rafttypes.LogItem{
+		{Data: []byte{0x02}},
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(1, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 2},
+		{Data: []byte{0x02}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		0,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(0, 0, []rafttypes.LogItem{{Term: 1}})
+	lastTerm, nextIndex, err = s.Append(0, 0, 1, []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 2},
+		{Data: []byte{0x02}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		0,
+	}, s.terms)
 
-	s.log = []rafttypes.LogItem{{Term: 1}}
+	s.log = []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+	}
+	s.terms = []rafttypes.Index{
+		0,
+	}
 
-	lastTerm, nextIndex, err = s.Append(1, 1, []rafttypes.LogItem{
-		{Term: 2},
-		{Term: 3},
+	lastTerm, nextIndex, err = s.Append(1, 1, 2, []rafttypes.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(2, lastTerm)
+	requireT.EqualValues(2, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(2, 2, 3, []rafttypes.LogItem{
+		{Data: []byte{0x03}},
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, nil)
+	lastTerm, nextIndex, err = s.Append(3, 3, 3, nil)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 2, []rafttypes.LogItem{{Term: 3}})
+	lastTerm, nextIndex, err = s.Append(2, 2, 3, []rafttypes.LogItem{
+		{Data: []byte{0x03}},
+	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 4}})
+	lastTerm, nextIndex, err = s.Append(3, 3, 4, []rafttypes.LogItem{
+		{Data: []byte{0x04}},
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(4, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		3,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 5}})
+	lastTerm, nextIndex, err = s.Append(3, 3, 5, []rafttypes.LogItem{
+		{Data: []byte{0x05}},
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(4, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 5},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x05}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		3,
+		3,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 3, nil)
-	requireT.NoError(err)
-	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-	}, s.log)
-
-	lastTerm, nextIndex, err = s.Append(4, 3, []rafttypes.LogItem{{Term: 4}})
-	requireT.NoError(err)
-	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-	}, s.log)
-
-	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{{Term: 3}})
-	requireT.NoError(err)
-	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-	}, s.log)
-
-	lastTerm, nextIndex, err = s.Append(3, 3, []rafttypes.LogItem{
-		{Term: 4},
-		{Term: 5},
-		{Term: 4},
-		{Term: 6},
-	})
+	lastTerm, nextIndex, err = s.Append(3, 3, 3, nil)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x05}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		3,
+		3,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(4, 3, []rafttypes.LogItem{
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{Term: 4},
-		{Term: 4},
-		{Term: 5},
-		{Term: 6},
+	s.log = []rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+	}
+	s.terms = []rafttypes.Index{
+		0,
+		1,
+		2,
+	}
+
+	lastTerm, nextIndex, err = s.Append(4, 3, 4, []rafttypes.LogItem{
+		{Data: []byte{0x04}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastTerm)
+	requireT.EqualValues(3, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(3, 3, 3, []rafttypes.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastTerm)
+	requireT.EqualValues(4, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(4, 3, 3, []rafttypes.LogItem{
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastTerm)
+	requireT.EqualValues(6, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(6, 3, 4, []rafttypes.LogItem{
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(4, lastTerm)
+	requireT.EqualValues(9, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(9, 4, 5, []rafttypes.LogItem{
+		{Data: []byte{0x05}},
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(5, lastTerm)
+	requireT.EqualValues(10, nextIndex)
+	requireT.EqualValues([]rafttypes.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x05}},
+	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+		9,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(10, 5, 6, []rafttypes.LogItem{
+		{Data: []byte{0x06}},
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(11, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{Term: 4},
-		{Term: 4},
-		{Term: 5},
-		{Term: 6},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x05}},
+		{Data: []byte{0x06}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+		9,
+		10,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(11, 7, []rafttypes.LogItem{{Term: 7}})
+	lastTerm, nextIndex, err = s.Append(11, 7, 7, []rafttypes.LogItem{
+		{Data: []byte{0x07}},
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(10, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{Term: 4},
-		{Term: 4},
-		{Term: 5},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x05}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+		9,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(9, 4, []rafttypes.LogItem{{Term: 4}})
+	lastTerm, nextIndex, err = s.Append(9, 4, 4, []rafttypes.LogItem{
+		{Data: []byte{0x04}},
+	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{Term: 4},
-		{Term: 4},
-		{Term: 5},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x05}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+		9,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(9, 4, []rafttypes.LogItem{{Term: 5}})
+	lastTerm, nextIndex, err = s.Append(9, 4, 5, []rafttypes.LogItem{
+		{Data: []byte{0x05}},
+	})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{Term: 4},
-		{Term: 4},
-		{Term: 5},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x04}},
+		{Data: []byte{0x05}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+		9,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(8, 5, []rafttypes.LogItem{{Term: 6}})
+	lastTerm, nextIndex, err = s.Append(8, 5, 6, []rafttypes.LogItem{
+		{Data: []byte{0x06}},
+	})
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
 	requireT.EqualValues([]rafttypes.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
-		{Term: 3},
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
+		{Data: []byte{0x03}},
 	}, s.log)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(1, 2, []rafttypes.LogItem{{Term: 3}})
+	lastTerm, nextIndex, err = s.Append(1, 2, 3, []rafttypes.LogItem{
+		{Data: []byte{0x03}},
+	})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
 	requireT.Empty(s.log)
+	requireT.Empty(s.terms)
 }

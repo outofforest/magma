@@ -14,10 +14,13 @@ import (
 func TestLeaderSetup(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -45,12 +48,10 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         3,
 		NextLogIndex: 3,
+		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Entries: []types.LogItem{
-			{
-				Term: 3,
-				Data: nil,
-			},
+			{},
 		},
 		LeaderCommit: 2,
 	}, msg)
@@ -66,13 +67,21 @@ func TestLeaderSetup(t *testing.T) {
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
-	_, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
 	requireT.EqualValues([]types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
-		{Term: 3},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(1)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(3)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
 	}, entries)
 }
 
@@ -80,10 +89,13 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT := require.New(t)
 	s := &state.State{}
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 
@@ -97,20 +109,11 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
+		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Entries: []types.LogItem{
-			{
-				Term: 3,
-				Data: []byte{0x01},
-			},
-			{
-				Term: 3,
-				Data: []byte{0x02},
-			},
-			{
-				Term: 4,
-				Data: []byte{0x03},
-			},
+			{Data: []byte{0x01}},
+			{Data: []byte{0x02}},
 		},
 		LeaderCommit: 0,
 	})
@@ -118,30 +121,28 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(&types.AppendEntriesResponse{
 		Term:         4,
-		NextLogIndex: 6,
+		NextLogIndex: 5,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
 	requireT.EqualValues([]types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
-		{
-			Term: 3,
-			Data: []byte{0x01},
-		},
-		{
-			Term: 3,
-			Data: []byte{0x02},
-		},
-		{
-			Term: 4,
-			Data: []byte{0x03},
-		},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(1)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(3)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{Data: []byte{0x01}},
+		{Data: []byte{0x02}},
 	}, entries)
 }
 
@@ -208,11 +209,20 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -231,11 +241,10 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 2,
+		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Entries: []types.LogItem{
-			{Term: 3},
-			{Term: 4},
-			{Term: 5},
+			{Data: []byte{0x03}},
 		},
 	}, msg)
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
@@ -247,11 +256,20 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -268,11 +286,10 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 2,
+		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Entries: []types.LogItem{
-			{Term: 3},
-			{Term: 4},
-			{Term: 5},
+			{Data: []byte{0x03}},
 		},
 	}, msg)
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
@@ -284,11 +301,20 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -314,11 +340,20 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -351,19 +386,28 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-	_, _, err = s.Append(0, 0, []types.LogItem{
-		{Term: 5},
+	_, _, err = s.Append(0, 0, 5, []types.LogItem{
+		{},
 	})
 	requireT.NoError(err)
 
@@ -392,20 +436,29 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-	_, _, err = s.Append(0, 0, []types.LogItem{
-		{Term: 5},
-		{Term: 5},
+	_, _, err = s.Append(0, 0, 5, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 
@@ -434,11 +487,20 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -476,20 +538,29 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-	_, _, err = s.Append(0, 0, []types.LogItem{
-		{Term: 5},
-		{Term: 5},
+	_, _, err = s.Append(0, 0, 5, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 
@@ -518,11 +589,20 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -547,8 +627,9 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 5,
+		NextLogTerm:  5,
 		LastLogTerm:  5,
-		Entries:      []types.LogItem{},
+		Entries:      nil,
 	}, msg)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 }
@@ -556,11 +637,20 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{Data: []byte{0x01}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{Data: []byte{0x02}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{Data: []byte{0x03}},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{Data: []byte{0x04}},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -589,12 +679,18 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{},
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 2, 3, []types.LogItem{
+		{},
+		{},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
@@ -612,12 +708,10 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 6,
+		NextLogTerm:  4,
 		LastLogTerm:  4,
 		Entries: []types.LogItem{
-			{
-				Term: 4,
-				Data: []byte{0x01},
-			},
+			{Data: []byte{0x01}},
 		},
 	}, msg)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
@@ -629,30 +723,48 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.EqualValues(7, r.nextLogIndex)
 	requireT.EqualValues(0, r.committedCount)
 
-	_, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
 	requireT.EqualValues([]types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 2},
-		{Term: 3},
-		{Term: 3},
-		{Term: 4},
-		{
-			Term: 4,
-			Data: []byte{0x01},
-		},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(1)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(3)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{},
+	}, entries)
+	_, _, entries, err = s.Entries(5)
+	requireT.NoError(err)
+	requireT.EqualValues([]types.LogItem{
+		{},
+		{Data: []byte{0x01}},
 	}, entries)
 }
 
 func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT := require.New(t)
 	s := &state.State{}
-	_, _, err := s.Append(0, 0, []types.LogItem{
-		{Term: 1},
-		{Term: 2},
-		{Term: 3},
-		{Term: 4},
+	_, _, err := s.Append(0, 0, 1, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []types.LogItem{
+		{},
+	})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []types.LogItem{
+		{},
 	})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -691,8 +803,9 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT.Equal(&types.AppendEntriesRequest{
 		Term:         5,
 		NextLogIndex: 5,
+		NextLogTerm:  5,
 		LastLogTerm:  5,
-		Entries:      []types.LogItem{},
+		Entries:      nil,
 	}, msg)
 	requireT.Equal(serverID, r.leaderID)
 }

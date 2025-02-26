@@ -204,7 +204,6 @@ func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntri
 	}
 
 	newLogIndex, err := r.appendLogItem(types.LogItem{
-		Term: r.state.CurrentTerm(),
 		Data: m.Data,
 	})
 	if err != nil {
@@ -353,9 +352,7 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
-	r.indexTermStarted, err = r.appendLogItem(types.LogItem{
-		Term: r.state.CurrentTerm(),
-	})
+	r.indexTermStarted, err = r.appendLogItem(types.LogItem{})
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +373,7 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 }
 
 func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
-	lastLogTerm, entries, err := r.state.Entries(nextLogIndex)
+	lastLogTerm, nextLogTerm, entries, err := r.state.Entries(nextLogIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +381,7 @@ func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.Appe
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  lastLogTerm,
+		NextLogTerm:  nextLogTerm,
 		Entries:      entries,
 		LeaderCommit: r.committedCount,
 	}, nil
@@ -399,7 +397,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Entries)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Entries)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +464,8 @@ func (r *Reactor) computeCommittedCount() types.Index {
 func (r *Reactor) appendLogItem(item types.LogItem) (types.Index, error) {
 	nextLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, []types.LogItem{item})
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(),
+		[]types.LogItem{item})
 	if err != nil {
 		return 0, err
 	}

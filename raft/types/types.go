@@ -60,6 +60,8 @@ type AppendEntriesRequest struct {
 	Term Term
 	// NextLogIndex is the index of the next log entry.
 	NextLogIndex Index
+	// NextLogTerm is the term of appended log entries.
+	NextLogTerm Term
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
 	// Entries are the log entries to store (empty for a heartbeat).
@@ -110,7 +112,6 @@ type ClientRequest struct {
 
 // LogItem represents a single entry in the log.
 type LogItem struct {
-	Term Term
 	Data []byte
 }
 
