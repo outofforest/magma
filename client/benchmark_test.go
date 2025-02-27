@@ -1,4 +1,4 @@
-package magma
+package client
 
 import (
 	"context"
@@ -11,9 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/logger"
-	"github.com/outofforest/magma/gossip"
-	"github.com/outofforest/magma/gossip/p2c"
-	rafttypes "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma"
+	"github.com/outofforest/magma/client/entities"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
@@ -84,38 +83,61 @@ func TestCluster(t *testing.T) {
 	group := parallel.NewGroup(ctx)
 
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		return Run(ctx, types.Config{ServerID: peer1, Servers: servers}, p2p1, p2c1)
+		return magma.Run(ctx, types.Config{ServerID: peer1, Servers: servers}, p2p1, p2c1)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		return Run(ctx, types.Config{ServerID: peer2, Servers: servers}, p2p2, p2c2)
+		return magma.Run(ctx, types.Config{ServerID: peer2, Servers: servers}, p2p2, p2c2)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		return Run(ctx, types.Config{ServerID: peer3, Servers: servers}, p2p3, p2c3)
+		return magma.Run(ctx, types.Config{ServerID: peer3, Servers: servers}, p2p3, p2c3)
 	})
+
+	client := New(Config[entities.Marshaller]{
+		PeerAddress: p2c1.Addr().String(),
+		TxMessageConfig: resonance.Config[entities.Marshaller]{
+			MaxMessageSize:    4096,
+			MarshallerFactory: entities.NewMarshaller,
+		},
+	})
+	group.Spawn("client", parallel.Fail, client.Run)
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	_ = resonance.RunClient[p2c.Marshaller](ctx, p2c1.Addr().String(), gossip.P2CConfig,
-		func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2c.Marshaller]) error {
-			fmt.Println("Connected")
-			for i := range 1000 {
-				c.Send(&rafttypes.ClientRequest{
-					Data: []byte{byte(i), byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)},
-				})
-				for range 10000 {
-				}
-			}
-			return nil
-		},
-	)
+	for range 1000 {
+		err := client.Broadcast(ctx, []any{
+			&entities.Account{
+				FirstName: "Test1",
+				LastName:  "Test2",
+			},
+			&entities.Account{
+				FirstName: "Test1",
+				LastName:  "Test2",
+			},
+			&entities.Account{
+				FirstName: "Test1",
+				LastName:  "Test2",
+			},
+			&entities.Account{
+				FirstName: "Test1",
+				LastName:  "Test2",
+			},
+			&entities.Account{
+				FirstName: "Test1",
+				LastName:  "Test2",
+			},
+		})
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
 
 	time.Sleep(5 * time.Second)
 
 	fmt.Println("===================")
 
 	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return Run(ctx, types.Config{ServerID: peer4, Servers: servers}, p2p4, p2c4)
+		return magma.Run(ctx, types.Config{ServerID: peer4, Servers: servers}, p2p4, p2c4)
 	})
 
 	time.Sleep(time.Minute)
