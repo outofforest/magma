@@ -24,6 +24,16 @@ func NewMarshaller() Marshaller {
 type Marshaller struct {
 }
 
+// ID returns ID of message type.
+func (m Marshaller) ID(msg any) (uint64, error) {
+	switch msg.(type) {
+	case *types.ClientRequest:
+		return id0, nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
