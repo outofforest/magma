@@ -5,14 +5,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 )
 
 func TestID(t *testing.T) {
 	requireT := require.New(t)
 
-	r, _ := newReactor(&state.State{})
+	r, _ := newReactor(newState())
 	r.id = serverID
 
 	requireT.Equal(serverID, r.ID())
@@ -21,7 +20,7 @@ func TestID(t *testing.T) {
 func TestRole(t *testing.T) {
 	requireT := require.New(t)
 
-	r, _ := newReactor(&state.State{})
+	r, _ := newReactor(newState())
 	r.role = types.RoleLeader
 
 	requireT.Equal(types.RoleLeader, r.Role())
@@ -30,7 +29,7 @@ func TestRole(t *testing.T) {
 func TestLeaderID(t *testing.T) {
 	requireT := require.New(t)
 
-	r, _ := newReactor(&state.State{})
+	r, _ := newReactor(newState())
 	r.leaderID = serverID
 
 	requireT.Equal(serverID, r.LeaderID())

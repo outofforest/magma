@@ -1,18 +1,65 @@
 package state
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/types"
 )
 
+const logSize = 1024 * 1024 * 1024
+
+// CloseFunc defines function type used to close the state.
+type CloseFunc func()
+
+// Open opens state existing in directory or creates a new one there.
+func Open(dir string) (*State, CloseFunc, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	logF, err := os.OpenFile(filepath.Join(dir, "log"), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	pageSize := os.Getpagesize()
+	size := (logSize + pageSize - 1) / pageSize * pageSize
+	if err := logF.Truncate(int64(size)); err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	log, err := unix.Mmap(int(logF.Fd()), 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "memory allocation failed")
+	}
+
+	return &State{
+			log:          log,
+			nextLogIndex: rafttypes.Index(0), // FIXME (wojciech): nextLogIndex must be stored somewhere.
+			doMSync:      true,
+		}, func() {
+			_ = unix.Munmap(log)
+			_ = logF.Close()
+		}, nil
+}
+
+// NewInMemory creates in-memory state useful for testing.
+func NewInMemory(logSize uint64) *State {
+	return &State{
+		log: make([]byte, logSize),
+	}
+}
+
 // State represents the persistent state of the Raft consensus algorithm.
 type State struct {
-	currentTerm rafttypes.Term
-	votedFor    types.ServerID
-	terms       []rafttypes.Index
-	log         []byte
+	currentTerm  rafttypes.Term
+	votedFor     types.ServerID
+	terms        []rafttypes.Index
+	log          []byte
+	nextLogIndex rafttypes.Index
+	doMSync      bool
 }
 
 // CurrentTerm returns the current term of the state.
@@ -56,14 +103,14 @@ func (s *State) VoteFor(candidate types.ServerID) (bool, error) {
 // LastLogTerm returns the term of the last log entry in the state.
 // If the log is empty, it returns 0.
 func (s *State) LastLogTerm() rafttypes.Term {
-	return s.previousTerm(rafttypes.Index(len(s.log)))
+	return s.previousTerm(s.nextLogIndex)
 }
 
 // NextLogIndex returns the index of the next log entry.
 // This is calculated based on the current length of the log.
 // It effectively points to the position where a new log entry would be appended.
 func (s *State) NextLogIndex() rafttypes.Index {
-	return rafttypes.Index(len(s.log))
+	return s.nextLogIndex
 }
 
 // Entries retrieves the log entries starting from the given nextLogIndex.
@@ -71,19 +118,19 @@ func (s *State) NextLogIndex() rafttypes.Index {
 // For a valid nextLogIndex, it returns the term of the log entry preceding nextLogIndex (or 0 if nextLogIndex is 0),
 // the slice of log entries starting at nextLogIndex, and no error.
 func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []byte, error) {
-	if nextLogIndex > rafttypes.Index(len(s.log)) {
+	if nextLogIndex > s.nextLogIndex {
 		return 0, 0, nil, errors.New("bug in protocol")
 	}
 
 	previousTerm := s.previousTerm(nextLogIndex)
-	if nextLogIndex == rafttypes.Index(len(s.log)) {
+	if nextLogIndex == s.nextLogIndex {
 		return previousTerm, previousTerm, nil, nil
 	}
 	nextTerm := s.previousTerm(nextLogIndex + 1)
 	if nextTerm < rafttypes.Term(len(s.terms)) {
 		return previousTerm, nextTerm, s.log[nextLogIndex:s.terms[nextTerm]], nil
 	}
-	return previousTerm, nextTerm, s.log[nextLogIndex:], nil
+	return previousTerm, nextTerm, s.log[nextLogIndex:s.nextLogIndex], nil
 }
 
 // Append attempts to apply the given log entries starting at a specified index in the log.
@@ -116,8 +163,7 @@ func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes
 // the consistency guarantees of the Raft protocol.
 func (s *State) Append(
 	nextLogIndex rafttypes.Index,
-	lastLogTerm rafttypes.Term,
-	term rafttypes.Term,
+	lastLogTerm, term rafttypes.Term,
 	data []byte,
 ) (rafttypes.Term, rafttypes.Index, error) {
 	if term < lastLogTerm {
@@ -131,48 +177,25 @@ func (s *State) Append(
 		if lastLogTerm != 0 {
 			return 0, 0, errors.New("bug in protocol")
 		}
-		if rafttypes.Index(len(s.log)) > 0 && term <= s.previousTerm(1) {
-			return 0, 0, errors.New("bug in protocol")
-		}
-		s.log = data
-		s.terms = s.terms[:0]
-		if len(s.log) == 0 {
-			return 0, 0, nil
-		}
-		for range term {
-			s.terms = append(s.terms, 0)
-		}
-		return term, rafttypes.Index(len(s.log)), nil
+		return s.appendLog(nextLogIndex, lastLogTerm, term, data)
 	}
 	if lastLogTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
 
-	if nextLogIndex > rafttypes.Index(len(s.log)) {
-		if len(s.log) == 0 {
-			return 0, 0, nil
-		}
-		return s.previousTerm(rafttypes.Index(len(s.log))), rafttypes.Index(len(s.log)), nil
+	if nextLogIndex > s.nextLogIndex {
+		return s.previousTerm(s.nextLogIndex), s.nextLogIndex, nil
 	}
 
 	if s.previousTerm(nextLogIndex) == lastLogTerm {
-		if rafttypes.Index(len(s.log)) > nextLogIndex && term <= s.previousTerm(nextLogIndex+1) {
-			return 0, 0, errors.New("bug in protocol")
-		}
-		s.log = append(s.log[:nextLogIndex], data...)
-		s.terms = s.terms[:lastLogTerm]
-		for range term - lastLogTerm {
-			s.terms = append(s.terms, nextLogIndex)
-		}
-		return term, rafttypes.Index(len(s.log)), nil
+		return s.appendLog(nextLogIndex, lastLogTerm, term, data)
 	}
 
-	revertTerm := s.previousTerm(nextLogIndex)
-	revertIndex := s.terms[revertTerm-1]
-	s.log = s.log[:revertIndex]
-	s.terms = s.terms[:revertTerm-1]
+	revertTerm := s.previousTerm(nextLogIndex) - 1
+	s.nextLogIndex = s.terms[revertTerm]
+	s.terms = s.terms[:revertTerm]
 
-	return revertTerm - 1, revertIndex, nil
+	return revertTerm, s.nextLogIndex, nil
 }
 
 func (s *State) previousTerm(nextIndex rafttypes.Index) rafttypes.Term {
@@ -182,4 +205,31 @@ func (s *State) previousTerm(nextIndex rafttypes.Index) rafttypes.Term {
 		}
 	}
 	return 0
+}
+
+func (s *State) appendLog(
+	nextLogIndex rafttypes.Index,
+	lastLogTerm,
+	term rafttypes.Term,
+	data []byte,
+) (rafttypes.Term, rafttypes.Index, error) {
+	if s.nextLogIndex > nextLogIndex && term <= s.previousTerm(nextLogIndex+1) {
+		return 0, 0, errors.New("bug in protocol")
+	}
+	s.terms = s.terms[:lastLogTerm]
+	dLen := rafttypes.Index(len(data))
+	s.nextLogIndex = nextLogIndex + dLen
+	if dLen == 0 {
+		return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+	}
+	copy(s.log[nextLogIndex:], data)
+	for range term - lastLogTerm {
+		s.terms = append(s.terms, nextLogIndex)
+	}
+	if s.doMSync {
+		if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
+			return 0, 0, errors.WithStack(err)
+		}
+	}
+	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
 }

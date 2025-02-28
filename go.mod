@@ -11,6 +11,7 @@ require (
 	github.com/outofforest/varuint64 v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/sys v0.30.0
 )
 
 require (

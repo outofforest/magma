@@ -14,6 +14,7 @@ var ZeroServerID ServerID
 type Config struct {
 	ServerID ServerID
 	Servers  []PeerConfig
+	StateDir string
 }
 
 // PeerConfig stores configuration of peer connection.

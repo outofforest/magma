@@ -18,7 +18,7 @@ func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactorSingleMode(s)
 
 	electionTimeoutTime := ts.Add(time.Hour)
@@ -55,7 +55,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
@@ -102,7 +102,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
