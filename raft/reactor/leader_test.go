@@ -6,14 +6,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
 )
 
 func TestLeaderSetup(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
@@ -73,7 +72,7 @@ func TestLeaderSetup(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -118,7 +117,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 
 func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToLeader()
@@ -142,7 +141,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 
 func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToLeader()
@@ -178,7 +177,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -215,7 +214,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -250,7 +249,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -281,7 +280,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -319,7 +318,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -359,7 +358,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -399,7 +398,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -442,7 +441,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 
 func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -482,7 +481,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 
 func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -522,7 +521,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 
 func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x02})
@@ -556,7 +555,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 
 func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
@@ -607,7 +606,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 
 func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
@@ -658,7 +657,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 
 func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(1, 1, 2, []byte{0x00})

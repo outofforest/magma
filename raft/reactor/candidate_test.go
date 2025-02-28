@@ -7,14 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
 )
 
 func TestCandidateSetup(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 
@@ -65,7 +64,7 @@ func TestCandidateSetup(t *testing.T) {
 
 func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -110,7 +109,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 
 func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -146,7 +145,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 
 func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -175,7 +174,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 
 func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -204,7 +203,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 
 func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -229,7 +228,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -254,7 +253,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -298,7 +297,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -349,7 +348,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 
 func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
@@ -367,7 +366,7 @@ func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 
 func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, _ := newReactor(s)
 	_, err := r.transitionToCandidate()
 	requireT.NoError(err)

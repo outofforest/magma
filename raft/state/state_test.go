@@ -10,10 +10,49 @@ import (
 	"github.com/outofforest/magma/types"
 )
 
+func newState() *State {
+	return NewInMemory(1024 * 1024)
+}
+
+func setLog(s *State, log ...byte) {
+	copy(s.log, log)
+	s.nextLogIndex = rafttypes.Index(len(log))
+}
+
+func appendLog(s *State, data ...byte) {
+	copy(s.log[s.nextLogIndex:], data)
+	s.nextLogIndex += rafttypes.Index(len(data))
+}
+
+func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
+	requireT.Equal(rafttypes.Index(len(expectedLog)), s.nextLogIndex)
+	requireT.Equal(expectedLog, s.log[:s.nextLogIndex])
+}
+
+func TestNewInMemory(t *testing.T) {
+	requireT := require.New(t)
+
+	s := NewInMemory(112)
+	requireT.False(s.doMSync)
+	requireT.Len(s.log, 112)
+}
+
+func TestOpen(t *testing.T) {
+	requireT := require.New(t)
+	dir := t.TempDir()
+
+	s, sClose, err := Open(dir)
+	t.Cleanup(sClose)
+
+	requireT.NoError(err)
+	requireT.True(s.doMSync)
+	requireT.Len(s.log, logSize)
+}
+
 func TestCurrentTerm(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	requireT.Zero(s.CurrentTerm())
 
@@ -36,7 +75,7 @@ func TestCurrentTerm(t *testing.T) {
 func TestSetCurrentTermResetsVotedFor(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 	s.votedFor = types.ServerID(uuid.New())
 
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -46,7 +85,7 @@ func TestSetCurrentTermResetsVotedFor(t *testing.T) {
 func TestVoteFor(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	granted, err := s.VoteFor(types.ZeroServerID)
 	requireT.Error(err)
@@ -79,14 +118,14 @@ func TestVoteFor(t *testing.T) {
 func TestLastLogTerm(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	requireT.EqualValues(0, s.LastLogTerm())
 
 	s.terms = []rafttypes.Index{0, 0, 1, 2, 2, 4, 5, 5, 5, 6, 6}
 	requireT.EqualValues(0, s.LastLogTerm())
 
-	s.log = []byte{0x00}
+	setLog(s, 0x00)
 
 	s.terms = []rafttypes.Index{0}
 	requireT.EqualValues(1, s.LastLogTerm())
@@ -101,7 +140,7 @@ func TestLastLogTerm(t *testing.T) {
 	s.terms = []rafttypes.Index{0, 0, 1, 2}
 	requireT.EqualValues(2, s.LastLogTerm())
 
-	s.log = []byte{0x00, 0x00, 0x00}
+	setLog(s, 0x00, 0x00, 0x00)
 
 	s.terms = []rafttypes.Index{}
 	requireT.EqualValues(0, s.LastLogTerm())
@@ -152,15 +191,15 @@ func TestLastLogTerm(t *testing.T) {
 func TestNextLogIndex(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	requireT.EqualValues(0, s.NextLogIndex())
 
-	s.log = append(s.log, 0x00)
+	appendLog(s, 0x00)
 
 	requireT.EqualValues(1, s.NextLogIndex())
 
-	s.log = append(s.log, 0x00)
+	appendLog(s, 0x00)
 
 	requireT.EqualValues(2, s.NextLogIndex())
 }
@@ -168,7 +207,7 @@ func TestNextLogIndex(t *testing.T) {
 func TestEntries(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	lastLogTerm, nextLogTerm, entries, err := s.Entries(1)
 	requireT.Error(err)
@@ -183,7 +222,7 @@ func TestEntries(t *testing.T) {
 	requireT.Empty(entries)
 
 	// 0x01 0x02 0x03
-	s.log = append(s.log, 0x01, 0x02, 0x03)
+	appendLog(s, 0x01, 0x02, 0x03)
 	s.terms = []rafttypes.Index{0, 1, 2}
 
 	lastLogTerm, nextLogTerm, entries, err = s.Entries(0)
@@ -217,7 +256,7 @@ func TestEntries(t *testing.T) {
 	requireT.Empty(entries)
 
 	// 0x01 0x02 0x03 0x03 0x03 0x04 0x04
-	s.log = append(s.log, 0x03, 0x03, 0x04, 0x04)
+	appendLog(s, 0x03, 0x03, 0x04, 0x04)
 	s.terms = []rafttypes.Index{0, 1, 2, 5, 5}
 
 	lastLogTerm, nextLogTerm, entries, err = s.Entries(2)
@@ -266,49 +305,49 @@ func TestEntries(t *testing.T) {
 func TestAppend(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &State{}
+	s := newState()
 
 	lastTerm, nextIndex, err := s.Append(0, 1, 1, []byte{0x01})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(1, 0, 1, []byte{0x01})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(0, 0, 0, []byte{0x01})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(1, 1, 0, []byte{0x01})
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(1, 1, 1, []byte{0x01})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(0, 0, 1, nil)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 
 	lastTerm, nextIndex, err = s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(1, nextIndex)
-	requireT.EqualValues([]byte{0x01}, s.log)
+	logEqual(requireT, s, 0x01)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 	}, s.terms)
@@ -317,7 +356,7 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{0x01}, s.log)
+	logEqual(requireT, s, 0x01)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 	}, s.terms)
@@ -326,7 +365,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(1, nextIndex)
-	requireT.EqualValues([]byte{0x02}, s.log)
+	logEqual(requireT, s, 0x02)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		0,
@@ -336,13 +375,13 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{0x02}, s.log)
+	logEqual(requireT, s, 0x02)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		0,
 	}, s.terms)
 
-	s.log = []byte{0x01}
+	setLog(s, 0x01)
 	s.terms = []rafttypes.Index{
 		0,
 	}
@@ -351,7 +390,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(2, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02}, s.log)
+	logEqual(requireT, s, 0x01, 0x02)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -361,7 +400,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -372,7 +411,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -383,7 +422,7 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -394,7 +433,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03, 0x04}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03, 0x04)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -406,7 +445,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03, 0x05}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03, 0x05)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -419,7 +458,7 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03, 0x05}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03, 0x05)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -428,7 +467,7 @@ func TestAppend(t *testing.T) {
 		3,
 	}, s.terms)
 
-	s.log = []byte{0x01, 0x02, 0x03}
+	setLog(s, 0x01, 0x02, 0x03)
 	s.terms = []rafttypes.Index{
 		0,
 		1,
@@ -439,7 +478,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -450,7 +489,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(4, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -461,7 +500,7 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
-	requireT.EqualValues([]byte{0x01, 0x02, 0x03, 0x03, 0x03, 0x03}, s.log)
+	logEqual(requireT, s, 0x01, 0x02, 0x03, 0x03, 0x03, 0x03)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -472,12 +511,12 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(9, nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -489,13 +528,13 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
 		0x05,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -508,14 +547,14 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(11, nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
 		0x05,
 		0x06,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -529,13 +568,13 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
 		0x05,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -548,13 +587,13 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
 		0x05,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -567,13 +606,13 @@ func TestAppend(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
 		0x04, 0x04, 0x04,
 		0x05,
-	}, s.log)
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -586,11 +625,58 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, s,
 		0x01,
 		0x02,
 		0x03, 0x03, 0x03, 0x03,
-	}, s.log)
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(6, 3, 4, nil)
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastTerm)
+	requireT.EqualValues(6, nextIndex)
+	logEqual(requireT, s,
+		0x01,
+		0x02,
+		0x03, 0x03, 0x03, 0x03,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(6, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.EqualValues(4, lastTerm)
+	requireT.EqualValues(7, nextIndex)
+	logEqual(requireT, s,
+		0x01,
+		0x02,
+		0x03, 0x03, 0x03, 0x03,
+		0x04,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+		6,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(6, 3, 5, nil)
+	requireT.NoError(err)
+	requireT.EqualValues(3, lastTerm)
+	requireT.EqualValues(6, nextIndex)
+	logEqual(requireT, s,
+		0x01,
+		0x02,
+		0x03, 0x03, 0x03, 0x03,
+	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
 		1,
@@ -601,6 +687,6 @@ func TestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Empty(s.log)
+	requireT.Zero(s.nextLogIndex)
 	requireT.Empty(s.terms)
 }

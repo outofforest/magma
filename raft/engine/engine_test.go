@@ -13,6 +13,10 @@ import (
 	magmatypes "github.com/outofforest/magma/types"
 )
 
+func newState() *state.State {
+	return state.NewInMemory(1024 * 1024)
+}
+
 var (
 	serverID = magmatypes.ServerID(uuid.New())
 	peer1ID  = magmatypes.ServerID(uuid.New())
@@ -32,7 +36,7 @@ func newEngine(s *state.State) (*Engine, reactor.TimeAdvancer) {
 func TestTransition(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -41,7 +45,7 @@ func TestTransition(t *testing.T) {
 func TestApplyAppendEntriesRequest(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	messageID := types.NewMessageID()
@@ -73,7 +77,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 func TestApplyAppendEntriesResponseMore(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -114,7 +118,7 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 func TestApplyAppendEntriesResponseIgnore(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -142,7 +146,7 @@ func TestApplyAppendEntriesResponseIgnore(t *testing.T) {
 func TestApplyVoteRequest(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	messageID := types.NewMessageID()
@@ -171,7 +175,7 @@ func TestApplyVoteRequest(t *testing.T) {
 func TestApplyVoteResponseIgnore(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	messageID := transitionToCandidate(requireT, e, ts)
@@ -208,7 +212,7 @@ func TestApplyVoteResponseIgnore(t *testing.T) {
 func TestApplyClientRequestIfNoLeader(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	role, toSend, err := e.Apply(types.Command{
@@ -225,7 +229,7 @@ func TestApplyClientRequestIfNoLeader(t *testing.T) {
 func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -264,7 +268,7 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -304,7 +308,7 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	// To set leader.
@@ -340,7 +344,7 @@ func TestApplyClientRequestIfNotLeaderAndNoPeer(t *testing.T) {
 func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	// To set leader.
@@ -372,7 +376,7 @@ func TestApplyClientRequestIfNotLeaderAndPeer(t *testing.T) {
 func TestApplyClientRequestPeersIgnored(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -417,7 +421,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 func TestApplyHeartbeatTimeout(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -454,7 +458,7 @@ func TestApplyHeartbeatTimeout(t *testing.T) {
 func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -494,7 +498,7 @@ func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 func TestApplyHeartbeatTimeoutNothingToDo(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -516,7 +520,7 @@ func TestApplyHeartbeatTimeoutNothingToDo(t *testing.T) {
 func TestApplyElectionTimeout(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	role, toSend, err := e.Apply(types.Command{
@@ -548,7 +552,7 @@ func TestApplyElectionTimeout(t *testing.T) {
 func TestApplyElectionTimeoutExpectationsIgnored(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	oldMessageID := types.NewMessageID()
@@ -588,7 +592,7 @@ func TestApplyElectionTimeoutExpectationsIgnored(t *testing.T) {
 func TestApplyElectionTimeoutNothingToDo(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	role, toSend, err := e.Apply(types.Command{
@@ -603,7 +607,7 @@ func TestApplyElectionTimeoutNothingToDo(t *testing.T) {
 func TestApplyPeerConnected(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, ts := newEngine(s)
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
@@ -638,7 +642,7 @@ func TestApplyPeerConnected(t *testing.T) {
 func TestApplyPeerConnectedNotLeader(t *testing.T) {
 	requireT := require.New(t)
 
-	s := &state.State{}
+	s := newState()
 	e, _ := newEngine(s)
 
 	role, toSend, err := e.Apply(types.Command{

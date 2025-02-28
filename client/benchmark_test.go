@@ -81,15 +81,19 @@ func TestCluster(t *testing.T) {
 	}
 
 	group := parallel.NewGroup(ctx)
+	defer func() {
+		group.Exit(nil)
+		fmt.Println(group.Wait())
+	}()
 
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer1, Servers: servers}, p2p1, p2c1)
+		return magma.Run(ctx, types.Config{ServerID: peer1, Servers: servers, StateDir: "./test/peer1"}, p2p1, p2c1)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer2, Servers: servers}, p2p2, p2c2)
+		return magma.Run(ctx, types.Config{ServerID: peer2, Servers: servers, StateDir: "./test/peer2"}, p2p2, p2c2)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer3, Servers: servers}, p2p3, p2c3)
+		return magma.Run(ctx, types.Config{ServerID: peer3, Servers: servers, StateDir: "./test/peer3"}, p2p3, p2c3)
 	})
 
 	client := New(Config[entities.Marshaller]{
@@ -137,7 +141,7 @@ func TestCluster(t *testing.T) {
 	fmt.Println("===================")
 
 	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer4, Servers: servers}, p2p4, p2c4)
+		return magma.Run(ctx, types.Config{ServerID: peer4, Servers: servers, StateDir: "./test/peer4"}, p2p4, p2c4)
 	})
 
 	time.Sleep(time.Minute)

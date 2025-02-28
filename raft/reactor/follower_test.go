@@ -22,6 +22,10 @@ var (
 	peers = []magmatypes.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
 )
 
+func newState() *state.State {
+	return state.NewInMemory(1024 * 1024)
+}
+
 func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
 	timeSource := &TestTimeSource{}
 	return New(serverID, len(peers)/2+1, s, timeSource), timeSource
@@ -29,7 +33,7 @@ func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
 
 func TestFollowerInitialRole(t *testing.T) {
 	requireT := require.New(t)
-	r, ts := newReactor(&state.State{})
+	r, ts := newReactor(newState())
 	expectedElectionTime := ts.Add(0)
 
 	requireT.Equal(types.RoleFollower, r.role)
@@ -38,7 +42,7 @@ func TestFollowerInitialRole(t *testing.T) {
 
 func TestFollowerSetup(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 
 	r.role = types.RoleCandidate
@@ -72,7 +76,7 @@ func TestFollowerSetup(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
 
@@ -101,7 +105,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
@@ -139,7 +143,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(3))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -180,7 +184,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 
 func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -220,7 +224,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -257,7 +261,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 
 func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(3))
 	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
@@ -329,7 +333,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 
 func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -367,7 +371,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -405,7 +409,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 
 func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -443,7 +447,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(4))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
@@ -481,7 +485,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 
 func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -514,7 +518,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 
 func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -547,7 +551,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 
 func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -583,7 +587,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 
 func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -616,7 +620,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 
 func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -654,7 +658,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 
 func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
@@ -687,7 +691,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 
 func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -719,7 +723,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 
 func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
@@ -755,7 +759,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 
 func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
@@ -791,7 +795,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 
 func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	expectedElectionTime := ts.Add(time.Hour)
@@ -823,7 +827,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 
 func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
@@ -866,7 +870,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 
 func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
@@ -909,7 +913,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 
 func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
 	r, ts := newReactor(s)
 	notExpectedElectionTime := ts.Add(time.Hour)
@@ -937,7 +941,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 
 func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
@@ -969,7 +973,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 
 func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
@@ -1001,7 +1005,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 
 func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
@@ -1044,7 +1048,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 
 func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 
 	electionTimeoutTime := ts.Add(time.Hour)
@@ -1073,7 +1077,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 
 func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 
 	electionTimeoutTime := ts.Add(time.Hour)
@@ -1095,7 +1099,7 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 
 func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, ts := newReactor(s)
 
 	heartbeatTimeoutTime := ts.Add(time.Hour)
@@ -1110,7 +1114,7 @@ func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 
 func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	r, _ := newReactor(s)
 
 	msg, err := r.ApplyPeerConnected(magmatypes.ServerID(uuid.New()))
@@ -1121,7 +1125,7 @@ func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 
 func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT := require.New(t)
-	s := &state.State{}
+	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
 

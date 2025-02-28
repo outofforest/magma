@@ -6,7 +6,6 @@ package reactor
 // FIXME (wojciech): Rebalance reactors across servers.
 // FIXME (wojciech): Read and write state and logs.
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
-// FIXME (wojciech): Keep in memory only uncommitted changes. If append is requested below commit is a protocol bug.
 
 import (
 	"sort"
@@ -92,6 +91,9 @@ func (r *Reactor) ApplyAppendEntriesRequest(
 	m *types.AppendEntriesRequest,
 ) (*types.AppendEntriesResponse, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
+		return nil, errors.New("bug in protocol")
+	}
+	if m.NextLogIndex < r.committedCount {
 		return nil, errors.New("bug in protocol")
 	}
 
