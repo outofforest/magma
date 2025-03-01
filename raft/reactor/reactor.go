@@ -16,6 +16,7 @@ import (
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
+	"github.com/outofforest/varuint64"
 )
 
 // New creates new reactor of raft consensus algorithm.
@@ -29,6 +30,7 @@ func New(
 		timeSource:   timeSource,
 		id:           id,
 		state:        s,
+		varuint64Buf: make([]byte, varuint64.MaxSize),
 		majority:     majority,
 		lastLogTerm:  s.LastLogTerm(),
 		nextLogIndex: s.NextLogIndex(),
@@ -44,9 +46,10 @@ func New(
 type Reactor struct {
 	timeSource TimeSource
 
-	id       magmatypes.ServerID
-	leaderID magmatypes.ServerID
-	state    *state.State
+	id           magmatypes.ServerID
+	leaderID     magmatypes.ServerID
+	state        *state.State
+	varuint64Buf []byte
 
 	majority       int
 	role           types.Role
@@ -352,7 +355,7 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
-	r.indexTermStarted, err = r.appendData([]byte{0x00})
+	r.indexTermStarted, err = r.appendData(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -464,11 +467,20 @@ func (r *Reactor) computeCommittedCount() types.Index {
 func (r *Reactor) appendData(data []byte) (types.Index, error) {
 	nextLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(), data)
+	n := types.Index(varuint64.Put(r.varuint64Buf, uint64(len(data))))
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(),
+		r.varuint64Buf[:n])
 	if err != nil {
 		return 0, err
 	}
-	if r.nextLogIndex != nextLogIndex+types.Index(len(data)) {
+
+	if len(data) > 0 {
+		r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(), data)
+		if err != nil {
+			return 0, err
+		}
+	}
+	if r.nextLogIndex != nextLogIndex+n+types.Index(len(data)) {
 		return 0, errors.New("bug in protocol")
 	}
 	r.matchIndex[r.id] = r.nextLogIndex

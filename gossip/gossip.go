@@ -5,11 +5,9 @@ import (
 	"context"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
-	"github.com/outofforest/magma/gossip/p2c"
 	"github.com/outofforest/magma/gossip/p2p"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/engine"
@@ -19,22 +17,17 @@ import (
 	"github.com/outofforest/resonance"
 )
 
-const (
-	helloTimeout  = time.Second
-	queueCapacity = 100
-)
+const queueCapacity = 100
 
 var (
 	// P2CConfig is the config of client connection.
-	P2CConfig = resonance.Config[p2c.Marshaller]{
-		MaxMessageSize:    4 * 1024,
-		MarshallerFactory: p2c.NewMarshaller,
+	P2CConfig = resonance.Config{
+		MaxMessageSize: 4 * 1024,
 	}
 
 	// P2PConfig is the config of peer connection.
-	P2PConfig = resonance.Config[p2p.Marshaller]{
-		MaxMessageSize:    1024 * 1024,
-		MarshallerFactory: p2p.NewMarshaller,
+	P2PConfig = resonance.Config{
+		MaxMessageSize: 1024 * 1024,
 	}
 )
 
@@ -48,11 +41,12 @@ func New(config types.Config, p2pListener, p2cListener net.Listener) raft.Gossip
 	}
 
 	return (&gossip{
-		config:      config,
-		p2pListener: p2pListener,
-		p2cListener: p2cListener,
-		peerChs:     peerChs,
-		activeConns: map[types.ServerID]*context.CancelFunc{},
+		config:        config,
+		p2pListener:   p2pListener,
+		p2cListener:   p2cListener,
+		p2pMarshaller: p2p.NewMarshaller(),
+		peerChs:       peerChs,
+		activeConns:   map[types.ServerID]*context.CancelFunc{},
 	}).Run
 }
 
@@ -60,7 +54,8 @@ type gossip struct {
 	config                   types.Config
 	p2pListener, p2cListener net.Listener
 
-	peerChs map[types.ServerID]chan any
+	p2pMarshaller p2p.Marshaller
+	peerChs       map[types.ServerID]chan any
 
 	mu          sync.Mutex
 	activeConns map[types.ServerID]*context.CancelFunc
@@ -75,15 +70,15 @@ func (g *gossip) Run(
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
 			return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
-				func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2c.Marshaller]) error {
-					return g.handleClient(ctx, cmdCh, recvCh)
+				func(ctx context.Context, c *resonance.Connection) error {
+					return g.handleClient(ctx, cmdCh, c)
 				},
 			)
 		})
 		spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
 			return resonance.RunServer(ctx, g.p2pListener, P2PConfig,
-				func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2p.Marshaller]) error {
-					return g.handlePeer(ctx, types.ZeroServerID, cmdCh, recvCh, controlCh, c)
+				func(ctx context.Context, c *resonance.Connection) error {
+					return g.handlePeer(ctx, types.ZeroServerID, cmdCh, controlCh, c)
 				},
 			)
 		})
@@ -94,9 +89,9 @@ func (g *gossip) Run(
 			}
 			spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
 				for {
-					err := resonance.RunClient[p2p.Marshaller](ctx, s.P2PAddress, P2PConfig,
-						func(ctx context.Context, recvCh <-chan any, c *resonance.Connection[p2p.Marshaller]) error {
-							return g.handlePeer(ctx, s.ID, cmdCh, recvCh, controlCh, c)
+					err := resonance.RunClient(ctx, s.P2PAddress, P2PConfig,
+						func(ctx context.Context, c *resonance.Connection) error {
+							return g.handlePeer(ctx, s.ID, cmdCh, controlCh, c)
 						},
 					)
 					if err != nil && errors.Is(err, ctx.Err()) {
@@ -134,47 +129,43 @@ func (g *gossip) handlePeer(
 	ctx context.Context,
 	expectedPeerID types.ServerID,
 	cmdCh chan<- rafttypes.Command,
-	recvCh <-chan any,
 	controlCh chan<- rafttypes.PeerEvent,
-	c *resonance.Connection[p2p.Marshaller],
+	c *resonance.Connection,
 ) error {
-	if sent := c.Send(&p2p.Hello{
+	if sent := c.SendProton(&p2p.Hello{
 		ServerID: g.config.ServerID,
-	}); !sent {
+	}, g.p2pMarshaller); !sent {
 		return errors.New("sending hello failed")
 	}
 
 	var peerID types.ServerID
 	var sendCh <-chan any
-	select {
-	case <-time.After(helloTimeout):
-		return errors.New("timeout waiting for hello")
-	case m, ok := <-recvCh:
-		if !ok {
-			return errors.WithStack(ctx.Err())
-		}
 
-		h, ok := m.(*p2p.Hello)
-		if !ok {
-			return errors.New("expected hello, got sth else")
-		}
-
-		sendCh = g.peerChs[h.ServerID]
-		if sendCh == nil {
-			return errors.New("unknown peer")
-		}
-
-		switch {
-		case expectedPeerID == types.ZeroServerID:
-			if initConnection(g.config.ServerID, h.ServerID) {
-				return errors.New("peer should wait for my connection")
-			}
-		case h.ServerID != expectedPeerID:
-			return errors.New("unexpected peer")
-		}
-
-		peerID = h.ServerID
+	m, err := c.ReceiveProton(g.p2pMarshaller)
+	if err != nil {
+		return err
 	}
+
+	h, ok := m.(*p2p.Hello)
+	if !ok {
+		return errors.New("expected hello, got sth else")
+	}
+
+	sendCh = g.peerChs[h.ServerID]
+	if sendCh == nil {
+		return errors.New("unknown peer")
+	}
+
+	switch {
+	case expectedPeerID == types.ZeroServerID:
+		if initConnection(g.config.ServerID, h.ServerID) {
+			return errors.New("peer should wait for my connection")
+		}
+	case h.ServerID != expectedPeerID:
+		return errors.New("unexpected peer")
+	}
+
+	peerID = h.ServerID
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer g.closeConnection(peerID, &cancel)
@@ -198,58 +189,62 @@ func (g *gossip) handlePeer(
 		}
 	}()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.WithStack(ctx.Err())
-		case m, ok := <-recvCh:
-			if !ok {
-				return errors.WithStack(ctx.Err())
-			}
-			if _, ok := m.(*p2p.Hello); ok {
-				return errors.New("unexpected hello")
-			}
+	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+		spawn("receiver", parallel.Fail, func(ctx context.Context) error {
+			for {
+				m, err := c.ReceiveProton(g.p2pMarshaller)
+				if err != nil {
+					return err
+				}
 
-			select {
-			case <-ctx.Done():
-				return errors.WithStack(ctx.Err())
-			case cmdCh <- rafttypes.Command{
-				PeerID: peerID,
-				Cmd:    m,
-			}:
+				if _, ok := m.(*p2p.Hello); ok {
+					return errors.New("unexpected hello")
+				}
+
+				select {
+				case <-ctx.Done():
+					return errors.WithStack(ctx.Err())
+				case cmdCh <- rafttypes.Command{
+					PeerID: peerID,
+					Cmd:    m,
+				}:
+				}
 			}
-		case m := <-sendCh:
-			c.Send(m)
-		}
-	}
+		})
+		spawn("sender", parallel.Fail, func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return errors.WithStack(ctx.Err())
+				case m := <-sendCh:
+					c.SendProton(m, g.p2pMarshaller)
+				}
+			}
+		})
+
+		return nil
+	})
 }
 
 func (g *gossip) handleClient(
 	ctx context.Context,
 	cmdCh chan<- rafttypes.Command,
-	recvCh <-chan any,
+	c *resonance.Connection,
 ) error {
 	for {
+		tx, err := c.ReceiveBytes()
+		if err != nil {
+			return err
+		}
+
 		select {
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
-		case m, ok := <-recvCh:
-			if !ok {
-				return errors.WithStack(ctx.Err())
-			}
-
-			req, ok := m.(*rafttypes.ClientRequest)
-			if !ok {
-				return errors.New("unknown message")
-			}
-
-			select {
-			case <-ctx.Done():
-				return errors.WithStack(ctx.Err())
-			case cmdCh <- rafttypes.Command{
-				Cmd: req,
-			}:
-			}
+		case cmdCh <- rafttypes.Command{
+			Cmd: &rafttypes.ClientRequest{
+				Data: tx,
+			},
+		}:
 		}
 	}
 }

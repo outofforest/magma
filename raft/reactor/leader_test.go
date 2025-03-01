@@ -579,15 +579,15 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		NextLogIndex: 6,
 		NextLogTerm:  4,
 		LastLogTerm:  4,
-		Data:         []byte{0x01},
+		Data:         []byte{0x01, 0x01},
 	}, msg)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 7,
+		serverID: 8,
 	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(7, r.nextLogIndex)
+	requireT.EqualValues(8, r.nextLogIndex)
 	requireT.EqualValues(0, r.committedCount)
 
 	_, _, entries, err := s.Entries(0)
@@ -601,7 +601,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(5)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x01}, entries)
+	requireT.EqualValues([]byte{0x00, 0x01, 0x01}, entries)
 }
 
 func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
@@ -630,15 +630,15 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 		NextLogIndex: 6,
 		NextLogTerm:  4,
 		LastLogTerm:  4,
-		Data:         []byte{0x01, 0x02, 0x03},
+		Data:         []byte{0x03, 0x01, 0x02, 0x03},
 	}, msg)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 9,
+		serverID: 10,
 	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(9, r.nextLogIndex)
+	requireT.EqualValues(10, r.nextLogIndex)
 	requireT.EqualValues(0, r.committedCount)
 
 	_, _, entries, err := s.Entries(0)
@@ -652,7 +652,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(5)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x01, 0x02, 0x03}, entries)
+	requireT.EqualValues([]byte{0x00, 0x03, 0x01, 0x02, 0x03}, entries)
 }
 
 func TestLeaderApplyPeerConnected(t *testing.T) {
