@@ -217,18 +217,17 @@ func (s *State) appendLog(
 		return 0, 0, errors.New("bug in protocol")
 	}
 	s.terms = s.terms[:lastLogTerm]
-	dLen := rafttypes.Index(len(data))
-	s.nextLogIndex = nextLogIndex + dLen
-	if dLen == 0 {
-		return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
-	}
-	copy(s.log[nextLogIndex:], data)
-	for range term - lastLogTerm {
-		s.terms = append(s.terms, nextLogIndex)
-	}
-	if s.doMSync {
-		if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
-			return 0, 0, errors.WithStack(err)
+	s.nextLogIndex = nextLogIndex
+	if len(data) > 0 {
+		for range term - lastLogTerm {
+			s.terms = append(s.terms, nextLogIndex)
+		}
+		s.nextLogIndex += rafttypes.Index(copy(s.log[nextLogIndex:], data))
+
+		if s.doMSync {
+			if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
+				return 0, 0, errors.WithStack(err)
+			}
 		}
 	}
 	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil

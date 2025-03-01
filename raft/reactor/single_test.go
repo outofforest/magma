@@ -80,11 +80,11 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.Nil(msg)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 7,
+		serverID: 8,
 	}, r.matchIndex)
-	requireT.EqualValues(7, r.committedCount)
+	requireT.EqualValues(8, r.committedCount)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(7, r.nextLogIndex)
+	requireT.EqualValues(8, r.nextLogIndex)
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
@@ -97,7 +97,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 	_, _, entries, err = s.Entries(5)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x01}, entries)
+	requireT.EqualValues([]byte{0x00, 0x01, 0x01}, entries)
 }
 
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {

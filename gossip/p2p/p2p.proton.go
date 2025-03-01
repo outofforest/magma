@@ -21,9 +21,9 @@ var _ proton.Marshaller = Marshaller{}
 
 // NewMarshaller creates marshaller.
 func NewMarshaller() Marshaller {
-	return Marshaller{
-	}
+	return Marshaller{}
 }
+
 
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {

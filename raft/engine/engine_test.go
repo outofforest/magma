@@ -253,7 +253,7 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Data:         []byte{0x01},
+			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -293,7 +293,7 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Data:         []byte{0x01},
+			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)
@@ -406,7 +406,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 			NextLogIndex: 1,
 			NextLogTerm:  1,
 			LastLogTerm:  1,
-			Data:         []byte{0x01},
+			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
 	}, toSend)

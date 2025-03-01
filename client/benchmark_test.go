@@ -96,13 +96,13 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, types.Config{ServerID: peer3, Servers: servers, StateDir: "./test/peer3"}, p2p3, p2c3)
 	})
 
-	client := New(Config[entities.Marshaller]{
+	client := New(Config{
 		PeerAddress: p2c1.Addr().String(),
-		TxMessageConfig: resonance.Config[entities.Marshaller]{
-			MaxMessageSize:    4096,
-			MarshallerFactory: entities.NewMarshaller,
+		TxMessageConfig: resonance.Config{
+			MaxMessageSize: 4096,
 		},
 	})
+	m := entities.NewMarshaller()
 	group.Spawn("client", parallel.Fail, client.Run)
 
 	time.Sleep(5 * time.Second)
@@ -130,7 +130,7 @@ func TestCluster(t *testing.T) {
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
-		})
+		}, m)
 		if err != nil {
 			fmt.Println(err)
 		}
