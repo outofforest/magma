@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/types"
-	magmatypes "github.com/outofforest/magma/types"
 )
 
 const (
@@ -17,14 +16,12 @@ const (
 )
 
 // New creates new timeout manager.
-func New(majority int, roleCh <-chan types.Role, controlCh <-chan types.PeerEvent) *Timeouts {
+func New(roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
 	t := &Timeouts{
-		majority:        majority,
 		roleCh:          roleCh,
-		controlCh:       controlCh,
+		majorityCh:      majorityCh,
 		tickerHeartbeat: newTicker(),
 		tickerElection:  newTicker(),
-		connections:     map[magmatypes.ServerID]types.ConnectionID{},
 	}
 	t.tickerHeartbeat.Stop()
 	t.tickerElection.Stop()
@@ -33,16 +30,15 @@ func New(majority int, roleCh <-chan types.Role, controlCh <-chan types.PeerEven
 
 // Timeouts manages timeouts (election and heartbeat) defined by raft protocol.
 type Timeouts struct {
-	majority  int
-	roleCh    <-chan types.Role
-	controlCh <-chan types.PeerEvent
+	roleCh     <-chan types.Role
+	majorityCh <-chan bool
 
 	electionInterval time.Duration
 	tickerHeartbeat  *ticker
 	tickerElection   *ticker
 
-	role        types.Role
-	connections map[magmatypes.ServerID]types.ConnectionID
+	role            types.Role
+	majorityPresent bool
 }
 
 // Run runs the timeout manager.
@@ -52,11 +48,11 @@ func (t *Timeouts) Run(ctx context.Context) error {
 
 	for {
 		select {
-		case peerEvent, ok := <-t.controlCh:
+		case majorityPresent, ok := <-t.majorityCh:
 			if !ok {
 				return errors.WithStack(ctx.Err())
 			}
-			t.applyPeerEvent(peerEvent)
+			t.applyMajority(majorityPresent)
 		case t.role = <-t.roleCh:
 			t.applyRole(t.role)
 		}
@@ -87,9 +83,11 @@ func (t *Timeouts) applyRole(role types.Role) {
 	switch role {
 	case types.RoleFollower, types.RoleCandidate:
 		t.tickerHeartbeat.Stop()
-		if len(t.connections)+1 >= t.majority {
+		if t.majorityPresent {
 			t.electionInterval = electionInterval()
 			t.tickerElection.Start(t.electionInterval)
+		} else {
+			t.tickerElection.Stop()
 		}
 	case types.RoleLeader:
 		t.tickerHeartbeat.Start(heartbeatInterval)
@@ -97,30 +95,20 @@ func (t *Timeouts) applyRole(role types.Role) {
 	}
 }
 
-func (t *Timeouts) applyPeerEvent(e types.PeerEvent) {
-	if e.Connected {
-		before := len(t.connections[e.PeerID])
-		t.connections[e.PeerID] = e.ConnectionID
-		if t.role == types.RoleLeader {
-			return
-		}
-		if after := len(t.connections); after != before && after+1 == t.majority {
-			t.electionInterval = electionInterval()
-			t.tickerElection.Start(t.electionInterval)
-		}
+func (t *Timeouts) applyMajority(majorityPresent bool) {
+	if majorityPresent == t.majorityPresent {
 		return
 	}
-
-	if t.connections[e.PeerID] != e.ConnectionID {
-		return
-	}
-	delete(t.connections, e.PeerID)
+	t.majorityPresent = majorityPresent
 	if t.role == types.RoleLeader {
 		return
 	}
-	if len(t.connections)+1 == t.majority-1 {
+	if !majorityPresent {
 		t.tickerElection.Stop()
+		return
 	}
+	t.electionInterval = electionInterval()
+	t.tickerElection.Start(t.electionInterval)
 }
 
 func electionInterval() time.Duration {
