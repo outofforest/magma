@@ -29,6 +29,6 @@ func Run(ctx context.Context, config types.Config, p2pListener, p2cListener net.
 			helpers.Peers(config),
 		),
 		majority,
-		gossip.New(config, p2pListener, p2cListener),
+		gossip.New(config, p2pListener, p2cListener, config.StateDir),
 	)
 }

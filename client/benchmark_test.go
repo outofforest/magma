@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
@@ -83,7 +84,9 @@ func TestCluster(t *testing.T) {
 	group := parallel.NewGroup(ctx)
 	defer func() {
 		group.Exit(nil)
-		fmt.Println(group.Wait())
+		if err := group.Wait(); err != nil {
+			logger.Get(ctx).Error("Error", zap.Error(err))
+		}
 	}()
 
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
@@ -101,14 +104,13 @@ func TestCluster(t *testing.T) {
 		TxMessageConfig: resonance.Config{
 			MaxMessageSize: 4096,
 		},
-	})
-	m := entities.NewMarshaller()
+	}, entities.NewMarshaller())
 	group.Spawn("client", parallel.Fail, client.Run)
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 1000 {
+	for range 100000 {
 		err := client.Broadcast(ctx, []any{
 			&entities.Account{
 				FirstName: "Test1",
@@ -130,10 +132,11 @@ func TestCluster(t *testing.T) {
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
-		}, m)
+		})
 		if err != nil {
 			fmt.Println(err)
 		}
+		time.Sleep(time.Millisecond)
 	}
 
 	time.Sleep(5 * time.Second)
