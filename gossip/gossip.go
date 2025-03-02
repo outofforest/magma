@@ -3,8 +3,10 @@ package gossip
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -34,7 +36,7 @@ var (
 )
 
 // New returns gossiping function.
-func New(config types.Config, p2pListener, p2cListener net.Listener) raft.GossipFunc {
+func New(config types.Config, p2pListener, p2cListener net.Listener, stateDir string) raft.GossipFunc {
 	peerChs := map[types.ServerID]chan any{}
 	for _, p := range config.Servers {
 		if p.ID != config.ServerID {
@@ -46,6 +48,7 @@ func New(config types.Config, p2pListener, p2cListener net.Listener) raft.Gossip
 		config:        config,
 		p2pListener:   p2pListener,
 		p2cListener:   p2cListener,
+		stateDir:      stateDir,
 		p2pMarshaller: p2p.NewMarshaller(),
 		p2cMarshaller: p2c.NewMarshaller(),
 		peerChs:       peerChs,
@@ -56,6 +59,7 @@ func New(config types.Config, p2pListener, p2cListener net.Listener) raft.Gossip
 type gossip struct {
 	config                   types.Config
 	p2pListener, p2cListener net.Listener
+	stateDir                 string
 
 	p2pMarshaller p2p.Marshaller
 	p2cMarshaller p2c.Marshaller
@@ -285,8 +289,6 @@ func (g *gossip) handleClient(
 		return errors.New("expected init")
 	}
 
-	commitInfo := *msgCommitInfo
-
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
 			for {
@@ -307,13 +309,33 @@ func (g *gossip) handleClient(
 			}
 		})
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
+			nextLogIndex := msgCommitInfo.NextLogIndex
+			var logF *os.File
 			for {
 				select {
 				case <-ctx.Done():
 					return errors.WithStack(ctx.Err())
 				case newCommitInfo := <-commitCh:
-					commitInfo = newCommitInfo
-					fmt.Println(commitInfo.NextLogIndex)
+					if logF == nil {
+						var err error
+						logF, err = os.Open(filepath.Join(g.stateDir, "log"))
+						if err != nil {
+							return errors.WithStack(err)
+						}
+						if nextLogIndex > 0 {
+							if _, err := logF.Seek(int64(nextLogIndex), io.SeekStart); err != nil {
+								return errors.WithStack(err)
+							}
+						}
+					}
+
+					if newCommitInfo.NextLogIndex > nextLogIndex {
+						toSend := uint64(newCommitInfo.NextLogIndex - nextLogIndex)
+						if !c.SendStream(io.LimitReader(logF, int64(toSend))) {
+							return errors.WithStack(ctx.Err())
+						}
+						nextLogIndex += rafttypes.Index(toSend)
+					}
 				}
 			}
 		})
