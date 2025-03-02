@@ -7,6 +7,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/gossip"
+	"github.com/outofforest/magma/gossip/p2c"
+	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
@@ -52,12 +54,17 @@ func (c *Client) Run(ctx context.Context) error {
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {
+						if !conn.SendProton(&rafttypes.CommitInfo{}, p2c.NewMarshaller()) {
+							return errors.WithStack(ctx.Err())
+						}
 						for {
 							select {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case tx := <-c.txCh:
-								conn.SendBytes(tx)
+								if !conn.SendBytes(tx) {
+									return errors.WithStack(ctx.Err())
+								}
 							}
 						}
 					})

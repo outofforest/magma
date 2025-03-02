@@ -25,10 +25,10 @@ func TestCandidateSetup(t *testing.T) {
 
 	r.lastLogTerm = 3
 	r.nextLogIndex = 10
-	r.committedCount = 5
+	r.commitInfo = types.CommitInfo{NextLogIndex: 5}
 
 	expectedElectionTime := ts.Add(time.Hour)
-	msg, err := r.transitionToCandidate()
+	msg, commitInfo, err := r.transitionToCandidate()
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleCandidate, r.role)
@@ -42,10 +42,10 @@ func TestCandidateSetup(t *testing.T) {
 		NextLogIndex: 10,
 		LastLogTerm:  3,
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 5}, commitInfo)
 
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
-	requireT.EqualValues(5, r.committedCount)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -72,13 +72,13 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.NoError(err)
 
 	r, ts := newReactor(s)
-	_, err = r.transitionToCandidate()
+	_, _, err = r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
+	msg, commitInfo, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		NextLogTerm:  3,
@@ -92,6 +92,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		Term:         4,
 		NextLogIndex: 5,
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(peer1ID, r.leaderID)
 
@@ -112,7 +113,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
@@ -148,16 +149,17 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        3,
 		VoteGranted: true,
 	})
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
@@ -177,13 +179,13 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        1,
 		VoteGranted: true,
 	})
@@ -191,6 +193,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
@@ -206,13 +209,13 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        2,
 		VoteGranted: false,
 	})
@@ -220,6 +223,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
@@ -231,13 +235,13 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	})
@@ -245,6 +249,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
@@ -256,13 +261,13 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	})
@@ -270,25 +275,27 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	_, err = r.transitionToCandidate()
+	_, _, err = r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
 	ts.Add(time.Hour)
 
-	msg, err = r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err = r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        3,
 		VoteGranted: true,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
-	requireT.Empty(msg)
+	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
@@ -300,27 +307,28 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	notExpectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
+	msg, commitInfo, err := r.ApplyVoteResponse(peer1ID, &types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.EqualValues(2, r.votedForMe)
-	requireT.Empty(msg)
+	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err = r.ApplyVoteResponse(peer2ID, &types.VoteResponse{
+	msg, commitInfo, err = r.ApplyVoteResponse(peer2ID, &types.VoteResponse{
 		Term:        2,
 		VoteGranted: true,
 	})
@@ -335,6 +343,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		Data:         []byte{0x00},
 		LeaderCommit: 0,
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
@@ -350,7 +359,7 @@ func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	r, ts := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
 
@@ -368,7 +377,7 @@ func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	r, _ := newReactor(s)
-	_, err := r.transitionToCandidate()
+	_, _, err := r.transitionToCandidate()
 	requireT.NoError(err)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, s.CurrentTerm())

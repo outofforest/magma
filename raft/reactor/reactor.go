@@ -51,11 +51,11 @@ type Reactor struct {
 	state        *state.State
 	varuint64Buf []byte
 
-	majority       int
-	role           types.Role
-	lastLogTerm    types.Term
-	nextLogIndex   types.Index
-	committedCount types.Index
+	majority     int
+	role         types.Role
+	lastLogTerm  types.Term
+	nextLogIndex types.Index
+	commitInfo   types.CommitInfo
 
 	// Follower and candidate specific.
 	electionTime time.Time
@@ -92,23 +92,23 @@ func (r *Reactor) LeaderID() magmatypes.ServerID {
 func (r *Reactor) ApplyAppendEntriesRequest(
 	peerID magmatypes.ServerID,
 	m *types.AppendEntriesRequest,
-) (*types.AppendEntriesResponse, error) {
+) (*types.AppendEntriesResponse, types.CommitInfo, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
-		return nil, errors.New("bug in protocol")
+		return nil, types.CommitInfo{}, errors.New("bug in protocol")
 	}
-	if m.NextLogIndex < r.committedCount {
-		return nil, errors.New("bug in protocol")
+	if m.NextLogIndex < r.commitInfo.NextLogIndex {
+		return nil, types.CommitInfo{}, errors.New("bug in protocol")
 	}
 
 	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
 	resp, err := r.handleAppendEntriesRequest(m)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
-	return resp, nil
+	return resp, r.commitInfo, nil
 }
 
 // ApplyAppendEntriesResponse processes a response to a previously sent AppendEntries request.
@@ -119,33 +119,33 @@ func (r *Reactor) ApplyAppendEntriesRequest(
 func (r *Reactor) ApplyAppendEntriesResponse(
 	peerID magmatypes.ServerID,
 	m *types.AppendEntriesResponse,
-) (*types.AppendEntriesRequest, error) {
+) (*types.AppendEntriesRequest, types.CommitInfo, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
 	if r.role != types.RoleLeader {
-		return nil, nil //nolint:nilnil
+		return nil, types.CommitInfo{}, nil
 	}
 
 	if m.NextLogIndex > r.getNextIndex(peerID) {
 		r.matchIndex[peerID] = m.NextLogIndex
-		if m.NextLogIndex > r.committedCount {
-			r.committedCount = r.computeCommittedCount()
+		if m.NextLogIndex > r.commitInfo.NextLogIndex {
+			r.updateCommit()
 		}
 	}
 
 	r.nextIndex[peerID] = m.NextLogIndex
 	if m.NextLogIndex >= r.nextLogIndex {
-		return nil, nil //nolint:nilnil
+		return nil, r.commitInfo, nil
 	}
 
 	resp, err := r.newAppendEntriesRequest(m.NextLogIndex)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
-	return resp, nil
+	return resp, r.commitInfo, nil
 }
 
 // ApplyVoteRequest processes an incoming VoteRequest from a peer.
@@ -173,22 +173,22 @@ func (r *Reactor) ApplyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequ
 func (r *Reactor) ApplyVoteResponse(
 	peerID magmatypes.ServerID,
 	m *types.VoteResponse,
-) (*types.AppendEntriesRequest, error) {
+) (*types.AppendEntriesRequest, types.CommitInfo, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
 	if r.role != types.RoleCandidate || m.Term != r.state.CurrentTerm() {
-		return nil, nil //nolint:nilnil
+		return nil, types.CommitInfo{}, nil
 	}
 
 	if !m.VoteGranted {
-		return nil, nil //nolint:nilnil
+		return nil, r.commitInfo, nil
 	}
 
 	r.votedForMe++
 	if r.votedForMe < r.majority {
-		return nil, nil //nolint:nilnil
+		return nil, types.CommitInfo{}, nil
 	}
 
 	return r.transitionToLeader()
@@ -198,34 +198,34 @@ func (r *Reactor) ApplyVoteResponse(
 // It ensures the reactor can only process the request if it is in the Leader role.
 // It appends the client's data as a new log entry, and returns an AppendEntriesRequest to replicate
 // the log entry to peers.
-func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntriesRequest, error) {
+func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntriesRequest, types.CommitInfo, error) {
 	// ApplyClientRequest processes a client request to append a log item.
 	// If the reactor is not in the Leader role, it returns an empty AppendEntriesRequest.
 	// As the leader, it appends the client's data as a new log item, updates the heartbeat time,
 	// and returns an AppendEntriesRequest if there are peers to replicate to,
 	// or updates the committed count if there are no peers.
 	if r.role != types.RoleLeader {
-		return nil, nil //nolint:nilnil
+		return nil, types.CommitInfo{}, nil
 	}
 
 	newLogIndex, err := r.appendData(m.Data)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
-		r.committedCount = r.nextLogIndex
-		return nil, nil //nolint:nilnil
+		r.commitInfo.NextLogIndex = r.nextLogIndex
+		return nil, r.commitInfo, nil
 	}
 
 	msg, err := r.newAppendEntriesRequest(newLogIndex)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
-	return msg, nil
+	return msg, r.commitInfo, nil
 }
 
 // ApplyHeartbeatTimeout processes a heartbeat timeout event and ensures the leader
@@ -254,9 +254,9 @@ func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*types.AppendEntriesReques
 // ApplyElectionTimeout processes an election timeout event, transitioning the reactor
 // to a candidate state if the timeout has expired and the reactor is not already a leader.
 // It then sends a VoteRequest to peers to begin a new election.
-func (r *Reactor) ApplyElectionTimeout(t time.Time) (*types.VoteRequest, error) {
+func (r *Reactor) ApplyElectionTimeout(t time.Time) (*types.VoteRequest, types.CommitInfo, error) {
 	if r.role == types.RoleLeader || t.Before(r.electionTime) {
-		return nil, nil //nolint:nilnil
+		return nil, types.CommitInfo{}, nil
 	}
 
 	return r.transitionToCandidate()
@@ -316,16 +316,16 @@ func (r *Reactor) transitionToFollower() {
 	clear(r.matchIndex)
 }
 
-func (r *Reactor) transitionToCandidate() (*types.VoteRequest, error) {
+func (r *Reactor) transitionToCandidate() (*types.VoteRequest, types.CommitInfo, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 	granted, err := r.state.VoteFor(r.id)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 	if !granted {
-		return nil, errors.New("bug in protocol")
+		return nil, types.CommitInfo{}, errors.New("bug in protocol")
 	}
 
 	r.role = types.RoleCandidate
@@ -336,18 +336,18 @@ func (r *Reactor) transitionToCandidate() (*types.VoteRequest, error) {
 	clear(r.matchIndex)
 
 	if r.majority == 1 {
-		_, err := r.transitionToLeader()
-		return nil, err
+		_, commitInfo, err := r.transitionToLeader()
+		return nil, commitInfo, err
 	}
 
 	return &types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
-	}, nil
+	}, r.commitInfo, nil
 }
 
-func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
+func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, types.CommitInfo, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
 	clear(r.nextIndex)
@@ -357,22 +357,22 @@ func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, error) {
 	var err error
 	r.indexTermStarted, err = r.appendData(nil)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
-		r.committedCount = r.nextLogIndex
-		return nil, nil //nolint:nilnil
+		r.commitInfo.NextLogIndex = r.nextLogIndex
+		return nil, r.commitInfo, nil
 	}
 
 	msg, err := r.newAppendEntriesRequest(r.indexTermStarted)
 	if err != nil {
-		return nil, err
+		return nil, types.CommitInfo{}, err
 	}
 
-	return msg, nil
+	return msg, r.commitInfo, nil
 }
 
 func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
@@ -386,7 +386,7 @@ func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.Appe
 		LastLogTerm:  lastLogTerm,
 		NextLogTerm:  nextLogTerm,
 		Data:         data,
-		LeaderCommit: r.committedCount,
+		LeaderCommit: r.commitInfo.NextLogIndex,
 	}, nil
 }
 
@@ -407,10 +407,10 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 
 	if r.nextLogIndex >= req.NextLogIndex {
 		r.electionTime = r.timeSource.Now()
-		if req.LeaderCommit > r.committedCount {
-			r.committedCount = req.LeaderCommit
-			if r.committedCount > r.nextLogIndex {
-				r.committedCount = r.nextLogIndex
+		if req.LeaderCommit > r.commitInfo.NextLogIndex {
+			r.commitInfo.NextLogIndex = req.LeaderCommit
+			if r.commitInfo.NextLogIndex > r.nextLogIndex {
+				r.commitInfo.NextLogIndex = r.nextLogIndex
 			}
 		}
 	}
@@ -444,24 +444,24 @@ func (r *Reactor) handleVoteRequest(
 	}, nil
 }
 
-func (r *Reactor) computeCommittedCount() types.Index {
+func (r *Reactor) updateCommit() {
 	// FIXME (wojciech): This is executed frequently and must be optimised.
 	indexes := make([]types.Index, 0, len(r.matchIndex))
 	for _, index := range r.matchIndex {
-		if index > r.committedCount && index > r.indexTermStarted {
+		if index > r.commitInfo.NextLogIndex && index > r.indexTermStarted {
 			indexes = append(indexes, index)
 		}
 	}
 
 	if len(indexes) < r.majority {
-		return r.committedCount
+		return
 	}
 
 	sort.Slice(indexes, func(i, j int) bool {
 		return indexes[i] > indexes[j]
 	})
 
-	return indexes[r.majority-1]
+	r.commitInfo.NextLogIndex = indexes[r.majority-1]
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {
