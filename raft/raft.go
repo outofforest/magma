@@ -82,6 +82,8 @@ func runEngine(
 	role := types.RoleFollower
 	roleCh <- role
 
+	var commitInfo types.CommitInfo
+
 	for cmd := range cmdCh {
 		newRole, toSend, err := e.Apply(cmd)
 		if err != nil {
@@ -97,7 +99,8 @@ func runEngine(
 			roleCh <- role
 		}
 
-		if len(toSend.Recipients) > 0 {
+		if len(toSend.Recipients) > 0 || toSend.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+			commitInfo = toSend.CommitInfo
 			sendCh <- toSend
 		}
 	}

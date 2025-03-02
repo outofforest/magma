@@ -110,6 +110,11 @@ type ClientRequest struct {
 	Data []byte
 }
 
+// CommitInfo reports the committed height.
+type CommitInfo struct {
+	NextLogIndex Index
+}
+
 // ConnectionID is the connection identifier.
 type ConnectionID uuid.UUID
 

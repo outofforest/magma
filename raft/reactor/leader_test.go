@@ -29,10 +29,10 @@ func TestLeaderSetup(t *testing.T) {
 
 	requireT.EqualValues(2, r.lastLogTerm)
 	requireT.EqualValues(3, r.nextLogIndex)
-	r.committedCount = 2
+	r.commitInfo = types.CommitInfo{NextLogIndex: 2}
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
-	msg, err := r.transitionToLeader()
+	msg, commitInfo, err := r.transitionToLeader()
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
@@ -47,6 +47,7 @@ func TestLeaderSetup(t *testing.T) {
 		Data:         []byte{0x00},
 		LeaderCommit: 2,
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 2}, commitInfo)
 	requireT.EqualValues(3, r.indexTermStarted)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
@@ -55,7 +56,6 @@ func TestLeaderSetup(t *testing.T) {
 
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(4, r.nextLogIndex)
-	requireT.EqualValues(2, r.committedCount)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -80,13 +80,13 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.NoError(err)
 
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
+	msg, commitInfo, err := r.ApplyAppendEntriesRequest(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
 		NextLogTerm:  3,
@@ -94,6 +94,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 		Data:         []byte{0x01, 0x02},
 		LeaderCommit: 0,
 	})
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(&types.AppendEntriesResponse{
@@ -120,12 +121,12 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToLeader()
+	_, _, err := r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	msg, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         3,
 		NextLogIndex: 2,
 	})
@@ -133,6 +134,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(serverID, r.leaderID)
 
@@ -144,7 +146,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r, ts := newReactor(s)
-	_, err := r.transitionToLeader()
+	_, _, err := r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
 
@@ -188,12 +190,12 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex[peer1ID] = 0
 
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	msg, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 2,
 	})
@@ -206,9 +208,9 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 		LastLogTerm:  2,
 		Data:         []byte{0x03},
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
 	requireT.EqualValues(2, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 	requireT.Equal(serverID, r.leaderID)
 }
 
@@ -225,10 +227,10 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	msg, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 2,
 	})
@@ -241,9 +243,9 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 		LastLogTerm:  2,
 		Data:         []byte{0x03},
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(2, r.nextIndex[peer1ID])
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 	requireT.Equal(serverID, r.leaderID)
 }
 
@@ -260,21 +262,21 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
 
-	msg, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	msg, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Nil(msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(5, r.nextIndex[peer1ID])
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 	requireT.Equal(serverID, r.leaderID)
 }
 
@@ -291,29 +293,29 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
 
-	r.committedCount = 0
+	r.commitInfo = types.CommitInfo{NextLogIndex: 0}
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	_, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
+	_, commitInfo, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 5}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer2ID])
-	requireT.EqualValues(5, r.committedCount)
 }
 
 func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
@@ -329,31 +331,31 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, 5, []byte{0x00})
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
 
-	r.committedCount = 0
+	r.commitInfo = types.CommitInfo{NextLogIndex: 0}
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	_, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
+	_, commitInfo, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 5}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer2ID])
-	requireT.EqualValues(5, r.committedCount)
 }
 
 func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
@@ -369,31 +371,31 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, 5, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
 
-	r.committedCount = 0
+	r.commitInfo = types.CommitInfo{NextLogIndex: 0}
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	_, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 6,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(6, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
+	_, commitInfo, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 7,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 5}, commitInfo)
 	requireT.EqualValues(7, r.matchIndex[peer2ID])
-	requireT.EqualValues(5, r.committedCount)
 }
 
 func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
@@ -409,7 +411,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[magmatypes.ServerID]types.Index{
@@ -419,24 +421,24 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 		peer4ID: 0,
 	}
 
-	r.committedCount = 0
+	r.commitInfo = types.CommitInfo{NextLogIndex: 0}
 	r.matchIndex[serverID] = 5
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	_, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
-	requireT.Zero(r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
+	_, commitInfo, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 4,
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(4, r.matchIndex[peer2ID])
-	requireT.Zero(r.committedCount)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 }
 
 func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) {
@@ -452,31 +454,31 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, 5, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
 
-	r.committedCount = 7
+	r.commitInfo = types.CommitInfo{NextLogIndex: 7}
 	r.matchIndex[serverID] = 7
 
-	_, err = r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
+	_, commitInfo, err := r.ApplyAppendEntriesResponse(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 7}, commitInfo)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
-	requireT.EqualValues(7, r.committedCount)
 
-	_, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
+	_, commitInfo, err = r.ApplyAppendEntriesResponse(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 6,
 	})
 	requireT.NoError(err)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 7}, commitInfo)
 	requireT.EqualValues(6, r.matchIndex[peer2ID])
-	requireT.EqualValues(7, r.committedCount)
 }
 
 func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
@@ -492,7 +494,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[magmatypes.ServerID]types.Index{
@@ -532,7 +534,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[magmatypes.ServerID]types.Index{
@@ -564,12 +566,12 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(&types.ClientRequest{
+	msg, commitInfo, err := r.ApplyClientRequest(&types.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)
@@ -581,6 +583,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		LastLogTerm:  4,
 		Data:         []byte{0x01, 0x01},
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
@@ -588,7 +591,6 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(8, r.nextLogIndex)
-	requireT.EqualValues(0, r.committedCount)
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
@@ -615,12 +617,12 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyClientRequest(&types.ClientRequest{
+	msg, commitInfo, err := r.ApplyClientRequest(&types.ClientRequest{
 		Data: []byte{0x01, 0x02, 0x03},
 	})
 	requireT.NoError(err)
@@ -632,6 +634,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 		LastLogTerm:  4,
 		Data:         []byte{0x03, 0x01, 0x02, 0x03},
 	}, msg)
+	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.Empty(r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
@@ -639,7 +642,6 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
-	requireT.EqualValues(0, r.committedCount)
 
 	_, _, entries, err := s.Entries(0)
 	requireT.NoError(err)
@@ -668,7 +670,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
 	r, _ := newReactor(s)
-	_, err = r.transitionToLeader()
+	_, _, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	r.nextIndex = map[magmatypes.ServerID]types.Index{

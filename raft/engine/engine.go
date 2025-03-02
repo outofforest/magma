@@ -16,6 +16,8 @@ type Send struct {
 	Recipients []magmatypes.ServerID
 	// Message is message to send.
 	Message any
+	// CommitInfo reports latest committed log index.
+	CommitInfo types.CommitInfo
 }
 
 // New creates new engine.
@@ -51,11 +53,12 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 				return e.reactor.Role(), Send{}, nil
 			}
 			if leaderID == e.reactor.ID() {
-				req, err := e.reactor.ApplyClientRequest(c)
+				req, commitInfo, err := e.reactor.ApplyClientRequest(c)
 				if err != nil {
 					return 0, Send{}, err
 				}
 				messageID, toSend = e.broadcastAppendEntriesRequest(req)
+				toSend.CommitInfo = commitInfo
 				break
 			}
 
@@ -70,11 +73,12 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			}
 			messageID, toSend = e.broadcastAppendEntriesRequest(req)
 		case types.ElectionTimeout:
-			req, err := e.reactor.ApplyElectionTimeout(time.Time(c))
+			req, commitInfo, err := e.reactor.ApplyElectionTimeout(time.Time(c))
 			if err != nil {
 				return 0, Send{}, err
 			}
 			messageID, toSend = e.broadcastVoteRequest(req)
+			toSend.CommitInfo = commitInfo
 		default:
 			return 0, Send{}, errors.Errorf("unexpected message type %T", c)
 		}
@@ -88,21 +92,23 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 	default:
 		switch c := cmd.Cmd.(type) {
 		case *types.AppendEntriesRequest:
-			resp, err := e.reactor.ApplyAppendEntriesRequest(cmd.PeerID, c)
+			resp, commitInfo, err := e.reactor.ApplyAppendEntriesRequest(cmd.PeerID, c)
 			if err != nil {
 				return 0, Send{}, err
 			}
 			toSend = e.unicastAppendEntriesResponse(cmd.PeerID, c.MessageID, resp)
+			toSend.CommitInfo = commitInfo
 		case *types.AppendEntriesResponse:
 			if !e.isExpected(cmd.PeerID, c.MessageID) {
 				return e.reactor.Role(), Send{}, nil
 			}
 
-			req, err := e.reactor.ApplyAppendEntriesResponse(cmd.PeerID, c)
+			req, commitInfo, err := e.reactor.ApplyAppendEntriesResponse(cmd.PeerID, c)
 			if err != nil {
 				return 0, Send{}, err
 			}
 			messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+			toSend.CommitInfo = commitInfo
 		case *types.VoteRequest:
 			resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
 			if err != nil {
@@ -114,22 +120,24 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 				return e.reactor.Role(), Send{}, nil
 			}
 
-			req, err := e.reactor.ApplyVoteResponse(cmd.PeerID, c)
+			req, commitInfo, err := e.reactor.ApplyVoteResponse(cmd.PeerID, c)
 			if err != nil {
 				return 0, Send{}, err
 			}
 			messageID, toSend = e.broadcastAppendEntriesRequest(req)
+			toSend.CommitInfo = commitInfo
 		case *types.ClientRequest:
 			leaderID := e.reactor.LeaderID()
 			if leaderID == magmatypes.ZeroServerID {
 				return e.reactor.Role(), Send{}, nil
 			}
 			if leaderID == e.reactor.ID() {
-				req, err := e.reactor.ApplyClientRequest(c)
+				req, commitInfo, err := e.reactor.ApplyClientRequest(c)
 				if err != nil {
 					return 0, Send{}, err
 				}
 				messageID, toSend = e.broadcastAppendEntriesRequest(req)
+				toSend.CommitInfo = commitInfo
 				break
 			}
 

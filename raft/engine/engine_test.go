@@ -71,6 +71,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 			Term:         1,
 			NextLogIndex: 1,
 		},
+		CommitInfo: types.CommitInfo{NextLogIndex: 1},
 	}, toSend)
 }
 
@@ -110,6 +111,7 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 			Data:         []byte{0x00},
 			LeaderCommit: 1,
 		},
+		CommitInfo: types.CommitInfo{NextLogIndex: 1},
 	}, toSend)
 
 	requireT.Equal(messageID, e.expectedResponses[peer1ID])
@@ -256,6 +258,7 @@ func TestApplyClientRequestIfLeaderAndNoPeer(t *testing.T) {
 			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
+		CommitInfo: types.CommitInfo{NextLogIndex: 1},
 	}, toSend)
 	requireT.Equal(map[magmatypes.ServerID]types.MessageID{
 		peer1ID: messageID,
@@ -296,6 +299,7 @@ func TestApplyClientRequestIfLeaderAndPeer(t *testing.T) {
 			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
+		CommitInfo: types.CommitInfo{NextLogIndex: 1},
 	}, toSend)
 	requireT.Equal(map[magmatypes.ServerID]types.MessageID{
 		peer1ID: messageID,
@@ -409,6 +413,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 			Data:         []byte{0x01, 0x01},
 			LeaderCommit: 1,
 		},
+		CommitInfo: types.CommitInfo{NextLogIndex: 1},
 	}, toSend)
 	requireT.Equal(map[magmatypes.ServerID]types.MessageID{
 		peer1ID: oldMessageID,
