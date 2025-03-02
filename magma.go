@@ -28,7 +28,6 @@ func Run(ctx context.Context, config types.Config, p2pListener, p2cListener net.
 			reactor.New(config.ServerID, majority, s, &reactor.RealTimeSource{}),
 			helpers.Peers(config),
 		),
-		majority,
 		gossip.New(config, p2pListener, p2cListener, config.StateDir),
 	)
 }

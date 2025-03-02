@@ -114,18 +114,3 @@ type ClientRequest struct {
 type CommitInfo struct {
 	NextLogIndex Index
 }
-
-// ConnectionID is the connection identifier.
-type ConnectionID uuid.UUID
-
-// NewConnectionID generates new random connection ID.
-func NewConnectionID() ConnectionID {
-	return ConnectionID(uuid.New())
-}
-
-// PeerEvent is an event representing peer connection and disconnection.
-type PeerEvent struct {
-	PeerID       types.ServerID
-	ConnectionID ConnectionID
-	Connected    bool
-}
