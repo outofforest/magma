@@ -36,7 +36,8 @@ var (
 
 type peer struct {
 	ID        types.ServerID
-	Ch        chan any
+	SendCh    chan any
+	ClosedCh  <-chan struct{}
 	Connected bool
 }
 
@@ -71,7 +72,6 @@ type gossip struct {
 	p2cMarshaller p2c.Marshaller
 }
 
-//nolint:gocyclo
 func (g *gossip) Run(
 	ctx context.Context,
 	cmdCh chan<- rafttypes.Command,
@@ -82,125 +82,141 @@ func (g *gossip) Run(
 		peerCh := make(chan peer)
 		clientCh := make(chan chan rafttypes.CommitInfo)
 
-		spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
-			return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
-				func(ctx context.Context, c *resonance.Connection) error {
-					commitCh := make(chan rafttypes.CommitInfo, 1)
+		spawn("network", parallel.Fail, func(ctx context.Context) error {
+			defer close(peerCh)
+			defer close(clientCh)
 
-					select {
-					case <-ctx.Done():
-						return errors.WithStack(ctx.Err())
-					case clientCh <- commitCh:
-					}
-
-					defer func() {
-						select {
-						case <-ctx.Done():
-						case clientCh <- commitCh:
-						}
-					}()
-
-					return g.handleClient(ctx, commitCh, cmdCh, c)
-				},
-			)
-		})
-		spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
-			return resonance.RunServer(ctx, g.p2pListener, P2PConfig,
-				func(ctx context.Context, c *resonance.Connection) error {
-					return g.handlePeer(ctx, types.ZeroServerID, peerCh, cmdCh, c)
-				},
-			)
-		})
-
-		for _, s := range g.config.Servers {
-			if s.ID == g.config.ServerID || !initConnection(g.config.ServerID, s.ID) {
-				continue
-			}
-			spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
-				for {
-					err := resonance.RunClient(ctx, s.P2PAddress, P2PConfig,
+			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+				spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
+					return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
-							return g.handlePeer(ctx, s.ID, peerCh, cmdCh, c)
+							commitCh := make(chan rafttypes.CommitInfo, 1)
+
+							clientCh <- commitCh
+
+							defer func() {
+								clientCh <- commitCh
+							}()
+
+							return g.handleClient(ctx, commitCh, cmdCh, c)
 						},
 					)
-					if err != nil && errors.Is(err, ctx.Err()) {
-						return err
+				})
+				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
+					return resonance.RunServer(ctx, g.p2pListener, P2PConfig,
+						func(ctx context.Context, c *resonance.Connection) error {
+							return g.handlePeer(ctx, types.ZeroServerID, peerCh, cmdCh, c)
+						},
+					)
+				})
+
+				for _, s := range g.config.Servers {
+					if s.ID == g.config.ServerID || !initConnection(g.config.ServerID, s.ID) {
+						continue
 					}
+					spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
+						for {
+							err := resonance.RunClient(ctx, s.P2PAddress, P2PConfig,
+								func(ctx context.Context, c *resonance.Connection) error {
+									return g.handlePeer(ctx, s.ID, peerCh, cmdCh, c)
+								},
+							)
+							if err != nil && errors.Is(err, ctx.Err()) {
+								return err
+							}
+						}
+					})
 				}
+				return nil
 			})
-		}
-		spawn("sender", parallel.Fail, func(ctx context.Context) error {
-			peers := map[types.ServerID]chan any{}
-			clientChs := map[chan rafttypes.CommitInfo]struct{}{}
-			var commitInfo rafttypes.CommitInfo
-
-			if g.minority == 0 {
-				majorityCh <- true
-			}
-
-			for {
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case toSend := <-sendCh:
-					for _, peerID := range toSend.Recipients {
-						ch := peers[peerID]
-						if ch == nil {
-							continue
-						}
-
-						select {
-						case ch <- toSend.Message:
-						default:
-							select {
-							case <-ch:
-							default:
-							}
-
-							ch <- toSend.Message
-						}
-					}
-					if toSend.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
-						commitInfo = toSend.CommitInfo
-						for ch := range clientChs {
-							select {
-							case <-ch:
-							default:
-							}
-							ch <- commitInfo
-						}
-					}
-				case p := <-peerCh:
-					switch {
-					case p.Connected:
-						ch := peers[p.ID]
-						if ch != nil {
-							close(ch)
-						}
-						peers[p.ID] = p.Ch
-						if ch == nil && len(peers) == g.minority {
-							majorityCh <- true
-						}
-					case peers[p.ID] == p.Ch:
-						delete(peers, p.ID)
-						if len(peers)+1 == g.minority {
-							majorityCh <- false
-						}
-					}
-				case ch := <-clientCh:
-					if _, exists := clientChs[ch]; exists {
-						delete(clientChs, ch)
-					} else {
-						if commitInfo.NextLogIndex > 0 {
-							ch <- commitInfo
-						}
-						clientChs[ch] = struct{}{}
-					}
-				}
-			}
+		})
+		spawn("supervisor", parallel.Fail, func(ctx context.Context) error {
+			return g.runSupervisor(ctx, peerCh, clientCh, sendCh, majorityCh)
 		})
 		return nil
 	})
+}
+
+func (g *gossip) runSupervisor(
+	ctx context.Context,
+	peerCh <-chan peer,
+	clientCh <-chan chan rafttypes.CommitInfo,
+	sendCh <-chan engine.Send,
+	majorityCh chan<- bool,
+) error {
+	peers := map[types.ServerID]peer{}
+	clientChs := map[chan rafttypes.CommitInfo]struct{}{}
+	var commitInfo rafttypes.CommitInfo
+
+	if g.minority == 0 {
+		majorityCh <- true
+	}
+
+	for {
+		select {
+		case toSend := <-sendCh:
+			for _, peerID := range toSend.Recipients {
+				p, exists := peers[peerID]
+				if !exists {
+					continue
+				}
+
+				select {
+				case p.SendCh <- toSend.Message:
+				case <-p.ClosedCh:
+				}
+			}
+			if toSend.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+				commitInfo = toSend.CommitInfo
+				for ch := range clientChs {
+					select {
+					case <-ch:
+					default:
+					}
+					ch <- commitInfo
+				}
+			}
+		case p, ok := <-peerCh:
+			if !ok {
+				peerCh = nil
+				if peerCh == nil && clientCh == nil {
+					return errors.WithStack(ctx.Err())
+				}
+			}
+			switch {
+			case p.Connected:
+				pOld, exists := peers[p.ID]
+				if exists {
+					close(pOld.SendCh)
+				}
+				peers[p.ID] = p
+				if !exists && len(peers) == g.minority {
+					majorityCh <- true
+				}
+			case peers[p.ID].SendCh == p.SendCh:
+				delete(peers, p.ID)
+				close(p.SendCh)
+				if len(peers)+1 == g.minority {
+					majorityCh <- false
+				}
+			}
+		case ch, ok := <-clientCh:
+			if !ok {
+				clientCh = nil
+				if peerCh == nil && clientCh == nil {
+					return errors.WithStack(ctx.Err())
+				}
+			}
+			if _, exists := clientChs[ch]; exists {
+				delete(clientChs, ch)
+			} else {
+				if commitInfo.NextLogIndex > 0 {
+					ch <- commitInfo
+				}
+				clientChs[ch] = struct{}{}
+			}
+		}
+	}
 }
 
 func (g *gossip) handlePeer(
@@ -248,29 +264,25 @@ func (g *gossip) handlePeer(
 	}
 
 	ch := make(chan any, queueCapacity)
-	p := peer{
-		ID:        peerID,
-		Ch:        ch,
-		Connected: true,
-	}
-	select {
-	case <-ctx.Done():
-		return errors.WithStack(ctx.Err())
-	case peerCh <- p:
-	}
-
-	defer func() {
-		p.Connected = false
-		select {
-		case <-ctx.Done():
-		case peerCh <- p:
-		}
-	}()
-
 	var sendCh <-chan any = ch
 
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receiver", parallel.Fail, func(ctx context.Context) error {
+			closedCh := make(chan struct{})
+			p := peer{
+				ID:        peerID,
+				SendCh:    ch,
+				ClosedCh:  closedCh,
+				Connected: true,
+			}
+
+			peerCh <- p
+			defer func() {
+				close(closedCh)
+				p.Connected = false
+				peerCh <- p
+			}()
+
 			for {
 				m, err := c.ReceiveProton(g.p2pMarshaller)
 				if err != nil {
@@ -294,17 +306,11 @@ func (g *gossip) handlePeer(
 		spawn("sender", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
-			for {
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case m, ok := <-sendCh:
-					if !ok {
-						return errors.WithStack(err)
-					}
-					c.SendProton(m, g.p2pMarshaller)
-				}
+			for m := range sendCh {
+				c.SendProton(m, g.p2pMarshaller)
 			}
+
+			return errors.WithStack(ctx.Err())
 		})
 
 		return nil
