@@ -96,26 +96,29 @@ func runEngine(
 
 	var commitInfo types.CommitInfo
 
-	for cmd := range cmdCh {
-		newRole, toSend, err := e.Apply(cmd)
-		if err != nil {
-			return err
-		}
-
-		if newRole != role {
-			role = newRole
-			select {
-			case <-roleCh:
-			default:
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.WithStack(ctx.Err())
+		case cmd := <-cmdCh:
+			newRole, toSend, err := e.Apply(cmd)
+			if err != nil {
+				return err
 			}
-			roleCh <- role
-		}
 
-		if len(toSend.Recipients) > 0 || toSend.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
-			commitInfo = toSend.CommitInfo
-			sendCh <- toSend
+			if newRole != role {
+				role = newRole
+				select {
+				case <-roleCh:
+				default:
+				}
+				roleCh <- role
+			}
+
+			if len(toSend.Recipients) > 0 || toSend.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+				commitInfo = toSend.CommitInfo
+				sendCh <- toSend
+			}
 		}
 	}
-
-	return errors.WithStack(ctx.Err())
 }
