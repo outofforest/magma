@@ -11,7 +11,7 @@ import (
 )
 
 func newState() *State {
-	return NewInMemory(1024 * 1024)
+	return NewInMemory(1024*1024, 3)
 }
 
 func setLog(s *State, log ...byte) {
@@ -32,21 +32,23 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 func TestNewInMemory(t *testing.T) {
 	requireT := require.New(t)
 
-	s := NewInMemory(112)
+	s := NewInMemory(112, 128*1024)
 	requireT.False(s.doMSync)
 	requireT.Len(s.log, 112)
+	requireT.EqualValues(128*1024, s.maxReturnedLogSize)
 }
 
 func TestOpen(t *testing.T) {
 	requireT := require.New(t)
 	dir := t.TempDir()
 
-	s, sClose, err := Open(dir)
+	s, sClose, err := Open(dir, 128*1024)
 	t.Cleanup(sClose)
 
 	requireT.NoError(err)
 	requireT.True(s.doMSync)
 	requireT.Len(s.log, logSize)
+	requireT.EqualValues(128*1024, s.maxReturnedLogSize)
 }
 
 func TestCurrentTerm(t *testing.T) {
@@ -299,6 +301,46 @@ func TestEntries(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastLogTerm)
 	requireT.Zero(nextLogTerm)
+	requireT.Empty(entries)
+
+	// 0x01 0x02 0x03 0x03 0x03 0x04 0x04, 0x05, 0x05, 0x05, 0x05, 0x05
+	appendLog(s, 0x05, 0x05, 0x05, 0x05, 0x05)
+	s.terms = []rafttypes.Index{0, 1, 2, 5, 5, 7}
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(7)
+	requireT.NoError(err)
+	requireT.EqualValues(5, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(8)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(9)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(10)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(11)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(12)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
 	requireT.Empty(entries)
 }
 

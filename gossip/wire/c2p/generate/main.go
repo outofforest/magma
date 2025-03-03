@@ -8,7 +8,7 @@ import (
 //go:generate go run .
 
 func main() {
-	proton.Generate("../p2c.proton.go",
+	proton.Generate("../c2p.proton.go",
 		rafttypes.CommitInfo{},
 	)
 }

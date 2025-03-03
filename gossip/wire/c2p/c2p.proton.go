@@ -1,4 +1,4 @@
-package p2c
+package c2p
 
 import (
 	"github.com/outofforest/magma/raft/types"
@@ -16,7 +16,6 @@ var _ proton.Marshaller = Marshaller{}
 func NewMarshaller() Marshaller {
 	return Marshaller{}
 }
-
 
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {

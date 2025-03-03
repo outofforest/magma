@@ -1,6 +1,5 @@
 package reactor
 
-// FIXME (wojciech): Limit the amount of data sent in single message.
 // FIXME (wojciech): Adding new peers.
 // FIXME (wojciech): Preventing server from being a leader.
 // FIXME (wojciech): Rebalance reactors across servers.
@@ -291,10 +290,6 @@ func (r *Reactor) maybeTransitionToFollower(
 		return nil
 	}
 
-	if onAppendEntryRequest {
-		r.leaderID = peerID
-	}
-
 	if term > r.state.CurrentTerm() {
 		if err := r.state.SetCurrentTerm(term); err != nil {
 			return err
@@ -305,11 +300,16 @@ func (r *Reactor) maybeTransitionToFollower(
 		r.transitionToFollower()
 	}
 
+	if onAppendEntryRequest {
+		r.leaderID = peerID
+	}
+
 	return nil
 }
 
 func (r *Reactor) transitionToFollower() {
 	r.role = types.RoleFollower
+	r.leaderID = magmatypes.ZeroServerID
 	r.electionTime = r.timeSource.Now()
 	r.votedForMe = 0
 	clear(r.nextIndex)

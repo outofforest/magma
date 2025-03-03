@@ -3,6 +3,7 @@ package p2p
 import (
 	"unsafe"
 
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
 	"github.com/pkg/errors"
@@ -24,7 +25,6 @@ func NewMarshaller() Marshaller {
 	return Marshaller{}
 }
 
-
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {
 }
@@ -42,7 +42,7 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 		return id2, nil
 	case *types.ClientRequest:
 		return id1, nil
-	case *Hello:
+	case *wire.Hello:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -62,7 +62,7 @@ func (m Marshaller) Size(msg any) (uint64, error) {
 		return size2(msg2), nil
 	case *types.ClientRequest:
 		return size1(msg2), nil
-	case *Hello:
+	case *wire.Hello:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -88,7 +88,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 		return id2, marshal2(msg2, buf), nil
 	case *types.ClientRequest:
 		return id1, marshal1(msg2, buf), nil
-	case *Hello:
+	case *wire.Hello:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -120,19 +120,19 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 		msg := &types.ClientRequest{}
 		return msg, unmarshal1(msg, buf), nil
 	case id0:
-		msg := &Hello{}
+		msg := &wire.Hello{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
 }
 
-func size0(m *Hello) uint64 {
+func size0(m *wire.Hello) uint64 {
 	var n uint64 = 16
 	return n
 }
 
-func marshal0(m *Hello, b []byte) uint64 {
+func marshal0(m *wire.Hello, b []byte) uint64 {
 	var o uint64
 	{
 		// ServerID
@@ -144,7 +144,7 @@ func marshal0(m *Hello, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(m *Hello, b []byte) uint64 {
+func unmarshal0(m *wire.Hello, b []byte) uint64 {
 	var o uint64
 	{
 		// ServerID

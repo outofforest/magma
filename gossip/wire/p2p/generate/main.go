@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/outofforest/magma/gossip/p2p"
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
 )
@@ -14,7 +14,6 @@ func main() {
 		types.AppendEntriesResponse{},
 		types.VoteRequest{},
 		types.VoteResponse{},
-		types.ClientRequest{},
-		p2p.Hello{},
+		wire.Hello{},
 	)
 }
