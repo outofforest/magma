@@ -16,7 +16,7 @@ import (
 // Run runs magma.
 func Run(ctx context.Context, config types.Config, p2pListener, p2cListener net.Listener) error {
 	majority := len(config.Servers)/2 + 1
-	s, closeState, err := state.Open(config.StateDir)
+	s, closeState, err := state.Open(config.StateDir, config.MaxLogSizePerMessage)
 	if err != nil {
 		return err
 	}

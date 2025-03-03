@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -138,6 +139,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 				}
 				messageID, toSend = e.broadcastAppendEntriesRequest(req)
 				toSend.CommitInfo = commitInfo
+				fmt.Printf("%#v\n", toSend)
 				break
 			}
 

@@ -2,6 +2,8 @@ package types
 
 import (
 	"github.com/google/uuid"
+
+	"github.com/outofforest/resonance"
 )
 
 // ServerID represents the unique identifier of a server.
@@ -12,9 +14,12 @@ var ZeroServerID ServerID
 
 // Config is the config of magma.
 type Config struct {
-	ServerID ServerID
-	Servers  []PeerConfig
-	StateDir string
+	ServerID             ServerID
+	Servers              []PeerConfig
+	StateDir             string
+	P2P                  resonance.Config
+	P2C                  resonance.Config
+	MaxLogSizePerMessage uint64
 }
 
 // PeerConfig stores configuration of peer connection.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -62,23 +63,33 @@ func TestCluster(t *testing.T) {
 	requireT.NoError(err)
 	defer p2c4.Close()
 
-	servers := []types.PeerConfig{
-		{
-			ID:         peer1,
-			P2PAddress: p2p1.Addr().String(),
+	config := types.Config{
+		Servers: []types.PeerConfig{
+			{
+				ID:         peer1,
+				P2PAddress: p2p1.Addr().String(),
+			},
+			{
+				ID:         peer2,
+				P2PAddress: p2p2.Addr().String(),
+			},
+			{
+				ID:         peer3,
+				P2PAddress: p2p3.Addr().String(),
+			},
+			{
+				ID:         peer4,
+				P2PAddress: p2p4.Addr().String(),
+			},
 		},
-		{
-			ID:         peer2,
-			P2PAddress: p2p2.Addr().String(),
+		P2C: resonance.Config{
+			MaxMessageSize: 128 * 1024,
 		},
-		{
-			ID:         peer3,
-			P2PAddress: p2p3.Addr().String(),
+
+		P2P: resonance.Config{
+			MaxMessageSize: 600 * 1024,
 		},
-		{
-			ID:         peer4,
-			P2PAddress: p2p4.Addr().String(),
-		},
+		MaxLogSizePerMessage: 512 * 1024,
 	}
 
 	group := parallel.NewGroup(ctx)
@@ -90,24 +101,23 @@ func TestCluster(t *testing.T) {
 	}()
 
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer1, Servers: servers, StateDir: "./test/peer1"}, p2p1, p2c1)
+		return magma.Run(ctx, makeConfig(config, peer1), p2p1, p2c1)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer2, Servers: servers, StateDir: "./test/peer2"}, p2p2, p2c2)
+		return magma.Run(ctx, makeConfig(config, peer2), p2p2, p2c2)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer3, Servers: servers, StateDir: "./test/peer3"}, p2p3, p2c3)
+		return magma.Run(ctx, makeConfig(config, peer3), p2p3, p2c3)
 	})
 
 	client := New(Config{
-		PeerAddress: p2c1.Addr().String(),
-		TxMessageConfig: resonance.Config{
-			MaxMessageSize: 4096,
-		},
+		PeerAddress:      p2c1.Addr().String(),
+		P2C:              config.P2C,
+		BroadcastTimeout: 30 * time.Second,
 	}, entities.NewMarshaller())
 	group.Spawn("client", parallel.Fail, client.Run)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	fmt.Println("Start")
 
 	for range 100000 {
@@ -136,16 +146,22 @@ func TestCluster(t *testing.T) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		time.Sleep(time.Millisecond)
+		// time.Sleep(time.Millisecond)
 	}
 
 	time.Sleep(5 * time.Second)
 
 	fmt.Println("===================")
 
-	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, types.Config{ServerID: peer4, Servers: servers, StateDir: "./test/peer4"}, p2p4, p2c4)
-	})
+	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+	// 	return magma.Run(ctx, makeConfig(config, peer4), p2p4, p2c4)
+	// })
 
 	time.Sleep(time.Minute)
+}
+
+func makeConfig(config types.Config, peerID types.ServerID) types.Config {
+	config.ServerID = peerID
+	config.StateDir = filepath.Join("test", uuid.UUID(peerID).String())
+	return config
 }

@@ -22,18 +22,6 @@ import (
 
 const queueCapacity = 10
 
-var (
-	// P2CConfig is the config of client connection.
-	P2CConfig = resonance.Config{
-		MaxMessageSize: 4 * 1024,
-	}
-
-	// P2PConfig is the config of peer connection.
-	P2PConfig = resonance.Config{
-		MaxMessageSize: 1024 * 1024,
-	}
-)
-
 type peer struct {
 	ID        types.ServerID
 	SendCh    chan any
@@ -88,14 +76,14 @@ func (g *gossip) Run(
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
+					return resonance.RunServer(ctx, g.p2cListener, g.config.P2C,
 						func(ctx context.Context, c *resonance.Connection) error {
 							return g.handleClient(ctx, clientCh, cmdCh, c)
 						},
 					)
 				})
 				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.p2pListener, P2PConfig,
+					return resonance.RunServer(ctx, g.p2pListener, g.config.P2P,
 						func(ctx context.Context, c *resonance.Connection) error {
 							return g.handlePeer(ctx, types.ZeroServerID, peerCh, cmdCh, c)
 						},
@@ -108,7 +96,7 @@ func (g *gossip) Run(
 					}
 					spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
 						for {
-							err := resonance.RunClient(ctx, s.P2PAddress, P2PConfig,
+							err := resonance.RunClient(ctx, s.P2PAddress, g.config.P2P,
 								func(ctx context.Context, c *resonance.Connection) error {
 									return g.handlePeer(ctx, s.ID, peerCh, cmdCh, c)
 								},

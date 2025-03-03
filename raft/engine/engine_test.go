@@ -14,7 +14,7 @@ import (
 )
 
 func newState() *state.State {
-	return state.NewInMemory(1024 * 1024)
+	return state.NewInMemory(1024*1024, 128*1024)
 }
 
 var (

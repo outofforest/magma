@@ -136,7 +136,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT.Nil(msg)
 	requireT.Equal(types.CommitInfo{NextLogIndex: 0}, commitInfo)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(serverID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 }
@@ -164,7 +164,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 		VoteGranted: true,
 	}, msg)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(serverID, r.leaderID)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
