@@ -88,7 +88,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			return 0, Send{}, err
 		}
 		e.expectedResponses[cmd.PeerID] = types.ZeroMessageID
-		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+		messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, types.NewMessageID(), req)
 	default:
 		switch c := cmd.Cmd.(type) {
 		case *types.AppendEntriesRequest:
@@ -107,7 +107,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 			if err != nil {
 				return 0, Send{}, err
 			}
-			messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, req)
+			messageID, toSend = e.unicastAppendEntriesRequest(cmd.PeerID, c.MessageID, req)
 			toSend.CommitInfo = commitInfo
 		case *types.VoteRequest:
 			resp, err := e.reactor.ApplyVoteRequest(cmd.PeerID, c)
@@ -172,13 +172,14 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Send, error) {
 
 func (e *Engine) unicastAppendEntriesRequest(
 	peerID magmatypes.ServerID,
+	messageID types.MessageID,
 	req *types.AppendEntriesRequest,
 ) (types.MessageID, Send) {
 	if req == nil {
 		return types.ZeroMessageID, Send{}
 	}
-	req.MessageID = types.NewMessageID()
-	return req.MessageID, Send{
+	req.MessageID = messageID
+	return messageID, Send{
 		// FIXME (wojciech): Avoid allocation.
 		Recipients: []magmatypes.ServerID{peerID},
 		Message:    req,

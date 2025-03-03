@@ -1,6 +1,5 @@
 package reactor
 
-// FIXME (wojciech): Limit the amount of data sent in single message.
 // FIXME (wojciech): Adding new peers.
 // FIXME (wojciech): Preventing server from being a leader.
 // FIXME (wojciech): Rebalance reactors across servers.
@@ -8,9 +7,11 @@ package reactor
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/state"
@@ -412,6 +413,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 			if r.commitInfo.NextLogIndex > r.nextLogIndex {
 				r.commitInfo.NextLogIndex = r.nextLogIndex
 			}
+			fmt.Printf(" %s: %d\n", uuid.UUID(r.id), r.commitInfo.NextLogIndex)
 		}
 	}
 
@@ -462,6 +464,7 @@ func (r *Reactor) updateCommit() {
 	})
 
 	r.commitInfo.NextLogIndex = indexes[r.majority-1]
+	fmt.Printf("+%s: %d\n", uuid.UUID(r.id), r.commitInfo.NextLogIndex)
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {

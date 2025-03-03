@@ -90,15 +90,7 @@ func (g *gossip) Run(
 				spawn("p2cListener", parallel.Fail, func(ctx context.Context) error {
 					return resonance.RunServer(ctx, g.p2cListener, P2CConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
-							commitCh := make(chan rafttypes.CommitInfo, 1)
-
-							clientCh <- commitCh
-
-							defer func() {
-								clientCh <- commitCh
-							}()
-
-							return g.handleClient(ctx, commitCh, cmdCh, c)
+							return g.handleClient(ctx, clientCh, cmdCh, c)
 						},
 					)
 				})
@@ -154,7 +146,11 @@ func (g *gossip) runSupervisor(
 
 	for {
 		select {
-		case toSend := <-sendCh:
+		case toSend, ok := <-sendCh:
+			if !ok {
+				sendCh = nil
+				continue
+			}
 			for _, peerID := range toSend.Recipients {
 				p, exists := peers[peerID]
 				if !exists {
@@ -182,6 +178,7 @@ func (g *gossip) runSupervisor(
 				if peerCh == nil && clientCh == nil {
 					return errors.WithStack(ctx.Err())
 				}
+				continue
 			}
 			switch {
 			case p.Connected:
@@ -206,8 +203,10 @@ func (g *gossip) runSupervisor(
 				if peerCh == nil && clientCh == nil {
 					return errors.WithStack(ctx.Err())
 				}
+				continue
 			}
 			if _, exists := clientChs[ch]; exists {
+				close(ch)
 				delete(clientChs, ch)
 			} else {
 				if commitInfo.NextLogIndex > 0 {
@@ -293,13 +292,9 @@ func (g *gossip) handlePeer(
 					return errors.New("unexpected hello")
 				}
 
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case cmdCh <- rafttypes.Command{
+				cmdCh <- rafttypes.Command{
 					PeerID: peerID,
 					Cmd:    m,
-				}:
 				}
 			}
 		})
@@ -307,7 +302,9 @@ func (g *gossip) handlePeer(
 			defer c.Close()
 
 			for m := range sendCh {
-				c.SendProton(m, g.p2pMarshaller)
+				if !c.SendProton(m, g.p2pMarshaller) {
+					return errors.WithStack(err)
+				}
 			}
 
 			return errors.WithStack(ctx.Err())
@@ -319,7 +316,7 @@ func (g *gossip) handlePeer(
 
 func (g *gossip) handleClient(
 	ctx context.Context,
-	commitCh <-chan rafttypes.CommitInfo,
+	clientCh chan<- chan rafttypes.CommitInfo,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
@@ -333,55 +330,59 @@ func (g *gossip) handleClient(
 		return errors.New("expected init")
 	}
 
+	ch := make(chan rafttypes.CommitInfo, 1)
+	var commitCh <-chan rafttypes.CommitInfo = ch
+
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
+			clientCh <- ch
+
+			defer func() {
+				clientCh <- ch
+			}()
+
 			for {
 				tx, err := c.ReceiveBytes()
 				if err != nil {
 					return err
 				}
 
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case cmdCh <- rafttypes.Command{
+				cmdCh <- rafttypes.Command{
 					Cmd: &rafttypes.ClientRequest{
 						Data: tx,
 					},
-				}:
 				}
 			}
 		})
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
+			defer c.Close()
+
 			nextLogIndex := msgCommitInfo.NextLogIndex
 			var logF *os.File
-			for {
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case newCommitInfo := <-commitCh:
-					if logF == nil {
-						var err error
-						logF, err = os.Open(filepath.Join(g.stateDir, "log"))
-						if err != nil {
+			for newCommitInfo := range commitCh {
+				if logF == nil {
+					var err error
+					logF, err = os.Open(filepath.Join(g.stateDir, "log"))
+					if err != nil {
+						return errors.WithStack(err)
+					}
+					if nextLogIndex > 0 {
+						if _, err := logF.Seek(int64(nextLogIndex), io.SeekStart); err != nil {
 							return errors.WithStack(err)
 						}
-						if nextLogIndex > 0 {
-							if _, err := logF.Seek(int64(nextLogIndex), io.SeekStart); err != nil {
-								return errors.WithStack(err)
-							}
-						}
-					}
-
-					if newCommitInfo.NextLogIndex > nextLogIndex {
-						toSend := uint64(newCommitInfo.NextLogIndex - nextLogIndex)
-						if !c.SendStream(io.LimitReader(logF, int64(toSend))) {
-							return errors.WithStack(ctx.Err())
-						}
-						nextLogIndex += rafttypes.Index(toSend)
 					}
 				}
+
+				if newCommitInfo.NextLogIndex > nextLogIndex {
+					toSend := uint64(newCommitInfo.NextLogIndex - nextLogIndex)
+					if !c.SendStream(io.LimitReader(logF, int64(toSend))) {
+						return errors.WithStack(ctx.Err())
+					}
+					nextLogIndex += rafttypes.Index(toSend)
+				}
 			}
+
+			return errors.WithStack(ctx.Err())
 		})
 
 		return nil

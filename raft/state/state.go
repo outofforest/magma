@@ -127,10 +127,16 @@ func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes
 		return previousTerm, previousTerm, nil, nil
 	}
 	nextTerm := s.previousTerm(nextLogIndex + 1)
+
+	entries := s.log[nextLogIndex:s.nextLogIndex]
 	if nextTerm < rafttypes.Term(len(s.terms)) {
-		return previousTerm, nextTerm, s.log[nextLogIndex:s.terms[nextTerm]], nil
+		entries = s.log[nextLogIndex:s.terms[nextTerm]]
 	}
-	return previousTerm, nextTerm, s.log[nextLogIndex:s.nextLogIndex], nil
+	const maxLength = 64 * 1024
+	if len(entries) > maxLength {
+		entries = entries[:maxLength]
+	}
+	return previousTerm, nextTerm, entries, nil
 }
 
 // Append attempts to apply the given log entries starting at a specified index in the log.

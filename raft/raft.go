@@ -40,6 +40,13 @@ func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 					return runTimeoutConsumer(ctx, t, cmdCh)
 				})
 				spawn("gossip", parallel.Fail, func(ctx context.Context) error {
+					defer func() {
+						spawn("sendChCleaner", parallel.Fail, func(ctx context.Context) error {
+							for range sendCh {
+							}
+							return errors.WithStack(ctx.Err())
+						})
+					}()
 					defer close(majorityCh)
 
 					return gossipFunc(ctx, cmdCh, sendCh, majorityCh)
@@ -48,6 +55,13 @@ func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 			})
 		})
 		spawn("engine", parallel.Fail, func(ctx context.Context) error {
+			defer func() {
+				spawn("cmdChCleaner", parallel.Fail, func(ctx context.Context) error {
+					for range cmdCh {
+					}
+					return errors.WithStack(ctx.Err())
+				})
+			}()
 			defer close(sendCh)
 
 			return runEngine(ctx, e, cmdCh, sendCh, roleCh)
@@ -63,10 +77,8 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
 		case tm := <-t.Heartbeat():
-			// FIXME (wojciech): Using types.Message here is strange.
 			cmdCh <- types.Command{Cmd: types.HeartbeatTimeout(tm.Add(-t.HeartbeatInterval()))}
 		case tm := <-t.Election():
-			// FIXME (wojciech): Using types.Message here is strange.
 			cmdCh <- types.Command{Cmd: types.ElectionTimeout(tm.Add(-t.ElectionInterval()))}
 		}
 	}
