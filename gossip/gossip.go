@@ -18,7 +18,7 @@ import (
 	"github.com/outofforest/magma/gossip/wire/p2p"
 	"github.com/outofforest/magma/gossip/wire/tx2p"
 	"github.com/outofforest/magma/raft"
-	"github.com/outofforest/magma/raft/engine"
+	"github.com/outofforest/magma/raft/reactor"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
@@ -29,7 +29,7 @@ const queueCapacity = 10
 
 type peerP2P struct {
 	ID        types.ServerID
-	SendCh    chan any
+	SendCh    chan []any
 	Connected bool
 }
 
@@ -91,7 +91,7 @@ type gossip struct {
 func (g *gossip) Run(
 	ctx context.Context,
 	cmdP2PCh, cmdC2PCh chan<- rafttypes.Command,
-	resultCh <-chan engine.Result,
+	resultCh <-chan reactor.Result,
 	majorityCh chan<- bool,
 ) error {
 	g.passthroughTimeoutTicker.Reset(g.config.PassthroughTimeout)
@@ -182,7 +182,7 @@ func (g *gossip) runSupervisor(
 	peerP2PCh <-chan peerP2P,
 	peerTx2PCh <-chan peerTx2P,
 	clientCh <-chan client,
-	resultCh <-chan engine.Result,
+	resultCh <-chan reactor.Result,
 	majorityCh chan<- bool,
 ) error {
 	peersP2P := map[types.ServerID]peerP2P{}
@@ -228,7 +228,7 @@ func (g *gossip) runSupervisor(
 					continue
 				}
 
-				p.SendCh <- result.Message
+				p.SendCh <- result.Messages
 			}
 			if result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
 				commitInfo = result.CommitInfo
@@ -345,8 +345,8 @@ func (g *gossip) p2pHandler(
 		return errors.New("unexpected peer")
 	}
 
-	ch := make(chan any, queueCapacity)
-	var sendCh <-chan any = ch
+	ch := make(chan []any, queueCapacity)
+	var sendCh <-chan []any = ch
 
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
@@ -389,9 +389,11 @@ func (g *gossip) p2pHandler(
 				}
 			}()
 
-			for m := range sendCh {
-				if err := c.SendProton(m, g.p2pMarshaller); err != nil {
-					return errors.WithStack(err)
+			for ms := range sendCh {
+				for _, m := range ms {
+					if err := c.SendProton(m, g.p2pMarshaller); err != nil {
+						return errors.WithStack(err)
+					}
 				}
 			}
 

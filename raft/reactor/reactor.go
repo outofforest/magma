@@ -18,23 +18,44 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+// Result is the result of state transition.
+type Result struct {
+	// Role is the current role.
+	Role types.Role
+	// LeaderID is the ID of current leader.
+	LeaderID magmatypes.ServerID
+	// CommitInfo reports latest committed log index.
+	CommitInfo types.CommitInfo
+	// PeerID is the recipient, if equal to `ZeroServerID` message is broadcasted to all connected peers.
+	Recipients []magmatypes.ServerID
+	// Messages is the list of messages to send.
+	Messages []any
+}
+
+type logTransfer struct {
+	Start types.Index
+	End   types.Index
+}
+
 // New creates new reactor of raft consensus algorithm.
 func New(
 	id magmatypes.ServerID,
-	majority int,
+	peers []magmatypes.ServerID,
 	s *state.State,
 	timeSource TimeSource,
 ) *Reactor {
 	r := &Reactor{
 		timeSource:   timeSource,
 		id:           id,
+		peers:        peers,
 		state:        s,
 		varuint64Buf: make([]byte, varuint64.MaxSize),
-		majority:     majority,
+		majority:     (len(peers)+1)/2 + 1,
 		lastLogTerm:  s.LastLogTerm(),
 		nextLogIndex: s.NextLogIndex(),
 		nextIndex:    map[magmatypes.ServerID]types.Index{},
 		matchIndex:   map[magmatypes.ServerID]types.Index{},
+		transfers:    map[magmatypes.ServerID]logTransfer{},
 	}
 	r.transitionToFollower()
 
@@ -46,6 +67,7 @@ type Reactor struct {
 	timeSource TimeSource
 
 	id           magmatypes.ServerID
+	peers        []magmatypes.ServerID
 	leaderID     magmatypes.ServerID
 	state        *state.State
 	varuint64Buf []byte
@@ -66,65 +88,69 @@ type Reactor struct {
 	indexTermStarted types.Index
 	nextIndex        map[magmatypes.ServerID]types.Index
 	matchIndex       map[magmatypes.ServerID]types.Index
+	transfers        map[magmatypes.ServerID]logTransfer
 	heartBeatTime    time.Time
 }
 
-// ID returns the ID of the server.
-func (r *Reactor) ID() magmatypes.ServerID {
-	return r.id
+// Apply applies command to the state machine.
+func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
+	switch {
+	case peerID == magmatypes.ZeroServerID:
+		switch c := cmd.(type) {
+		case *types.ClientRequest:
+			return r.applyClientRequest(c)
+		case types.HeartbeatTimeout:
+			return r.applyHeartbeatTimeout(time.Time(c))
+		case types.ElectionTimeout:
+			return r.applyElectionTimeout(time.Time(c))
+		}
+	case cmd == nil:
+		return r.applyPeerConnected(peerID)
+	default:
+		switch c := cmd.(type) {
+		case *types.AppendEntriesRequest:
+			return r.applyAppendEntriesRequest(peerID, c)
+		case *types.AppendEntriesResponse:
+			return r.applyAppendEntriesResponse(peerID, c)
+		case *types.VoteRequest:
+			return r.applyVoteRequest(peerID, c)
+		case *types.VoteResponse:
+			return r.applyVoteResponse(peerID, c)
+		}
+	}
+
+	return r.resultError(errors.Errorf("unexpected message type %T", cmd))
 }
 
-// Role returns current role.
-func (r *Reactor) Role() types.Role {
-	return r.role
-}
-
-// LeaderID returns current leader.
-func (r *Reactor) LeaderID() magmatypes.ServerID {
-	return r.leaderID
-}
-
-// ApplyAppendEntriesRequest handles an incoming AppendEntries request from a peer.
-// It performs state transitions if necessary and validates the log consistency
-// based on the request parameters. If the request is invalid or a protocol bug is detected,
-// it returns an appropriate error.
-func (r *Reactor) ApplyAppendEntriesRequest(
-	peerID magmatypes.ServerID,
-	m *types.AppendEntriesRequest,
-) (*types.AppendEntriesResponse, types.CommitInfo, error) {
+func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types.AppendEntriesRequest) (Result, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
-		return nil, types.CommitInfo{}, errors.New("bug in protocol")
+		return r.resultError(errors.New("bug in protocol"))
 	}
 	if m.NextLogIndex < r.commitInfo.NextLogIndex {
-		return nil, types.CommitInfo{}, errors.New("bug in protocol")
+		return r.resultError(errors.New("bug in protocol"))
 	}
 
 	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
 	resp, err := r.handleAppendEntriesRequest(m)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
-	return resp, r.commitInfo, nil
+	return r.resultMessageAndRecipient(resp, peerID)
 }
 
-// ApplyAppendEntriesResponse processes a response to a previously sent AppendEntries request.
-// It handles potential state transitions due to term updates, adjusts match and next indexes for the peer,
-// and recalculates the committed count if necessary.
-// If the peer's log is behind, it prepares and returns a new AppendEntries request.
-// Returns an empty request if no further action is required or an error occurred.
-func (r *Reactor) ApplyAppendEntriesResponse(
+func (r *Reactor) applyAppendEntriesResponse(
 	peerID magmatypes.ServerID,
 	m *types.AppendEntriesResponse,
-) (*types.AppendEntriesRequest, types.CommitInfo, error) {
+) (Result, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
-	if r.role != types.RoleLeader {
-		return nil, types.CommitInfo{}, nil
+	if r.role != types.RoleLeader || m.Term != r.state.CurrentTerm() {
+		return r.resultEmpty()
 	}
 
 	if m.NextLogIndex > r.getNextIndex(peerID) {
@@ -136,149 +162,153 @@ func (r *Reactor) ApplyAppendEntriesResponse(
 
 	r.nextIndex[peerID] = m.NextLogIndex
 	if m.NextLogIndex >= r.nextLogIndex {
-		return nil, r.commitInfo, nil
+		r.transfers[peerID] = logTransfer{
+			Start: r.nextLogIndex,
+			End:   r.nextLogIndex,
+		}
+		return r.resultEmpty()
 	}
 
-	resp, err := r.newAppendEntriesRequest(m.NextLogIndex)
+	req, err := r.newAppendEntriesRequest(m.NextLogIndex)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return Result{}, err
 	}
 
-	return resp, r.commitInfo, nil
+	r.transfers[peerID] = logTransfer{
+		Start: m.NextLogIndex,
+		End:   m.NextLogIndex + types.Index(len(req.Data)),
+	}
+
+	return r.resultMessageAndRecipient(req, peerID)
 }
 
-// ApplyVoteRequest processes an incoming VoteRequest from a peer.
-// It ensures the reactor transitions to a follower if necessary,
-// based on the term in the request, and then handles the vote request.
-// The function returns a VoteResponse and an error if any issues occur during processing.
-func (r *Reactor) ApplyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (*types.VoteResponse, error) {
+func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return nil, err
+		return r.resultError(err)
 	}
 
 	resp, err := r.handleVoteRequest(peerID, m)
 	if err != nil {
-		return nil, err
+		return r.resultError(err)
 	}
-	return resp, nil
+	return r.resultMessageAndRecipient(resp, peerID)
 }
 
-// ApplyVoteResponse processes an incoming VoteResponse from a peer.
-// It handles potential state transitions, such as transitioning to a follower
-// if a higher term is observed. If the response is for the current term and
-// the reactor is still a candidate, it tracks whether the vote is granted.
-// When the majority of votes is achieved, it transitions the reactor to the leader.
-// If no action is required or conditions aren't met, it returns an empty AppendEntriesRequest.
-func (r *Reactor) ApplyVoteResponse(
-	peerID magmatypes.ServerID,
-	m *types.VoteResponse,
-) (*types.AppendEntriesRequest, types.CommitInfo, error) {
+func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteResponse) (Result, error) {
 	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
 	if r.role != types.RoleCandidate || m.Term != r.state.CurrentTerm() {
-		return nil, types.CommitInfo{}, nil
+		return r.resultEmpty()
 	}
 
 	if !m.VoteGranted {
-		return nil, r.commitInfo, nil
+		return r.resultEmpty()
 	}
 
 	r.votedForMe++
 	if r.votedForMe < r.majority {
-		return nil, types.CommitInfo{}, nil
+		return r.resultEmpty()
 	}
 
 	return r.transitionToLeader()
 }
 
-// ApplyClientRequest processes a client request for appending a new log entry.
-// It ensures the reactor can only process the request if it is in the Leader role.
-// It appends the client's data as a new log entry, and returns an AppendEntriesRequest to replicate
-// the log entry to peers.
-func (r *Reactor) ApplyClientRequest(m *types.ClientRequest) (*types.AppendEntriesRequest, types.CommitInfo, error) {
-	// ApplyClientRequest processes a client request to append a log item.
-	// If the reactor is not in the Leader role, it returns an empty AppendEntriesRequest.
-	// As the leader, it appends the client's data as a new log item, updates the heartbeat time,
-	// and returns an AppendEntriesRequest if there are peers to replicate to,
-	// or updates the committed count if there are no peers.
+func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if r.role != types.RoleLeader {
-		return nil, types.CommitInfo{}, nil
+		return r.resultEmpty()
 	}
 
 	newLogIndex, err := r.appendData(m.Data)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
 		r.commitInfo.NextLogIndex = r.nextLogIndex
-		return nil, r.commitInfo, nil
+		return r.resultEmpty()
 	}
 
-	msg, err := r.newAppendEntriesRequest(newLogIndex)
+	req, err := r.newAppendEntriesRequest(newLogIndex)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
-	return msg, r.commitInfo, nil
+	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
+	endIndex := newLogIndex + types.Index(len(m.Data))
+	for _, p := range r.peers {
+		if r.transfers[p].Start == newLogIndex {
+			recipients = append(recipients, p)
+			r.transfers[p] = logTransfer{
+				Start: newLogIndex,
+				End:   endIndex,
+			}
+		}
+	}
+
+	return r.resultMessageAndRecipients(req, recipients)
 }
 
-// ApplyHeartbeatTimeout processes a heartbeat timeout event and ensures the leader
-// sends a heartbeat to other peers if the timeout has expired. The function checks
-// if the reactor is still in the Leader role and whether the provided timeout is
-// valid (i.e., after the last recorded heartbeat).
-func (r *Reactor) ApplyHeartbeatTimeout(t time.Time) (*types.AppendEntriesRequest, error) {
+func (r *Reactor) applyHeartbeatTimeout(t time.Time) (Result, error) {
 	if r.role != types.RoleLeader || t.Before(r.heartBeatTime) {
-		return nil, nil //nolint:nilnil
+		return r.resultEmpty()
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
-		return nil, nil //nolint:nilnil
+		return r.resultEmpty()
 	}
 
-	msg, err := r.newAppendEntriesRequest(r.nextLogIndex)
+	req, err := r.newAppendEntriesRequest(r.nextLogIndex)
 	if err != nil {
-		return nil, err
+		return r.resultError(err)
 	}
 
-	return msg, nil
+	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
+	for _, p := range r.peers {
+		if r.transfers[p].Start == r.nextLogIndex {
+			recipients = append(recipients, p)
+			r.transfers[p] = logTransfer{
+				Start: r.nextLogIndex,
+				End:   r.nextLogIndex,
+			}
+		}
+	}
+
+	return r.resultMessageAndRecipients(req, recipients)
 }
 
-// ApplyElectionTimeout processes an election timeout event, transitioning the reactor
-// to a candidate state if the timeout has expired and the reactor is not already a leader.
-// It then sends a VoteRequest to peers to begin a new election.
-func (r *Reactor) ApplyElectionTimeout(t time.Time) (*types.VoteRequest, types.CommitInfo, error) {
+func (r *Reactor) applyElectionTimeout(t time.Time) (Result, error) {
 	if r.role == types.RoleLeader || t.Before(r.electionTime) {
-		return nil, types.CommitInfo{}, nil
+		return r.resultEmpty()
 	}
 
 	return r.transitionToCandidate()
 }
 
-// ApplyPeerConnected handles the event of a new peer connection.
-// If the reactor is in the Leader role, it prepares an AppendEntriesRequest
-// for the newly connected peer. It also initializes the peer's nextIndex and
-// matchIndex to track replication state.
-func (r *Reactor) ApplyPeerConnected(peerID magmatypes.ServerID) (*types.AppendEntriesRequest, error) {
+func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error) {
 	if r.role != types.RoleLeader {
-		return nil, nil //nolint:nilnil
-	}
-
-	msg, err := r.newAppendEntriesRequest(r.nextLogIndex)
-	if err != nil {
-		return nil, err
+		return r.resultEmpty()
 	}
 
 	delete(r.nextIndex, peerID)
 	delete(r.matchIndex, peerID)
 
-	return msg, nil
+	req, err := r.newAppendEntriesRequest(r.nextLogIndex)
+	if err != nil {
+		return r.resultError(err)
+	}
+
+	r.transfers[peerID] = logTransfer{
+		Start: r.nextLogIndex,
+		End:   r.nextLogIndex,
+	}
+
+	return r.resultMessageAndRecipient(req, peerID)
 }
 
 func (r *Reactor) maybeTransitionToFollower(
@@ -314,18 +344,19 @@ func (r *Reactor) transitionToFollower() {
 	r.votedForMe = 0
 	clear(r.nextIndex)
 	clear(r.matchIndex)
+	clear(r.transfers)
 }
 
-func (r *Reactor) transitionToCandidate() (*types.VoteRequest, types.CommitInfo, error) {
+func (r *Reactor) transitionToCandidate() (Result, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 	granted, err := r.state.VoteFor(r.id)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 	if !granted {
-		return nil, types.CommitInfo{}, errors.New("bug in protocol")
+		return r.resultError(errors.New("bug in protocol"))
 	}
 
 	r.role = types.RoleCandidate
@@ -334,45 +365,54 @@ func (r *Reactor) transitionToCandidate() (*types.VoteRequest, types.CommitInfo,
 	r.electionTime = r.timeSource.Now()
 	clear(r.nextIndex)
 	clear(r.matchIndex)
+	clear(r.transfers)
 
 	if r.majority == 1 {
-		_, commitInfo, err := r.transitionToLeader()
-		return nil, commitInfo, err
+		return r.transitionToLeader()
 	}
 
-	return &types.VoteRequest{
+	return r.resultBroadcastMessage(&types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
-	}, r.commitInfo, nil
+	})
 }
 
-func (r *Reactor) transitionToLeader() (*types.AppendEntriesRequest, types.CommitInfo, error) {
+func (r *Reactor) transitionToLeader() (Result, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
 	clear(r.nextIndex)
 	clear(r.matchIndex)
+	clear(r.transfers)
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
 	r.indexTermStarted, err = r.appendData(nil)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
 	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
 		r.commitInfo.NextLogIndex = r.nextLogIndex
-		return nil, r.commitInfo, nil
+		return r.resultEmpty()
 	}
 
-	msg, err := r.newAppendEntriesRequest(r.indexTermStarted)
+	req, err := r.newAppendEntriesRequest(r.indexTermStarted)
 	if err != nil {
-		return nil, types.CommitInfo{}, err
+		return r.resultError(err)
 	}
 
-	return msg, r.commitInfo, nil
+	endIndex := r.indexTermStarted + types.Index(len(req.Data))
+	for _, p := range r.peers {
+		r.transfers[p] = logTransfer{
+			Start: r.indexTermStarted,
+			End:   endIndex,
+		}
+	}
+
+	return r.resultBroadcastMessage(req)
 }
 
 func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
@@ -493,4 +533,46 @@ func (r *Reactor) getNextIndex(peerID magmatypes.ServerID) types.Index {
 		return i
 	}
 	return r.indexTermStarted
+}
+
+func (r *Reactor) resultError(err error) (Result, error) {
+	return Result{}, err
+}
+
+func (r *Reactor) resultEmpty() (Result, error) {
+	return Result{
+		Role:       r.role,
+		LeaderID:   r.leaderID,
+		CommitInfo: r.commitInfo,
+	}, nil
+}
+
+func (r *Reactor) resultMessageAndRecipient(message any, recipient magmatypes.ServerID) (Result, error) {
+	return Result{
+		Role:       r.role,
+		LeaderID:   r.leaderID,
+		CommitInfo: r.commitInfo,
+		Messages:   []any{message},
+		Recipients: []magmatypes.ServerID{recipient},
+	}, nil
+}
+
+func (r *Reactor) resultMessageAndRecipients(message any, recipients []magmatypes.ServerID) (Result, error) {
+	return Result{
+		Role:       r.role,
+		LeaderID:   r.leaderID,
+		CommitInfo: r.commitInfo,
+		Messages:   []any{message},
+		Recipients: recipients,
+	}, nil
+}
+
+func (r *Reactor) resultBroadcastMessage(message any) (Result, error) {
+	return Result{
+		Role:       r.role,
+		LeaderID:   r.leaderID,
+		CommitInfo: r.commitInfo,
+		Messages:   []any{message},
+		Recipients: r.peers,
+	}, nil
 }

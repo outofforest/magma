@@ -7,7 +7,6 @@ import (
 	"github.com/outofforest/magma/gossip"
 	"github.com/outofforest/magma/helpers"
 	"github.com/outofforest/magma/raft"
-	"github.com/outofforest/magma/raft/engine"
 	"github.com/outofforest/magma/raft/reactor"
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/types"
@@ -15,7 +14,6 @@ import (
 
 // Run runs magma.
 func Run(ctx context.Context, config types.Config, p2pListener, tx2pListener, c2pListener net.Listener) error {
-	majority := len(config.Servers)/2 + 1
 	s, closeState, err := state.Open(config.StateDir, config.MaxLogSizePerMessage)
 	if err != nil {
 		return err
@@ -24,10 +22,7 @@ func Run(ctx context.Context, config types.Config, p2pListener, tx2pListener, c2
 
 	return raft.Run(
 		ctx,
-		engine.New(
-			reactor.New(config.ServerID, majority, s, &reactor.RealTimeSource{}),
-			helpers.Peers(config),
-		),
+		reactor.New(config.ServerID, helpers.Peers(config), s, &reactor.RealTimeSource{}),
 		gossip.New(config, p2pListener, tx2pListener, c2pListener, config.StateDir),
 	)
 }

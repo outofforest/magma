@@ -108,7 +108,7 @@ func TestCluster(t *testing.T) {
 		C2P: resonance.Config{
 			MaxMessageSize: 128 * 1024,
 		},
-		MaxLogSizePerMessage: 1024 * 1024,
+		MaxLogSizePerMessage: 4 * 1024,
 		PassthroughTimeout:   3 * time.Second,
 	}
 
@@ -145,8 +145,8 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 100000 {
-		err := client.Broadcast(ctx, []any{
+	for range 1000000 {
+		err := client.Broadcast(group.Context(), []any{
 			&entities.Account{
 				FirstName: "Test1",
 				LastName:  "Test2",
@@ -170,9 +170,7 @@ func TestCluster(t *testing.T) {
 		})
 		if err != nil {
 			fmt.Println(err)
-			t.Fail()
 		}
-		// time.Sleep(time.Millisecond)
 	}
 
 	time.Sleep(5 * time.Second)

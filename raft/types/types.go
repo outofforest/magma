@@ -38,17 +38,9 @@ type HeartbeatTimeout time.Time
 // ElectionTimeout is sent to raft reactor when it's time to switch to election phase.
 type ElectionTimeout time.Time
 
-// MessageID represents a unique identifier for a message.
-type MessageID uint64
-
-// ZeroMessageID represents uninitialized message ID.
-var ZeroMessageID MessageID
-
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
 type AppendEntriesRequest struct {
-	// MessageID is random identifier of the message.
-	MessageID MessageID
 	// Term is the leader's current term.
 	Term Term
 	// NextLogIndex is the index of the next log entry.
@@ -66,8 +58,6 @@ type AppendEntriesRequest struct {
 // AppendEntriesResponse represents the response sent by a Raft follower
 // to the leader after processing an AppendEntriesRequest.
 type AppendEntriesResponse struct {
-	// MessageID is random identifier of the message.
-	MessageID MessageID
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item.
@@ -77,8 +67,6 @@ type AppendEntriesResponse struct {
 // VoteRequest represents the structure of a request sent by a Raft candidate
 // to gather votes from other nodes in the cluster during an election process.
 type VoteRequest struct {
-	// MessageID is random identifier of the message.
-	MessageID MessageID
 	// Term is the candidate's current term.
 	Term Term
 	// NextLogIndex is the index of the candidate's next log entry.
@@ -90,8 +78,6 @@ type VoteRequest struct {
 // VoteResponse represents the response sent by a Raft node
 // to a candidate after processing a VoteRequest during an election.
 type VoteResponse struct {
-	// MessageID is random identifier of the message.
-	MessageID MessageID
 	// Term is the current term of the server receiving the request, for candidate to update itself.
 	Term Term
 	// VoteGranted indicates whether the candidate received the vote.
