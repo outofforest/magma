@@ -13,7 +13,7 @@ import (
 
 func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
 	timeSource := &TestTimeSource{}
-	return New(serverID, 1, s, timeSource), timeSource
+	return New(serverID, nil, s, timeSource), timeSource
 }
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
@@ -24,16 +24,22 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	electionTimeoutTime := ts.Add(time.Hour)
 	expectedElectionTime := ts.Add(time.Hour)
 
-	msg, commitInfo, err := r.ApplyElectionTimeout(electionTimeoutTime)
+	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTimeout(electionTimeoutTime))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Equal(expectedElectionTime, r.heartBeatTime)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
-	requireT.Nil(msg)
-	requireT.Equal(types.CommitInfo{NextLogIndex: 1}, commitInfo)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex: 1,
+		},
+	}, result)
 	requireT.Empty(r.nextIndex)
+	requireT.Empty(r.transfers)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
@@ -64,12 +70,12 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactorSingleMode(s)
-	_, _, err = r.transitionToLeader()
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, commitInfo, err := r.ApplyClientRequest(&types.ClientRequest{
+	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x01},
 	})
 	requireT.NoError(err)
@@ -77,9 +83,15 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Nil(msg)
-	requireT.Equal(types.CommitInfo{NextLogIndex: 8}, commitInfo)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex: 8,
+		},
+	}, result)
 	requireT.Empty(r.nextIndex)
+	requireT.Empty(r.transfers)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 8,
 	}, r.matchIndex)
@@ -111,20 +123,27 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
 	r, ts := newReactorSingleMode(s)
-	_, _, err = r.transitionToLeader()
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	heartbeatTimeoutTime := ts.Add(time.Hour)
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
-	msg, err := r.ApplyHeartbeatTimeout(heartbeatTimeoutTime)
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTimeout(heartbeatTimeoutTime))
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
 	requireT.EqualValues(4, s.CurrentTerm())
-	requireT.Nil(msg)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex: 6,
+		},
+	}, result)
 	requireT.Empty(r.nextIndex)
+	requireT.Empty(r.transfers)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 6,
 	}, r.matchIndex)

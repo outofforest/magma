@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/outofforest/magma/raft/engine"
+	"github.com/outofforest/magma/raft/reactor"
 	"github.com/outofforest/magma/raft/timeouts"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
@@ -18,16 +18,16 @@ const queueCapacity = 10
 type GossipFunc func(
 	ctx context.Context,
 	cmdP2PCh, cmdC2PCh chan<- types.Command,
-	resultCh <-chan engine.Result,
+	resultCh <-chan reactor.Result,
 	majorityCh chan<- bool,
 ) error
 
 // Run runs Raft processor.
-func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
+func Run(ctx context.Context, r *reactor.Reactor, gossipFunc GossipFunc) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		cmdP2PCh := make(chan types.Command, queueCapacity)
 		cmdC2PCh := make(chan types.Command, queueCapacity)
-		resultCh := make(chan engine.Result, 1)
+		resultCh := make(chan reactor.Result, 1)
 		roleCh := make(chan types.Role, 1)
 		majorityCh := make(chan bool, 1)
 
@@ -57,7 +57,7 @@ func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 				return nil
 			})
 		})
-		spawn("engine", parallel.Fail, func(ctx context.Context) error {
+		spawn("reactor", parallel.Fail, func(ctx context.Context) error {
 			defer func() {
 				spawn("cmdP2PChCleaner", parallel.Fail, func(ctx context.Context) error {
 					for range cmdP2PCh {
@@ -72,7 +72,7 @@ func Run(ctx context.Context, e *engine.Engine, gossipFunc GossipFunc) error {
 			}()
 			defer close(resultCh)
 
-			return runEngine(ctx, e, cmdP2PCh, cmdC2PCh, resultCh, roleCh)
+			return runReactor(ctx, r, cmdP2PCh, cmdC2PCh, resultCh, roleCh)
 		})
 
 		return nil
@@ -92,11 +92,11 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 	}
 }
 
-func runEngine(
+func runReactor(
 	ctx context.Context,
-	e *engine.Engine,
+	r *reactor.Reactor,
 	cmdP2PCh, cmdC2PCh <-chan types.Command,
-	resultCh chan<- engine.Result,
+	resultCh chan<- reactor.Result,
 	roleCh chan types.Role,
 ) error {
 	role := types.RoleFollower
@@ -111,13 +111,13 @@ func runEngine(
 			return err
 		}
 
-		newRole, result, err := e.Apply(cmd)
+		result, err := r.Apply(cmd.PeerID, cmd.Cmd)
 		if err != nil {
 			return err
 		}
 
-		if newRole != role {
-			role = newRole
+		if result.Role != role {
+			role = result.Role
 			select {
 			case <-roleCh:
 			default:
