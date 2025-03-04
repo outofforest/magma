@@ -5,6 +5,7 @@ import (
 
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/proton"
+	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
 )
 
@@ -46,11 +47,7 @@ func (m Marshaller) Size(msg any) (uint64, error) {
 
 // Marshal marshals message.
 func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr error) {
-	defer func() {
-		if res := recover(); res != nil {
-			retErr = errors.Errorf("marshaling message failed: %s", res)
-		}
-	}()
+	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
 	case *wire.Hello:
@@ -62,11 +59,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 // Unmarshal unmarshals message.
 func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64, retErr error) {
-	defer func() {
-		if res := recover(); res != nil {
-			retErr = errors.Errorf("unmarshaling message failed: %s", res)
-		}
-	}()
+	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
 	case id0:

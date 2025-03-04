@@ -6,6 +6,7 @@ import (
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
+	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
 )
 
@@ -67,11 +68,7 @@ func (m Marshaller) Size(msg any) (uint64, error) {
 
 // Marshal marshals message.
 func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr error) {
-	defer func() {
-		if res := recover(); res != nil {
-			retErr = errors.Errorf("marshaling message failed: %s", res)
-		}
-	}()
+	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
 	case *types.AppendEntriesRequest:
@@ -91,11 +88,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 // Unmarshal unmarshals message.
 func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64, retErr error) {
-	defer func() {
-		if res := recover(); res != nil {
-			retErr = errors.Errorf("unmarshaling message failed: %s", res)
-		}
-	}()
+	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
 	case id4:
@@ -148,7 +141,33 @@ func unmarshal0(m *wire.Hello, b []byte) uint64 {
 }
 
 func size1(m *types.VoteResponse) uint64 {
-	var n uint64 = 18
+	var n uint64 = 3
+	{
+		// MessageID
+
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
 	{
 		// Term
 
@@ -183,8 +202,146 @@ func marshal1(m *types.VoteResponse, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(b[o:o+16], unsafe.Slice(&m.MessageID[0], 16))
-		o += 16
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
 	}
 	{
 		// Term
@@ -348,8 +505,51 @@ func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(unsafe.Slice(&m.MessageID[0], 16), b[o:o+16])
-		o += 16
+		{
+			vi := types.MessageID(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.MessageID(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.MessageID(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.MessageID(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.MessageID(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.MessageID(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.MessageID(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.MessageID(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.MessageID(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.MessageID = vi
+		}
 	}
 	{
 		// Term
@@ -410,7 +610,33 @@ func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
 }
 
 func size2(m *types.VoteRequest) uint64 {
-	var n uint64 = 19
+	var n uint64 = 4
+	{
+		// MessageID
+
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
 	{
 		// Term
 
@@ -497,8 +723,146 @@ func marshal2(m *types.VoteRequest, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(b[o:o+16], unsafe.Slice(&m.MessageID[0], 16))
-		o += 16
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
 	}
 	{
 		// Term
@@ -941,8 +1305,51 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(unsafe.Slice(&m.MessageID[0], 16), b[o:o+16])
-		o += 16
+		{
+			vi := types.MessageID(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.MessageID(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.MessageID(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.MessageID(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.MessageID(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.MessageID(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.MessageID(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.MessageID(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.MessageID(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.MessageID = vi
+		}
 	}
 	{
 		// Term
@@ -1096,7 +1503,33 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 }
 
 func size3(m *types.AppendEntriesResponse) uint64 {
-	var n uint64 = 18
+	var n uint64 = 3
+	{
+		// MessageID
+
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
 	{
 		// Term
 
@@ -1157,8 +1590,146 @@ func marshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(b[o:o+16], unsafe.Slice(&m.MessageID[0], 16))
-		o += 16
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
 	}
 	{
 		// Term
@@ -1457,8 +2028,51 @@ func unmarshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(unsafe.Slice(&m.MessageID[0], 16), b[o:o+16])
-		o += 16
+		{
+			vi := types.MessageID(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.MessageID(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.MessageID(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.MessageID(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.MessageID(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.MessageID(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.MessageID(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.MessageID(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.MessageID(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.MessageID = vi
+		}
 	}
 	{
 		// Term
@@ -1563,7 +2177,33 @@ func unmarshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 }
 
 func size4(m *types.AppendEntriesRequest) uint64 {
-	var n uint64 = 22
+	var n uint64 = 7
+	{
+		// MessageID
+
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
 	{
 		// Term
 
@@ -1730,8 +2370,146 @@ func marshal4(m *types.AppendEntriesRequest, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(b[o:o+16], unsafe.Slice(&m.MessageID[0], 16))
-		o += 16
+		{
+			vi := m.MessageID
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
 	}
 	{
 		// Term
@@ -2611,8 +3389,51 @@ func unmarshal4(m *types.AppendEntriesRequest, b []byte) uint64 {
 	{
 		// MessageID
 
-		copy(unsafe.Slice(&m.MessageID[0], 16), b[o:o+16])
-		o += 16
+		{
+			vi := types.MessageID(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.MessageID(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.MessageID(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.MessageID(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.MessageID(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.MessageID(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.MessageID(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.MessageID(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.MessageID(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.MessageID = vi
+		}
 	}
 	{
 		// Term

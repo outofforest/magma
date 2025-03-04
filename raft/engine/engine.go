@@ -25,18 +25,20 @@ type Result struct {
 // New creates new engine.
 func New(r *reactor.Reactor, peers []magmatypes.ServerID) *Engine {
 	return &Engine{
-		reactor:           r,
-		peers:             peers,
-		expectedResponses: map[magmatypes.ServerID]types.MessageID{},
+		reactor:            r,
+		peers:              peers,
+		expectedResponses:  map[magmatypes.ServerID]types.MessageID{},
+		messageIDGenerator: types.MessageID(time.Now().Unix()),
 	}
 }
 
 // Engine is responsible for applying commands to reactor, and transform response into send instructions.
 // It also tracks the expected responses to not send redundant messages.
 type Engine struct {
-	reactor           *reactor.Reactor
-	peers             []magmatypes.ServerID
-	expectedResponses map[magmatypes.ServerID]types.MessageID
+	reactor            *reactor.Reactor
+	peers              []magmatypes.ServerID
+	expectedResponses  map[magmatypes.ServerID]types.MessageID
+	messageIDGenerator types.MessageID
 }
 
 // Apply applied command and returns message to be sent to peers.
@@ -78,7 +80,7 @@ func (e *Engine) Apply(cmd types.Command) (types.Role, Result, error) {
 			return 0, Result{}, err
 		}
 		e.expectedResponses[cmd.PeerID] = types.ZeroMessageID
-		messageID, result = e.unicastAppendEntriesRequest(cmd.PeerID, types.NewMessageID(), req)
+		messageID, result = e.unicastAppendEntriesRequest(cmd.PeerID, e.newMessageID(), req)
 	default:
 		switch c := cmd.Cmd.(type) {
 		case *types.AppendEntriesRequest:
@@ -165,7 +167,7 @@ func (e *Engine) broadcastAppendEntriesRequest(req *types.AppendEntriesRequest) 
 	if req == nil {
 		return types.ZeroMessageID, Result{}
 	}
-	req.MessageID = types.NewMessageID()
+	req.MessageID = e.newMessageID()
 	return req.MessageID, Result{
 		Recipients: e.peers,
 		Message:    req,
@@ -192,7 +194,7 @@ func (e *Engine) broadcastVoteRequest(req *types.VoteRequest) (types.MessageID, 
 	if req == nil {
 		return types.ZeroMessageID, Result{}
 	}
-	req.MessageID = types.NewMessageID()
+	req.MessageID = e.newMessageID()
 	return req.MessageID, Result{
 		Recipients: e.peers,
 		Message:    req,
@@ -221,4 +223,13 @@ func (e *Engine) isExpected(peerID magmatypes.ServerID, messageID types.MessageI
 	}
 	e.expectedResponses[peerID] = types.ZeroMessageID
 	return true
+}
+
+func (e *Engine) newMessageID() types.MessageID {
+	e.messageIDGenerator++
+	if e.messageIDGenerator == 0 {
+		e.messageIDGenerator = 1
+	}
+
+	return e.messageIDGenerator
 }

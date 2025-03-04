@@ -3,8 +3,6 @@ package types
 import (
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/outofforest/magma/types"
 )
 
@@ -40,13 +38,8 @@ type HeartbeatTimeout time.Time
 // ElectionTimeout is sent to raft reactor when it's time to switch to election phase.
 type ElectionTimeout time.Time
 
-// NewMessageID generates a new unique identifier for a message.
-func NewMessageID() MessageID {
-	return MessageID(uuid.New())
-}
-
 // MessageID represents a unique identifier for a message.
-type MessageID uuid.UUID
+type MessageID uint64
 
 // ZeroMessageID represents uninitialized message ID.
 var ZeroMessageID MessageID
