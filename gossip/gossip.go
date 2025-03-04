@@ -28,7 +28,6 @@ const queueCapacity = 10
 type peerP2P struct {
 	ID        types.ServerID
 	SendCh    chan any
-	ClosedCh  <-chan struct{}
 	Connected bool
 }
 
@@ -220,10 +219,7 @@ func (g *gossip) runSupervisor(
 					continue
 				}
 
-				select {
-				case p.SendCh <- result.Message:
-				case <-p.ClosedCh:
-				}
+				p.SendCh <- result.Message
 			}
 			if result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
 				commitInfo = result.CommitInfo
@@ -345,16 +341,13 @@ func (g *gossip) p2pHandler(
 
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
-			closedCh := make(chan struct{})
 			p := peerP2P{
 				ID:        h.ServerID,
 				SendCh:    ch,
-				ClosedCh:  closedCh,
 				Connected: true,
 			}
 			peerCh <- p
 			defer func() {
-				close(closedCh)
 				p.Connected = false
 				peerCh <- p
 			}()
@@ -381,7 +374,11 @@ func (g *gossip) p2pHandler(
 			}
 		})
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
-			defer c.Close()
+			defer func() {
+				c.Close()
+				for range sendCh {
+				}
+			}()
 
 			for m := range sendCh {
 				if !c.SendProton(m, g.p2pMarshaller) {
