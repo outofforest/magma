@@ -23,7 +23,7 @@ var (
 )
 
 func newState() *state.State {
-	return state.NewInMemory(1024 * 1024)
+	return state.NewInMemory(1024*1024, 128*1024)
 }
 
 func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
@@ -46,6 +46,7 @@ func TestFollowerSetup(t *testing.T) {
 	r, ts := newReactor(s)
 
 	r.role = types.RoleCandidate
+	r.leaderID = serverID
 	r.votedForMe = 2
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
@@ -58,6 +59,7 @@ func TestFollowerSetup(t *testing.T) {
 	r.transitionToFollower()
 
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.Zero(r.votedForMe)
 	requireT.Equal(expectedElectionTime, r.electionTime)
 	requireT.Empty(r.nextIndex)

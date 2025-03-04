@@ -1,4 +1,4 @@
-package p2c
+package c2p
 
 import (
 	"github.com/outofforest/magma/raft/types"

@@ -17,7 +17,7 @@ const logSize = 1024 * 1024 * 1024
 type CloseFunc func()
 
 // Open opens state existing in directory or creates a new one there.
-func Open(dir string) (*State, CloseFunc, error) {
+func Open(dir string, maxReturnedLogSize uint64) (*State, CloseFunc, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
@@ -36,9 +36,10 @@ func Open(dir string) (*State, CloseFunc, error) {
 	}
 
 	return &State{
-			log:          log,
-			nextLogIndex: rafttypes.Index(0), // FIXME (wojciech): nextLogIndex must be stored somewhere.
-			doMSync:      true,
+			log:                log,
+			nextLogIndex:       rafttypes.Index(0), // FIXME (wojciech): nextLogIndex must be stored somewhere.
+			maxReturnedLogSize: maxReturnedLogSize,
+			doMSync:            true,
 		}, func() {
 			_ = unix.Munmap(log)
 			_ = logF.Close()
@@ -46,20 +47,22 @@ func Open(dir string) (*State, CloseFunc, error) {
 }
 
 // NewInMemory creates in-memory state useful for testing.
-func NewInMemory(logSize uint64) *State {
+func NewInMemory(logSize, maxReturnedLogSize uint64) *State {
 	return &State{
-		log: make([]byte, logSize),
+		log:                make([]byte, logSize),
+		maxReturnedLogSize: maxReturnedLogSize,
 	}
 }
 
 // State represents the persistent state of the Raft consensus algorithm.
 type State struct {
-	currentTerm  rafttypes.Term
-	votedFor     types.ServerID
-	terms        []rafttypes.Index
-	log          []byte
-	nextLogIndex rafttypes.Index
-	doMSync      bool
+	currentTerm        rafttypes.Term
+	votedFor           types.ServerID
+	terms              []rafttypes.Index
+	log                []byte
+	nextLogIndex       rafttypes.Index
+	maxReturnedLogSize uint64
+	doMSync            bool
 }
 
 // CurrentTerm returns the current term of the state.
@@ -127,10 +130,15 @@ func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes
 		return previousTerm, previousTerm, nil, nil
 	}
 	nextTerm := s.previousTerm(nextLogIndex + 1)
+
+	entries := s.log[nextLogIndex:s.nextLogIndex]
 	if nextTerm < rafttypes.Term(len(s.terms)) {
-		return previousTerm, nextTerm, s.log[nextLogIndex:s.terms[nextTerm]], nil
+		entries = s.log[nextLogIndex:s.terms[nextTerm]]
 	}
-	return previousTerm, nextTerm, s.log[nextLogIndex:s.nextLogIndex], nil
+	if uint64(len(entries)) > s.maxReturnedLogSize {
+		entries = entries[:s.maxReturnedLogSize]
+	}
+	return previousTerm, nextTerm, entries, nil
 }
 
 // Append attempts to apply the given log entries starting at a specified index in the log.

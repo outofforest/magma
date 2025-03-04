@@ -1,4 +1,4 @@
-package p2p
+package wire
 
 import "github.com/outofforest/magma/types"
 

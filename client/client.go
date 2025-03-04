@@ -6,8 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/outofforest/magma/gossip"
-	"github.com/outofforest/magma/gossip/p2c"
+	"github.com/outofforest/magma/gossip/wire/c2p"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
@@ -15,39 +14,45 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
-const timeout = 5 * time.Second
-
 // Config is the configuration of magma client.
 type Config struct {
-	PeerAddress     string
-	TxMessageConfig resonance.Config
+	PeerAddress      string
+	C2P              resonance.Config
+	BroadcastTimeout time.Duration
 }
 
 // New creates new magma client.
 func New(config Config, m proton.Marshaller) *Client {
-	return &Client{
-		config: config,
-		txCh:   make(chan []byte),
-		m:      m,
+	c := &Client{
+		config:        config,
+		txCh:          make(chan []byte, 1),
+		m:             m,
+		timeoutTicker: time.NewTicker(time.Hour),
 	}
+	c.timeoutTicker.Stop()
+	return c
 }
 
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
-	config       Config
-	txCh         chan []byte
-	m            proton.Marshaller
-	nextLogIndex rafttypes.Index
+	config        Config
+	txCh          chan []byte
+	m             proton.Marshaller
+	nextLogIndex  rafttypes.Index
+	timeoutTicker *time.Ticker
 }
 
 // Run runs client.
 func (c *Client) Run(ctx context.Context) error {
+	c.timeoutTicker.Reset(c.config.BroadcastTimeout)
+	defer c.timeoutTicker.Stop()
+
 	for {
-		err := resonance.RunClient(ctx, c.config.PeerAddress, gossip.P2CConfig,
+		err := resonance.RunClient(ctx, c.config.PeerAddress, c.config.C2P,
 			func(ctx context.Context, conn *resonance.Connection) error {
 				if !conn.SendProton(&rafttypes.CommitInfo{
 					NextLogIndex: c.nextLogIndex,
-				}, p2c.NewMarshaller()) {
+				}, c2p.NewMarshaller()) {
 					return errors.WithStack(ctx.Err())
 				}
 
@@ -123,6 +128,10 @@ func (c *Client) Broadcast(ctx context.Context, tx []any) error {
 		size += s + varuint64.Size(s) + varuint64.Size(id)
 	}
 
+	if size > c.config.C2P.MaxMessageSize {
+		return errors.Errorf("tx size %d exceeds allowed maximum %d", size, c.config.C2P.MaxMessageSize)
+	}
+
 	buf := make([]byte, size)
 	var i uint64
 	for _, o := range tx {
@@ -144,13 +153,15 @@ func (c *Client) Broadcast(ctx context.Context, tx []any) error {
 		i += msgSize
 	}
 
-	select {
-	case <-ctx.Done():
-		return errors.WithStack(ctx.Err())
-	case <-time.After(timeout):
-		return errors.New("timeout on sending transaction")
-	case c.txCh <- buf:
+	for range 2 {
+		select {
+		case <-ctx.Done():
+			return errors.WithStack(ctx.Err())
+		case <-c.timeoutTicker.C:
+		case c.txCh <- buf:
+			return nil
+		}
 	}
 
-	return nil
+	return errors.New("timeout on sending transaction")
 }
