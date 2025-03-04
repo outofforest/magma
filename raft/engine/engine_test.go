@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func TestApplyAppendEntriesRequest(t *testing.T) {
 	s := newState()
 	e, _ := newEngine(s)
 
-	messageID := types.NewMessageID()
+	messageID := newMessageID()
 	role, result, err := e.Apply(types.Command{
 		PeerID: peer1ID,
 		Cmd: &types.AppendEntriesRequest{
@@ -84,7 +85,7 @@ func TestApplyAppendEntriesResponseMore(t *testing.T) {
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
-	messageID := types.NewMessageID()
+	messageID := newMessageID()
 	e.expectedResponses[peer1ID] = messageID
 
 	role, result, err := e.Apply(types.Command{
@@ -127,7 +128,7 @@ func TestApplyAppendEntriesResponseIgnore(t *testing.T) {
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
-	messageID := types.NewMessageID()
+	messageID := newMessageID()
 	e.expectedResponses[peer2ID] = messageID
 	requireT.Equal(types.ZeroMessageID, e.expectedResponses[peer1ID])
 
@@ -153,7 +154,7 @@ func TestApplyVoteRequest(t *testing.T) {
 	s := newState()
 	e, _ := newEngine(s)
 
-	messageID := types.NewMessageID()
+	messageID := newMessageID()
 	role, result, err := e.Apply(types.Command{
 		PeerID: peer1ID,
 		Cmd: &types.VoteRequest{
@@ -184,7 +185,7 @@ func TestApplyVoteResponseIgnore(t *testing.T) {
 	e, ts := newEngine(s)
 
 	messageID := transitionToCandidate(requireT, e, ts)
-	messageID2 := types.NewMessageID()
+	messageID2 := newMessageID()
 	e.expectedResponses[peer1ID] = messageID2
 
 	requireT.Equal(map[magmatypes.ServerID]types.MessageID{
@@ -282,7 +283,7 @@ func TestApplyClientRequestIfNotLeader(t *testing.T) {
 	_, _, err := e.Apply(types.Command{
 		PeerID: peer1ID,
 		Cmd: &types.AppendEntriesRequest{
-			MessageID:    types.NewMessageID(),
+			MessageID:    newMessageID(),
 			Term:         1,
 			NextLogIndex: 0,
 			NextLogTerm:  1,
@@ -313,7 +314,7 @@ func TestApplyClientRequestPeersIgnored(t *testing.T) {
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
-	oldMessageID := types.NewMessageID()
+	oldMessageID := newMessageID()
 	e.expectedResponses = map[magmatypes.ServerID]types.MessageID{
 		peer1ID: oldMessageID,
 		peer2ID: oldMessageID,
@@ -398,7 +399,7 @@ func TestApplyHeartbeatTimeoutIgnorePeer(t *testing.T) {
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
-	oldMessageID := types.NewMessageID()
+	oldMessageID := newMessageID()
 	e.expectedResponses[peer1ID] = oldMessageID
 
 	role, result, err := e.Apply(types.Command{
@@ -493,7 +494,7 @@ func TestApplyElectionTimeoutExpectationsIgnored(t *testing.T) {
 	s := newState()
 	e, ts := newEngine(s)
 
-	oldMessageID := types.NewMessageID()
+	oldMessageID := newMessageID()
 	e.expectedResponses = map[magmatypes.ServerID]types.MessageID{
 		peer1ID: oldMessageID,
 		peer2ID: oldMessageID,
@@ -550,7 +551,7 @@ func TestApplyPeerConnected(t *testing.T) {
 
 	transitionToLeader(requireT, e, transitionToCandidate(requireT, e, ts))
 
-	e.expectedResponses[peer1ID] = types.NewMessageID()
+	e.expectedResponses[peer1ID] = newMessageID()
 
 	role, result, err := e.Apply(types.Command{
 		PeerID: peer1ID,
@@ -683,4 +684,8 @@ func transitionToLeader(requireT *require.Assertions, e *Engine, messageID types
 		requireT.Empty(result.Recipients)
 		requireT.Equal(types.ZeroMessageID, e.expectedResponses[peer])
 	}
+}
+
+func newMessageID() types.MessageID {
+	return types.MessageID(rand.Int64())
 }

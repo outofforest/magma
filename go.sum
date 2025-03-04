@@ -20,10 +20,10 @@ github.com/outofforest/mass v0.2.1 h1:oIzOnoTJqN8eVXo5jxk1htOhW7bL7hy2JHrvnTsfvt
 github.com/outofforest/mass v0.2.1/go.mod h1:rqr19KwYSKncmsmZCmMatTsg8pI+ElxerH9v1SGU1CQ=
 github.com/outofforest/parallel v0.2.3 h1:DRIgHr7XTL4LLgsTqrj041kulv4ajtbCkRbkOG5psWY=
 github.com/outofforest/parallel v0.2.3/go.mod h1:cu210xIjJtOMXR2ERzEcNA2kr0Z0xfZjSKw2jTxAQ2E=
-github.com/outofforest/proton v0.10.1 h1:WfqDG33DjNFf2CFrw39g6u0Tzb1Con1YbPjswk6krIg=
-github.com/outofforest/proton v0.10.1/go.mod h1:whP4rfB53NB31pm2VSkLDRcdJCjDu2B6cykaHcFT4yc=
-github.com/outofforest/resonance v0.12.0 h1:81oMQV+GynVYVsL6r/GorfP9JXbtLcHQu3NOEB76Pr8=
-github.com/outofforest/resonance v0.12.0/go.mod h1:0cQzMdxI+98XvEqjtdk+7+ngUwji3ERmxLeJP81NzGI=
+github.com/outofforest/proton v0.10.2 h1:b+eeahvKn4TmtgtervcFulAhV/GyNbUGtOyMDmr6gsU=
+github.com/outofforest/proton v0.10.2/go.mod h1:whP4rfB53NB31pm2VSkLDRcdJCjDu2B6cykaHcFT4yc=
+github.com/outofforest/resonance v0.13.0 h1:sz/hR7EvWvASyzHd0vwskd1VtwaR5EvIoy/U5Yf5+0Y=
+github.com/outofforest/resonance v0.13.0/go.mod h1:Mqtj0GmeI4A8C8vXhnVdSOofsk8XNxykrqwcpLqJtXc=
 github.com/outofforest/run v0.8.0 h1:p3tSksh6AWzxsZ+baZzeQhgsfugKz6d6RaE7xfQYt5M=
 github.com/outofforest/run v0.8.0/go.mod h1:4d6txrC3wfOSFy64bwxZweKUQsccDs9IvtIbAAFAk7E=
 github.com/outofforest/spin v0.3.1 h1:iF1t4zgbt7KaarrnBqmYWMfoSichqY4/KiKMC/dE524=

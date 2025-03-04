@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/magma/gossip/wire/p2p"
@@ -133,27 +135,34 @@ func (g *gossip) Run(
 						continue
 					}
 					spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
+						log := logger.Get(ctx)
 						for {
 							err := resonance.RunClient(ctx, s.P2PAddress, g.config.P2P,
 								func(ctx context.Context, c *resonance.Connection) error {
 									return g.p2pHandler(ctx, s.ID, peerP2PCh, cmdP2PCh, c)
 								},
 							)
-							if err != nil && errors.Is(err, ctx.Err()) {
-								return err
+							if ctx.Err() != nil {
+								return errors.WithStack(ctx.Err())
 							}
+
+							log.Error("Connection failed", zap.Error(err))
 						}
 					})
 					spawn("tx2pConnector", parallel.Fail, func(ctx context.Context) error {
+						log := logger.Get(ctx)
+
 						for {
 							err := resonance.RunClient(ctx, s.Tx2PAddress, g.config.C2P,
 								func(ctx context.Context, c *resonance.Connection) error {
 									return g.tx2pHandler(ctx, s.ID, peerTx2PCh, cmdC2PCh, c)
 								},
 							)
-							if err != nil && errors.Is(err, ctx.Err()) {
-								return err
+							if ctx.Err() != nil {
+								return errors.WithStack(ctx.Err())
 							}
+
+							log.Error("Connection failed", zap.Error(err))
 						}
 					})
 				}
@@ -307,10 +316,10 @@ func (g *gossip) p2pHandler(
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	if sent := c.SendProton(&wire.Hello{
+	if err := c.SendProton(&wire.Hello{
 		ServerID: g.config.ServerID,
-	}, g.p2pMarshaller); !sent {
-		return errors.New("sending hello failed")
+	}, g.p2pMarshaller); err != nil {
+		return err
 	}
 
 	m, err := c.ReceiveProton(g.p2pMarshaller)
@@ -381,7 +390,7 @@ func (g *gossip) p2pHandler(
 			}()
 
 			for m := range sendCh {
-				if !c.SendProton(m, g.p2pMarshaller) {
+				if err := c.SendProton(m, g.p2pMarshaller); err != nil {
 					return errors.WithStack(err)
 				}
 			}
@@ -402,10 +411,10 @@ func (g *gossip) tx2pHandler(
 ) error {
 	meCh := g.tx2PChs[g.config.ServerID]
 
-	if sent := c.SendProton(&wire.Hello{
+	if err := c.SendProton(&wire.Hello{
 		ServerID: g.config.ServerID,
-	}, g.tx2pMarshaller); !sent {
-		return errors.New("sending hello failed")
+	}, g.tx2pMarshaller); err != nil {
+		return err
 	}
 
 	m, err := c.ReceiveProton(g.tx2pMarshaller)
@@ -479,7 +488,7 @@ func (g *gossip) tx2pHandler(
 				case <-ctx.Done():
 					return errors.WithStack(ctx.Err())
 				case tx := <-txCh:
-					if !c.SendBytes(tx) {
+					if err := c.SendBytes(tx); err != nil {
 						return errors.WithStack(err)
 					}
 				}
@@ -599,8 +608,8 @@ func (g *gossip) c2pHandler(
 
 				if newCommitInfo.NextLogIndex > nextLogIndex {
 					toSend := uint64(newCommitInfo.NextLogIndex - nextLogIndex)
-					if !c.SendStream(io.LimitReader(logF, int64(toSend))) {
-						return errors.WithStack(ctx.Err())
+					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
+						return errors.WithStack(err)
 					}
 					nextLogIndex += rafttypes.Index(toSend)
 				}

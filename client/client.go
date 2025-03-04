@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
@@ -47,13 +49,15 @@ func (c *Client) Run(ctx context.Context) error {
 	c.timeoutTicker.Reset(c.config.BroadcastTimeout)
 	defer c.timeoutTicker.Stop()
 
+	log := logger.Get(ctx)
+
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, c.config.C2P,
 			func(ctx context.Context, conn *resonance.Connection) error {
-				if !conn.SendProton(&rafttypes.CommitInfo{
+				if err := conn.SendProton(&rafttypes.CommitInfo{
 					NextLogIndex: c.nextLogIndex,
-				}, c2p.NewMarshaller()) {
-					return errors.WithStack(ctx.Err())
+				}, c2p.NewMarshaller()); err != nil {
+					return errors.WithStack(err)
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
@@ -94,8 +98,8 @@ func (c *Client) Run(ctx context.Context) error {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case tx := <-c.txCh:
-								if !conn.SendBytes(tx) {
-									return errors.WithStack(ctx.Err())
+								if err := conn.SendBytes(tx); err != nil {
+									return errors.WithStack(err)
 								}
 							}
 						}
@@ -104,9 +108,11 @@ func (c *Client) Run(ctx context.Context) error {
 				})
 			},
 		)
-		if err != nil && errors.Is(err, ctx.Err()) {
-			return errors.WithStack(err)
+		if ctx.Err() != nil {
+			return errors.WithStack(ctx.Err())
 		}
+
+		log.Error("Connection failed", zap.Error(err))
 	}
 }
 
