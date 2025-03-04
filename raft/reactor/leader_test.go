@@ -690,13 +690,11 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		peer1ID: 5,
 		peer2ID: 2,
 		peer3ID: 3,
 		peer4ID: 4,
 	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		peer1ID: 0,
 		peer2ID: 2,
 		peer3ID: 3,
 		peer4ID: 4,

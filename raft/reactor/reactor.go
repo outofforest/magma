@@ -275,8 +275,8 @@ func (r *Reactor) ApplyPeerConnected(peerID magmatypes.ServerID) (*types.AppendE
 		return nil, err
 	}
 
-	r.nextIndex[peerID] = r.nextLogIndex
-	r.matchIndex[peerID] = 0
+	delete(r.nextIndex, peerID)
+	delete(r.matchIndex, peerID)
 
 	return msg, nil
 }

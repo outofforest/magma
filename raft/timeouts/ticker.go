@@ -3,7 +3,7 @@ package timeouts
 import "time"
 
 func newTicker() *ticker {
-	t := time.NewTicker(1000 * time.Hour)
+	t := time.NewTicker(time.Hour)
 	t.Stop()
 
 	return &ticker{t: t}

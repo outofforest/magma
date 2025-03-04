@@ -17,15 +17,12 @@ const (
 
 // New creates new timeout manager.
 func New(roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
-	t := &Timeouts{
+	return &Timeouts{
 		roleCh:          roleCh,
 		majorityCh:      majorityCh,
 		tickerHeartbeat: newTicker(),
 		tickerElection:  newTicker(),
 	}
-	t.tickerHeartbeat.Stop()
-	t.tickerElection.Stop()
-	return t
 }
 
 // Timeouts manages timeouts (election and heartbeat) defined by raft protocol.
