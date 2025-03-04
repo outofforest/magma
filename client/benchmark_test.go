@@ -121,6 +121,9 @@ func TestCluster(t *testing.T) {
 	}()
 
 	fmt.Printf("==== %s ====\n", uuid.UUID(peer1))
+	fmt.Printf("==== %s ====\n", uuid.UUID(peer2))
+	fmt.Printf("==== %s ====\n", uuid.UUID(peer3))
+	fmt.Printf("==== %s ====\n", uuid.UUID(peer4))
 
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
 		return magma.Run(ctx, makeConfig(config, peer1), p2p1, tx2p1, c2p1)

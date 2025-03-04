@@ -340,10 +340,6 @@ func (g *gossip) p2pHandler(
 		return errors.New("unexpected peer")
 	}
 
-	cmdCh <- rafttypes.Command{
-		PeerID: h.ServerID,
-	}
-
 	ch := make(chan any, queueCapacity)
 	var sendCh <-chan any = ch
 
@@ -362,6 +358,10 @@ func (g *gossip) p2pHandler(
 				p.Connected = false
 				peerCh <- p
 			}()
+
+			cmdCh <- rafttypes.Command{
+				PeerID: h.ServerID,
+			}
 
 			for {
 				m, err := c.ReceiveProton(g.p2pMarshaller)
