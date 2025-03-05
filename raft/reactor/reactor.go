@@ -32,9 +32,9 @@ type Result struct {
 	Messages []any
 }
 
-type logTransfer struct {
-	Start types.Index
-	End   types.Index
+type syncProgress struct {
+	NextIndex types.Index
+	End       types.Index
 }
 
 // New creates new reactor of raft consensus algorithm.
@@ -53,9 +53,8 @@ func New(
 		majority:     (len(peers)+1)/2 + 1,
 		lastLogTerm:  s.LastLogTerm(),
 		nextLogIndex: s.NextLogIndex(),
-		nextIndex:    map[magmatypes.ServerID]types.Index{},
+		sync:         map[magmatypes.ServerID]syncProgress{},
 		matchIndex:   map[magmatypes.ServerID]types.Index{},
-		transfers:    map[magmatypes.ServerID]logTransfer{},
 	}
 	r.transitionToFollower()
 
@@ -86,9 +85,8 @@ type Reactor struct {
 
 	// Leader specific.
 	indexTermStarted types.Index
-	nextIndex        map[magmatypes.ServerID]types.Index
+	sync             map[magmatypes.ServerID]syncProgress
 	matchIndex       map[magmatypes.ServerID]types.Index
-	transfers        map[magmatypes.ServerID]logTransfer
 	heartBeatTime    time.Time
 }
 
@@ -157,18 +155,17 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex > r.nextIndex[peerID] {
+	if m.NextLogIndex > r.sync[peerID].NextIndex {
 		r.matchIndex[peerID] = m.NextLogIndex
 		if m.NextLogIndex > r.commitInfo.NextLogIndex {
 			r.updateCommit()
 		}
 	}
 
-	r.nextIndex[peerID] = m.NextLogIndex
 	if m.NextLogIndex == r.nextLogIndex {
-		r.transfers[peerID] = logTransfer{
-			Start: r.nextLogIndex,
-			End:   r.nextLogIndex,
+		r.sync[peerID] = syncProgress{
+			NextIndex: m.NextLogIndex,
+			End:       m.NextLogIndex,
 		}
 		return r.resultEmpty()
 	}
@@ -178,9 +175,16 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return Result{}, err
 	}
 
-	r.transfers[peerID] = logTransfer{
-		Start: m.NextLogIndex,
-		End:   m.NextLogIndex + types.Index(len(req.Data)),
+	if req.NextLogIndex > r.sync[peerID].NextIndex {
+		r.sync[peerID] = syncProgress{
+			NextIndex: req.NextLogIndex,
+			End:       req.NextLogIndex + types.Index(len(req.Data)),
+		}
+	} else {
+		r.sync[peerID] = syncProgress{
+			NextIndex: req.NextLogIndex,
+			End:       0,
+		}
 	}
 
 	return r.resultMessageAndRecipient(req, peerID)
@@ -242,13 +246,13 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	}
 
 	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	endIndex := newLogIndex + types.Index(len(m.Data))
+	endIndex := req.NextLogIndex + types.Index(len(req.Data))
 	for _, p := range r.peers {
-		if r.transfers[p].Start == newLogIndex {
+		if r.sync[p].NextIndex == req.NextLogIndex && r.sync[p].End == req.NextLogIndex {
 			recipients = append(recipients, p)
-			r.transfers[p] = logTransfer{
-				Start: newLogIndex,
-				End:   endIndex,
+			r.sync[p] = syncProgress{
+				NextIndex: req.NextLogIndex,
+				End:       endIndex,
 			}
 		}
 	}
@@ -274,11 +278,11 @@ func (r *Reactor) applyHeartbeatTimeout(t time.Time) (Result, error) {
 
 	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
 	for _, p := range r.peers {
-		if r.transfers[p].Start == r.nextLogIndex {
+		if r.sync[p].NextIndex == r.nextLogIndex && r.sync[p].End == r.nextLogIndex {
 			recipients = append(recipients, p)
-			r.transfers[p] = logTransfer{
-				Start: r.nextLogIndex,
-				End:   r.nextLogIndex,
+			r.sync[p] = syncProgress{
+				NextIndex: r.nextLogIndex,
+				End:       r.nextLogIndex,
 			}
 		}
 	}
@@ -299,7 +303,6 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 		return r.resultEmpty()
 	}
 
-	delete(r.nextIndex, peerID)
 	delete(r.matchIndex, peerID)
 
 	req, err := r.newAppendEntriesRequest(r.nextLogIndex)
@@ -307,9 +310,9 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 		return r.resultError(err)
 	}
 
-	r.transfers[peerID] = logTransfer{
-		Start: r.nextLogIndex,
-		End:   r.nextLogIndex,
+	r.sync[peerID] = syncProgress{
+		NextIndex: r.nextLogIndex,
+		End:       0,
 	}
 
 	return r.resultMessageAndRecipient(req, peerID)
@@ -346,9 +349,8 @@ func (r *Reactor) transitionToFollower() {
 	r.leaderID = magmatypes.ZeroServerID
 	r.electionTime = r.timeSource.Now()
 	r.votedForMe = 0
-	clear(r.nextIndex)
+	clear(r.sync)
 	clear(r.matchIndex)
-	clear(r.transfers)
 }
 
 func (r *Reactor) transitionToCandidate() (Result, error) {
@@ -367,9 +369,8 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
 	r.electionTime = r.timeSource.Now()
-	clear(r.nextIndex)
+	clear(r.sync)
 	clear(r.matchIndex)
-	clear(r.transfers)
 
 	if r.majority == 1 {
 		return r.transitionToLeader()
@@ -406,12 +407,10 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultError(err)
 	}
 
-	endIndex := r.indexTermStarted + types.Index(len(req.Data))
 	for _, p := range r.peers {
-		r.nextIndex[p] = r.indexTermStarted
-		r.transfers[p] = logTransfer{
-			Start: r.indexTermStarted,
-			End:   endIndex,
+		r.sync[p] = syncProgress{
+			NextIndex: r.indexTermStarted,
+			End:       0,
 		}
 	}
 
@@ -508,7 +507,7 @@ func (r *Reactor) updateCommit() {
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {
-	nextLogIndex := r.nextLogIndex
+	startIndex := r.nextLogIndex
 	var err error
 	n := types.Index(varuint64.Put(r.varuint64Buf, uint64(len(data))))
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(),
@@ -523,12 +522,12 @@ func (r *Reactor) appendData(data []byte) (types.Index, error) {
 			return 0, err
 		}
 	}
-	if r.nextLogIndex != nextLogIndex+n+types.Index(len(data)) {
+	if r.nextLogIndex != startIndex+n+types.Index(len(data)) {
 		return 0, errors.New("bug in protocol")
 	}
 	r.matchIndex[r.id] = r.nextLogIndex
 
-	return nextLogIndex, nil
+	return startIndex, nil
 }
 
 func (r *Reactor) resultError(err error) (Result, error) {

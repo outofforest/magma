@@ -20,12 +20,11 @@ func TestCandidateSetup(t *testing.T) {
 	r.role = types.RoleLeader
 	r.leaderID = serverID
 	r.votedForMe = 10
-	r.nextIndex[peer1ID] = 100
-	r.matchIndex[peer1ID] = 100
-	r.transfers[peer1ID] = logTransfer{
-		Start: 100,
-		End:   100,
+	r.sync[peer1ID] = syncProgress{
+		NextIndex: 100,
+		End:       100,
 	}
+	r.matchIndex[peer1ID] = 100
 
 	r.lastLogTerm = 3
 	r.nextLogIndex = 10
@@ -39,9 +38,8 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Empty(r.nextIndex)
+	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
-	requireT.Empty(r.transfers)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -433,12 +431,24 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		peer1ID: 0,
-		peer2ID: 0,
-		peer3ID: 0,
-		peer4ID: 0,
-	}, r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]syncProgress{
+		peer1ID: {
+			NextIndex: 0,
+			End:       0,
+		},
+		peer2ID: {
+			NextIndex: 0,
+			End:       0,
+		},
+		peer3ID: {
+			NextIndex: 0,
+			End:       0,
+		},
+		peer4ID: {
+			NextIndex: 0,
+			End:       0,
+		},
+	}, r.sync)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
