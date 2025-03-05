@@ -20,7 +20,7 @@ func TestCandidateSetup(t *testing.T) {
 	r.role = types.RoleLeader
 	r.leaderID = serverID
 	r.votedForMe = 10
-	r.sync[peer1ID] = syncProgress{
+	r.sync[peer1ID] = &syncProgress{
 		NextIndex: 100,
 		End:       100,
 	}
@@ -431,7 +431,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(map[magmatypes.ServerID]syncProgress{
+	requireT.Equal(map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 0,
 			End:       0,

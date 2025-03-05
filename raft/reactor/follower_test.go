@@ -50,7 +50,7 @@ func TestFollowerSetup(t *testing.T) {
 	r.role = types.RoleCandidate
 	r.leaderID = serverID
 	r.votedForMe = 2
-	r.sync[peer1ID] = syncProgress{
+	r.sync[peer1ID] = &syncProgress{
 		NextIndex: 100,
 		End:       100,
 	}

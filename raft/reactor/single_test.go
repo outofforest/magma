@@ -75,7 +75,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
-		Data: []byte{0x01},
+		Data: []byte{0x01, 0x01},
 	})
 	requireT.NoError(err)
 
