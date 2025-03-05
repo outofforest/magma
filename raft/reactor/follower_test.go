@@ -888,6 +888,29 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
 
+func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(1))
+	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
+	requireT.NoError(err)
+
+	r, _ := newReactor(s)
+	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         2,
+		NextLogIndex: 2,
+		NextLogTerm:  2,
+		LastLogTerm:  1,
+		Data:         nil,
+		LeaderCommit: 2,
+	})
+	requireT.Error(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{}, result)
+}
+
 func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()

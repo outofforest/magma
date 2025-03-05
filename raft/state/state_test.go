@@ -725,6 +725,21 @@ func TestAppend(t *testing.T) {
 		2,
 	}, s.terms)
 
+	lastTerm, nextIndex, err = s.Append(6, 3, 2, []byte{0x04})
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+	logEqual(requireT, s,
+		0x01,
+		0x02,
+		0x03, 0x03, 0x03, 0x03,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		1,
+		2,
+	}, s.terms)
+
 	lastTerm, nextIndex, err = s.Append(1, 2, 3, []byte{0x03})
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
