@@ -433,7 +433,12 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Empty(r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
