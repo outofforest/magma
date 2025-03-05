@@ -120,20 +120,20 @@ func (s *State) NextLogIndex() rafttypes.Index {
 // If nextLogIndex is greater than the length of the log, it returns an error indicating a protocol bug.
 // For a valid nextLogIndex, it returns the term of the log entry preceding nextLogIndex (or 0 if nextLogIndex is 0),
 // the slice of log entries starting at nextLogIndex, and no error.
-func (s *State) Entries(nextLogIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []byte, error) {
-	if nextLogIndex > s.nextLogIndex {
+func (s *State) Entries(startIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []byte, error) {
+	if startIndex > s.nextLogIndex {
 		return 0, 0, nil, errors.New("bug in protocol")
 	}
 
-	previousTerm := s.previousTerm(nextLogIndex)
-	if nextLogIndex == s.nextLogIndex {
+	previousTerm := s.previousTerm(startIndex)
+	if startIndex == s.nextLogIndex {
 		return previousTerm, previousTerm, nil, nil
 	}
-	nextTerm := s.previousTerm(nextLogIndex + 1)
+	nextTerm := s.previousTerm(startIndex + 1)
 
-	entries := s.log[nextLogIndex:s.nextLogIndex]
+	entries := s.log[startIndex:s.nextLogIndex]
 	if nextTerm < rafttypes.Term(len(s.terms)) {
-		entries = s.log[nextLogIndex:s.terms[nextTerm]]
+		entries = s.log[startIndex:s.terms[nextTerm]]
 	}
 	if uint64(len(entries)) > s.maxReturnedLogSize {
 		entries = entries[:s.maxReturnedLogSize]
@@ -206,9 +206,9 @@ func (s *State) Append(
 	return revertTerm, s.nextLogIndex, nil
 }
 
-func (s *State) previousTerm(nextIndex rafttypes.Index) rafttypes.Term {
+func (s *State) previousTerm(index rafttypes.Index) rafttypes.Term {
 	for i := len(s.terms) - 1; i >= 0; i-- {
-		if s.terms[i] < nextIndex {
+		if s.terms[i] < index {
 			return rafttypes.Term(i + 1)
 		}
 	}

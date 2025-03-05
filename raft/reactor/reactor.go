@@ -153,6 +153,10 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultEmpty()
 	}
 
+	if m.NextLogIndex > r.nextLogIndex {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+
 	if m.NextLogIndex > r.getNextIndex(peerID) {
 		r.matchIndex[peerID] = m.NextLogIndex
 		if m.NextLogIndex > r.commitInfo.NextLogIndex {
@@ -161,7 +165,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 	}
 
 	r.nextIndex[peerID] = m.NextLogIndex
-	if m.NextLogIndex >= r.nextLogIndex {
+	if m.NextLogIndex == r.nextLogIndex {
 		r.transfers[peerID] = logTransfer{
 			Start: r.nextLogIndex,
 			End:   r.nextLogIndex,

@@ -163,6 +163,33 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.EqualValues([]byte{0x01, 0x02}, entries)
 }
 
+func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x00})
+	requireT.NoError(err)
+
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+	requireT.EqualValues(2, s.CurrentTerm())
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         2,
+		NextLogIndex: 3,
+		NextLogTerm:  3,
+		LastLogTerm:  2,
+		Data:         []byte{0x01, 0x02},
+		LeaderCommit: 0,
+	})
+	requireT.Error(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{}, result)
+}
+
 func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
@@ -369,6 +396,72 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	requireT.Equal(serverID, r.leaderID)
 }
 
+func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	clear(r.nextIndex)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+		Term:         5,
+		NextLogIndex: 6,
+	})
+	requireT.Error(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{}, result)
+	requireT.EqualValues(0, r.nextIndex[peer1ID])
+	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(serverID, r.leaderID)
+}
+
+func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r, _ := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	clear(r.nextIndex)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+		Term:         4,
+		NextLogIndex: 5,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex: 0,
+		},
+	}, result)
+	requireT.EqualValues(0, r.nextIndex[peer1ID])
+	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(serverID, r.leaderID)
+}
+
 func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
@@ -486,7 +579,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	r, _ := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-	_, _, err = s.Append(0, 0, 5, []byte{0x00, 0x00})
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
@@ -504,6 +597,18 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
+		},
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesRequest{
+				Term:         5,
+				NextLogIndex: 6,
+				NextLogTerm:  5,
+				LastLogTerm:  5,
+				Data:         []byte{0x00},
+			},
 		},
 	}, result)
 	requireT.EqualValues(6, r.matchIndex[peer1ID])
@@ -606,7 +711,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	r, _ := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-	_, _, err = s.Append(0, 0, 5, []byte{0x00, 0x00})
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
 	clear(r.nextIndex)
@@ -625,6 +730,19 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 7,
 		},
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesRequest{
+				Term:         5,
+				NextLogIndex: 5,
+				NextLogTerm:  5,
+				LastLogTerm:  5,
+				Data:         []byte{0x00, 0x00},
+				LeaderCommit: 7,
+			},
+		},
 	}, result)
 	requireT.EqualValues(5, r.matchIndex[peer1ID])
 
@@ -638,6 +756,19 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 7,
+		},
+		Recipients: []magmatypes.ServerID{
+			peer2ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesRequest{
+				Term:         5,
+				NextLogIndex: 6,
+				NextLogTerm:  5,
+				LastLogTerm:  5,
+				Data:         []byte{0x00},
+				LeaderCommit: 7,
+			},
 		},
 	}, result)
 	requireT.EqualValues(6, r.matchIndex[peer2ID])
