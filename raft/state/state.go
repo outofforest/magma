@@ -17,7 +17,7 @@ const logSize = 1024 * 1024 * 1024
 type CloseFunc func()
 
 // Open opens state existing in directory or creates a new one there.
-func Open(dir string, maxReturnedLogSize uint64) (*State, CloseFunc, error) {
+func Open(dir string) (*State, CloseFunc, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
@@ -36,10 +36,9 @@ func Open(dir string, maxReturnedLogSize uint64) (*State, CloseFunc, error) {
 	}
 
 	return &State{
-			log:                log,
-			nextLogIndex:       rafttypes.Index(0), // FIXME (wojciech): nextLogIndex must be stored somewhere.
-			maxReturnedLogSize: maxReturnedLogSize,
-			doMSync:            true,
+			log:          log,
+			nextLogIndex: rafttypes.Index(0), // FIXME (wojciech): nextLogIndex must be stored somewhere.
+			doMSync:      true,
 		}, func() {
 			_ = unix.Munmap(log)
 			_ = logF.Close()
@@ -47,22 +46,20 @@ func Open(dir string, maxReturnedLogSize uint64) (*State, CloseFunc, error) {
 }
 
 // NewInMemory creates in-memory state useful for testing.
-func NewInMemory(logSize, maxReturnedLogSize uint64) *State {
+func NewInMemory(logSize uint64) *State {
 	return &State{
-		log:                make([]byte, logSize),
-		maxReturnedLogSize: maxReturnedLogSize,
+		log: make([]byte, logSize),
 	}
 }
 
 // State represents the persistent state of the Raft consensus algorithm.
 type State struct {
-	currentTerm        rafttypes.Term
-	votedFor           types.ServerID
-	terms              []rafttypes.Index
-	log                []byte
-	nextLogIndex       rafttypes.Index
-	maxReturnedLogSize uint64
-	doMSync            bool
+	currentTerm  rafttypes.Term
+	votedFor     types.ServerID
+	terms        []rafttypes.Index
+	log          []byte
+	nextLogIndex rafttypes.Index
+	doMSync      bool
 }
 
 // CurrentTerm returns the current term of the state.
@@ -120,7 +117,7 @@ func (s *State) NextLogIndex() rafttypes.Index {
 // If nextLogIndex is greater than the length of the log, it returns an error indicating a protocol bug.
 // For a valid nextLogIndex, it returns the term of the log entry preceding nextLogIndex (or 0 if nextLogIndex is 0),
 // the slice of log entries starting at nextLogIndex, and no error.
-func (s *State) Entries(startIndex rafttypes.Index) (rafttypes.Term, rafttypes.Term, []byte, error) {
+func (s *State) Entries(startIndex rafttypes.Index, maxSize uint64) (rafttypes.Term, rafttypes.Term, []byte, error) {
 	if startIndex > s.nextLogIndex {
 		return 0, 0, nil, errors.New("bug in protocol")
 	}
@@ -135,8 +132,8 @@ func (s *State) Entries(startIndex rafttypes.Index) (rafttypes.Term, rafttypes.T
 	if nextTerm < rafttypes.Term(len(s.terms)) {
 		entries = s.log[startIndex:s.terms[nextTerm]]
 	}
-	if uint64(len(entries)) > s.maxReturnedLogSize {
-		entries = entries[:s.maxReturnedLogSize]
+	if uint64(len(entries)) > maxSize {
+		entries = entries[:maxSize]
 	}
 	return previousTerm, nextTerm, entries, nil
 }

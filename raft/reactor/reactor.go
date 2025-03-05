@@ -42,19 +42,26 @@ func New(
 	id magmatypes.ServerID,
 	peers []magmatypes.ServerID,
 	s *state.State,
+	maxLogSizePerMessage, maxLogSizeOnWire uint64,
 	timeSource TimeSource,
 ) *Reactor {
+	if maxLogSizePerMessage > maxLogSizeOnWire {
+		maxLogSizePerMessage = maxLogSizeOnWire
+	}
+
 	r := &Reactor{
-		timeSource:   timeSource,
-		id:           id,
-		peers:        peers,
-		state:        s,
-		varuint64Buf: make([]byte, varuint64.MaxSize),
-		majority:     (len(peers)+1)/2 + 1,
-		lastLogTerm:  s.LastLogTerm(),
-		nextLogIndex: s.NextLogIndex(),
-		sync:         map[magmatypes.ServerID]syncProgress{},
-		matchIndex:   map[magmatypes.ServerID]types.Index{},
+		timeSource:           timeSource,
+		id:                   id,
+		peers:                peers,
+		state:                s,
+		varuint64Buf:         make([]byte, varuint64.MaxSize),
+		maxLogSizePerMessage: maxLogSizePerMessage,
+		maxLogSizeOnWire:     maxLogSizeOnWire,
+		majority:             (len(peers)+1)/2 + 1,
+		lastLogTerm:          s.LastLogTerm(),
+		nextLogIndex:         s.NextLogIndex(),
+		sync:                 map[magmatypes.ServerID]syncProgress{},
+		matchIndex:           map[magmatypes.ServerID]types.Index{},
 	}
 	r.transitionToFollower()
 
@@ -65,11 +72,12 @@ func New(
 type Reactor struct {
 	timeSource TimeSource
 
-	id           magmatypes.ServerID
-	peers        []magmatypes.ServerID
-	leaderID     magmatypes.ServerID
-	state        *state.State
-	varuint64Buf []byte
+	id                                     magmatypes.ServerID
+	peers                                  []magmatypes.ServerID
+	leaderID                               magmatypes.ServerID
+	state                                  *state.State
+	varuint64Buf                           []byte
+	maxLogSizePerMessage, maxLogSizeOnWire uint64
 
 	majority     int
 	role         types.Role
@@ -170,21 +178,54 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(m.NextLogIndex)
+	//nolint:nestif
+	if m.NextLogIndex > r.sync[peerID].NextIndex {
+		lenToSend := r.maxLogSizeOnWire
+		endIndex := m.NextLogIndex
+		if r.sync[peerID].End > 0 {
+			endIndex = r.sync[peerID].End
+			if lenOnWire := uint64(endIndex - m.NextLogIndex); lenOnWire < lenToSend {
+				lenToSend -= lenOnWire
+			} else {
+				lenToSend = 0
+			}
+		}
+
+		reqs := []any{}
+
+		for endIndex < r.nextLogIndex && lenToSend > 0 {
+			maxSize := r.maxLogSizePerMessage
+			if maxSize > lenToSend {
+				maxSize = lenToSend
+			}
+
+			req, err := r.newAppendEntriesRequest(endIndex, maxSize)
+			if err != nil {
+				return Result{}, err
+			}
+
+			endIndex += types.Index(len(req.Data))
+			lenToSend -= uint64(len(req.Data))
+
+			reqs = append(reqs, req)
+		}
+
+		r.sync[peerID] = syncProgress{
+			NextIndex: m.NextLogIndex,
+			End:       endIndex,
+		}
+
+		return r.resultMessagesAndRecipient(reqs, peerID)
+	}
+
+	req, err := r.newAppendEntriesRequest(m.NextLogIndex, r.maxLogSizePerMessage)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if req.NextLogIndex > r.sync[peerID].NextIndex {
-		r.sync[peerID] = syncProgress{
-			NextIndex: req.NextLogIndex,
-			End:       req.NextLogIndex + types.Index(len(req.Data)),
-		}
-	} else {
-		r.sync[peerID] = syncProgress{
-			NextIndex: req.NextLogIndex,
-			End:       0,
-		}
+	r.sync[peerID] = syncProgress{
+		NextIndex: req.NextLogIndex,
+		End:       0,
 	}
 
 	return r.resultMessageAndRecipient(req, peerID)
@@ -240,7 +281,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(newLogIndex)
+	req, err := r.newAppendEntriesRequest(newLogIndex, r.maxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -271,7 +312,7 @@ func (r *Reactor) applyHeartbeatTimeout(t time.Time) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.nextLogIndex)
+	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -305,7 +346,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	delete(r.matchIndex, peerID)
 
-	req, err := r.newAppendEntriesRequest(r.nextLogIndex)
+	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -402,7 +443,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.indexTermStarted)
+	req, err := r.newAppendEntriesRequest(r.indexTermStarted, r.maxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -417,8 +458,11 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	return r.resultBroadcastMessage(req)
 }
 
-func (r *Reactor) newAppendEntriesRequest(nextLogIndex types.Index) (*types.AppendEntriesRequest, error) {
-	lastLogTerm, nextLogTerm, data, err := r.state.Entries(nextLogIndex)
+func (r *Reactor) newAppendEntriesRequest(
+	nextLogIndex types.Index,
+	maxLogSize uint64,
+) (*types.AppendEntriesRequest, error) {
+	lastLogTerm, nextLogTerm, data, err := r.state.Entries(nextLogIndex, maxLogSize)
 	if err != nil {
 		return nil, err
 	}
@@ -548,6 +592,16 @@ func (r *Reactor) resultMessageAndRecipient(message any, recipient magmatypes.Se
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
 		Messages:   []any{message},
+		Recipients: []magmatypes.ServerID{recipient},
+	}, nil
+}
+
+func (r *Reactor) resultMessagesAndRecipient(messages []any, recipient magmatypes.ServerID) (Result, error) {
+	return Result{
+		Role:       r.role,
+		LeaderID:   r.leaderID,
+		CommitInfo: r.commitInfo,
+		Messages:   messages,
 		Recipients: []magmatypes.ServerID{recipient},
 	}, nil
 }

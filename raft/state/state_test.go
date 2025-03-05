@@ -10,8 +10,10 @@ import (
 	"github.com/outofforest/magma/types"
 )
 
+const maxSize = 3
+
 func newState() *State {
-	return NewInMemory(1024*1024, 3)
+	return NewInMemory(1024 * 1024)
 }
 
 func setLog(s *State, log ...byte) {
@@ -32,23 +34,21 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 func TestNewInMemory(t *testing.T) {
 	requireT := require.New(t)
 
-	s := NewInMemory(112, 128*1024)
+	s := NewInMemory(112)
 	requireT.False(s.doMSync)
 	requireT.Len(s.log, 112)
-	requireT.EqualValues(128*1024, s.maxReturnedLogSize)
 }
 
 func TestOpen(t *testing.T) {
 	requireT := require.New(t)
 	dir := t.TempDir()
 
-	s, sClose, err := Open(dir, 128*1024)
+	s, sClose, err := Open(dir)
 	t.Cleanup(sClose)
 
 	requireT.NoError(err)
 	requireT.True(s.doMSync)
 	requireT.Len(s.log, logSize)
-	requireT.EqualValues(128*1024, s.maxReturnedLogSize)
 }
 
 func TestCurrentTerm(t *testing.T) {
@@ -211,13 +211,13 @@ func TestEntries(t *testing.T) {
 
 	s := newState()
 
-	lastLogTerm, nextLogTerm, entries, err := s.Entries(1)
+	lastLogTerm, nextLogTerm, entries, err := s.Entries(1, maxSize)
 	requireT.Error(err)
 	requireT.Zero(lastLogTerm)
 	requireT.Zero(nextLogTerm)
 	requireT.Empty(entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(0)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(0, maxSize)
 	requireT.NoError(err)
 	requireT.Zero(lastLogTerm)
 	requireT.Zero(nextLogTerm)
@@ -227,31 +227,31 @@ func TestEntries(t *testing.T) {
 	appendLog(s, 0x01, 0x02, 0x03)
 	s.terms = []rafttypes.Index{0, 1, 2}
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(0)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(0, maxSize)
 	requireT.NoError(err)
 	requireT.Zero(lastLogTerm)
 	requireT.EqualValues(1, nextLogTerm)
 	requireT.Equal([]byte{0x01}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(1)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(1, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastLogTerm)
 	requireT.EqualValues(2, nextLogTerm)
 	requireT.EqualValues([]byte{0x02}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(2)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(2, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastLogTerm)
 	requireT.EqualValues(3, nextLogTerm)
 	requireT.EqualValues([]byte{0x03}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(3)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(3, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastLogTerm)
 	requireT.EqualValues(3, nextLogTerm)
 	requireT.Empty(entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(4)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(4, maxSize)
 	requireT.Error(err)
 	requireT.Zero(lastLogTerm)
 	requireT.Zero(nextLogTerm)
@@ -261,43 +261,43 @@ func TestEntries(t *testing.T) {
 	appendLog(s, 0x03, 0x03, 0x04, 0x04)
 	s.terms = []rafttypes.Index{0, 1, 2, 5, 5}
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(2)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(2, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastLogTerm)
 	requireT.EqualValues(3, nextLogTerm)
 	requireT.EqualValues([]byte{0x03, 0x03, 0x03}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(3)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(3, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastLogTerm)
 	requireT.EqualValues(3, nextLogTerm)
 	requireT.EqualValues([]byte{0x03, 0x03}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(4)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(4, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastLogTerm)
 	requireT.EqualValues(3, nextLogTerm)
 	requireT.EqualValues([]byte{0x03}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(5)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(5, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastLogTerm)
 	requireT.EqualValues(5, nextLogTerm)
 	requireT.EqualValues([]byte{0x04, 0x04}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(6)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(6, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastLogTerm)
 	requireT.EqualValues(5, nextLogTerm)
 	requireT.EqualValues([]byte{0x04}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(7)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(7, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastLogTerm)
 	requireT.EqualValues(5, nextLogTerm)
 	requireT.Empty(entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(8)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(8, maxSize)
 	requireT.Error(err)
 	requireT.Zero(lastLogTerm)
 	requireT.Zero(nextLogTerm)
@@ -307,37 +307,49 @@ func TestEntries(t *testing.T) {
 	appendLog(s, 0x05, 0x05, 0x05, 0x05, 0x05)
 	s.terms = []rafttypes.Index{0, 1, 2, 5, 5, 7}
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(7)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(7, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(5, lastLogTerm)
 	requireT.EqualValues(6, nextLogTerm)
 	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(8)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(8, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastLogTerm)
 	requireT.EqualValues(6, nextLogTerm)
 	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(9)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(9, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastLogTerm)
 	requireT.EqualValues(6, nextLogTerm)
 	requireT.Equal([]byte{0x05, 0x05, 0x05}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(10)
-	requireT.NoError(err)
-	requireT.EqualValues(6, lastLogTerm)
-	requireT.EqualValues(6, nextLogTerm)
-	requireT.Equal([]byte{0x05, 0x05}, entries)
-
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(11)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(9, 1)
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastLogTerm)
 	requireT.EqualValues(6, nextLogTerm)
 	requireT.Equal([]byte{0x05}, entries)
 
-	lastLogTerm, nextLogTerm, entries, err = s.Entries(12)
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(9, 2)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(10, maxSize)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05, 0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(11, maxSize)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastLogTerm)
+	requireT.EqualValues(6, nextLogTerm)
+	requireT.Equal([]byte{0x05}, entries)
+
+	lastLogTerm, nextLogTerm, entries, err = s.Entries(12, maxSize)
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastLogTerm)
 	requireT.EqualValues(6, nextLogTerm)

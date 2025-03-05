@@ -93,13 +93,13 @@ func TestLeaderSetup(t *testing.T) {
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
 }
@@ -150,13 +150,13 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01, 0x02}, entries)
 }
@@ -308,11 +308,25 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 				LastLogTerm:  2,
 				Data:         []byte{0x03},
 			},
+			&types.AppendEntriesRequest{
+				Term:         5,
+				NextLogIndex: 3,
+				NextLogTerm:  4,
+				LastLogTerm:  3,
+				Data:         []byte{0x04},
+			},
+			&types.AppendEntriesRequest{
+				Term:         5,
+				NextLogIndex: 4,
+				NextLogTerm:  5,
+				LastLogTerm:  4,
+				Data:         []byte{0x00},
+			},
 		},
 	}, result)
 	requireT.EqualValues(syncProgress{
 		NextIndex: 2,
-		End:       3,
+		End:       5,
 	}, r.sync[peer1ID])
 	requireT.EqualValues(2, r.matchIndex[peer1ID])
 	requireT.Equal(serverID, r.leaderID)
@@ -1043,16 +1057,16 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(8, r.nextLogIndex)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5)
+	_, _, entries, err = s.Entries(5, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x01, 0x01}, entries)
 }
@@ -1144,16 +1158,16 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5)
+	_, _, entries, err = s.Entries(5, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x03, 0x01, 0x02, 0x03}, entries)
 }

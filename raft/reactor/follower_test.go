@@ -22,13 +22,15 @@ var (
 	peers = []magmatypes.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
 )
 
+const maxReadLogSize = 128 * 1024
+
 func newState() *state.State {
-	return state.NewInMemory(1024*1024, 128*1024)
+	return state.NewInMemory(1024 * 1024)
 }
 
 func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
 	timeSource := &TestTimeSource{}
-	return New(serverID, peers, s, timeSource), timeSource
+	return New(serverID, peers, s, maxReadLogSize, maxReadLogSize, timeSource), timeSource
 }
 
 func TestFollowerInitialRole(t *testing.T) {
@@ -74,7 +76,7 @@ func TestFollowerSetup(t *testing.T) {
 
 	requireT.EqualValues(0, s.CurrentTerm())
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Nil(entries)
 }
@@ -115,7 +117,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01}, entries)
 }
@@ -160,7 +162,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{
 		0x00, 0x00,
@@ -212,13 +214,13 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01, 0x02}, entries)
 }
@@ -264,13 +266,13 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT.Equal(expectedElectionTime, r.electionTime)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(2)
+	_, _, entries, err = s.Entries(2, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01}, entries)
 }
@@ -316,10 +318,10 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Empty(entries)
 }
@@ -369,13 +371,13 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	requireT.EqualValues(2, r.lastLogTerm)
 
 	requireT.EqualValues(5, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x02, 0x02}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Empty(entries)
 
@@ -411,11 +413,11 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	requireT.EqualValues(1, r.lastLogTerm)
 
 	requireT.EqualValues(6, s.CurrentTerm())
-	_, _, entries, err = s.Entries(0)
+	_, _, entries, err = s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01}, entries)
 
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Empty(entries)
 }
@@ -462,10 +464,10 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 }
@@ -512,10 +514,10 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 }
@@ -562,10 +564,10 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 }
@@ -612,10 +614,10 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
 }
@@ -658,7 +660,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00, 0x01}, entries)
 }
@@ -701,7 +703,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
@@ -744,7 +746,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{
 		0x00, 0x00, 0x00,
@@ -790,7 +792,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
@@ -835,10 +837,10 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	}, result)
 
 	requireT.EqualValues(3, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Empty(entries)
 }
@@ -881,7 +883,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
