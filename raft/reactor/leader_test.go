@@ -67,7 +67,12 @@ func TestLeaderSetup(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(3, r.indexTermStarted)
-	requireT.Empty(r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		peer1ID: 3,
+		peer2ID: 3,
+		peer3ID: 3,
+		peer4ID: 3,
+	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 4,
 	}, r.matchIndex)
@@ -956,7 +961,12 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		},
 	}, result)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
-	requireT.Empty(r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 8,
 	}, r.matchIndex)
@@ -1040,7 +1050,12 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 		},
 	}, result)
 	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
-	requireT.Empty(r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		peer1ID: 5,
+		peer2ID: 5,
+		peer3ID: 5,
+		peer4ID: 5,
+	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 10,
 	}, r.matchIndex)

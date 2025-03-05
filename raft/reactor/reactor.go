@@ -157,7 +157,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex > r.getNextIndex(peerID) {
+	if m.NextLogIndex > r.nextIndex[peerID] {
 		r.matchIndex[peerID] = m.NextLogIndex
 		if m.NextLogIndex > r.commitInfo.NextLogIndex {
 			r.updateCommit()
@@ -385,9 +385,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 func (r *Reactor) transitionToLeader() (Result, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.id
-	clear(r.nextIndex)
 	clear(r.matchIndex)
-	clear(r.transfers)
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
 	var err error
@@ -410,6 +408,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 
 	endIndex := r.indexTermStarted + types.Index(len(req.Data))
 	for _, p := range r.peers {
+		r.nextIndex[p] = r.indexTermStarted
 		r.transfers[p] = logTransfer{
 			Start: r.indexTermStarted,
 			End:   endIndex,
@@ -530,13 +529,6 @@ func (r *Reactor) appendData(data []byte) (types.Index, error) {
 	r.matchIndex[r.id] = r.nextLogIndex
 
 	return nextLogIndex, nil
-}
-
-func (r *Reactor) getNextIndex(peerID magmatypes.ServerID) types.Index {
-	if i, exists := r.nextIndex[peerID]; exists {
-		return i
-	}
-	return r.indexTermStarted
 }
 
 func (r *Reactor) resultError(err error) (Result, error) {
