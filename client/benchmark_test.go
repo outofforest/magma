@@ -103,12 +103,13 @@ func TestCluster(t *testing.T) {
 			},
 		},
 		P2P: resonance.Config{
-			MaxMessageSize: 3 * 1024 * 1024,
+			MaxMessageSize: 1024 * 1024,
 		},
 		C2P: resonance.Config{
 			MaxMessageSize: 128 * 1024,
 		},
-		MaxLogSizePerMessage: 4 * 1024,
+		MaxLogSizePerMessage: 512 * 1024,
+		MaxLogSizeOnWire:     10 * 1024 * 1024,
 		PassthroughTimeout:   3 * time.Second,
 	}
 
@@ -145,7 +146,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 1000000 {
+	for range 1_000_000 {
 		err := client.Broadcast(group.Context(), []any{
 			&entities.Account{
 				FirstName: "Test1",

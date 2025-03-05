@@ -74,7 +74,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.Empty(entries)
 }
@@ -125,13 +125,13 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01, 0x02}, entries)
 }

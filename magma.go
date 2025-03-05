@@ -14,7 +14,7 @@ import (
 
 // Run runs magma.
 func Run(ctx context.Context, config types.Config, p2pListener, tx2pListener, c2pListener net.Listener) error {
-	s, closeState, err := state.Open(config.StateDir, config.MaxLogSizePerMessage)
+	s, closeState, err := state.Open(config.StateDir)
 	if err != nil {
 		return err
 	}
@@ -22,7 +22,8 @@ func Run(ctx context.Context, config types.Config, p2pListener, tx2pListener, c2
 
 	return raft.Run(
 		ctx,
-		reactor.New(config.ServerID, helpers.Peers(config), s, &reactor.RealTimeSource{}),
+		reactor.New(config.ServerID, helpers.Peers(config), s, config.MaxLogSizePerMessage, config.MaxLogSizeOnWire,
+			&reactor.RealTimeSource{}),
 		gossip.New(config, p2pListener, tx2pListener, c2pListener, config.StateDir),
 	)
 }

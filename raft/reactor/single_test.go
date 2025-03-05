@@ -13,7 +13,7 @@ import (
 
 func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
 	timeSource := &TestTimeSource{}
-	return New(serverID, nil, s, timeSource), timeSource
+	return New(serverID, nil, s, maxReadLogSize, maxReadLogSize, timeSource), timeSource
 }
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
 }
@@ -96,16 +96,16 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(8, r.nextLogIndex)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5)
+	_, _, entries, err = s.Entries(5, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x01, 0x01}, entries)
 }
@@ -148,16 +148,16 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(6, r.nextLogIndex)
 
-	_, _, entries, err := s.Entries(0)
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3)
+	_, _, entries, err = s.Entries(3, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5)
+	_, _, entries, err = s.Entries(5, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x00}, entries)
 }

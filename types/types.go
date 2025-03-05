@@ -22,6 +22,7 @@ type Config struct {
 	P2P                  resonance.Config
 	C2P                  resonance.Config
 	MaxLogSizePerMessage uint64
+	MaxLogSizeOnWire     uint64
 	PassthroughTimeout   time.Duration
 }
 
