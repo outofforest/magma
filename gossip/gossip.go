@@ -460,7 +460,7 @@ func (g *gossip) tx2pHandler(
 
 			var lCh chan<- []byte
 			for {
-				tx, err := c.ReceiveBytes()
+				tx, err := c.ReceiveRawBytes()
 				if err != nil {
 					return err
 				}
@@ -486,7 +486,7 @@ func (g *gossip) tx2pHandler(
 				case <-ctx.Done():
 					return errors.WithStack(ctx.Err())
 				case tx := <-txCh:
-					if err := c.SendBytes(tx); err != nil {
+					if err := c.SendRawBytes(tx); err != nil {
 						return errors.WithStack(err)
 					}
 				}
@@ -533,7 +533,7 @@ func (g *gossip) c2pHandler(
 
 			var lCh chan<- []byte
 			for {
-				tx, err := c.ReceiveBytes()
+				tx, err := c.ReceiveRawBytes()
 				if err != nil {
 					return err
 				}

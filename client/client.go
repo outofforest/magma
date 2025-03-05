@@ -74,7 +74,15 @@ func (c *Client) Run(ctx context.Context) error {
 								continue
 							}
 
-							tx := []any{}
+							var n uint64
+							buf := msg
+							for len(buf) > 0 {
+								n++
+								size, n2 := varuint64.Parse(buf)
+								buf = buf[n2+size:]
+							}
+
+							tx := make([]any, 0, n)
 							for len(msg) > 0 {
 								size, n1 := varuint64.Parse(msg)
 								id, n2 := varuint64.Parse(msg[n1:])
@@ -98,7 +106,7 @@ func (c *Client) Run(ctx context.Context) error {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case tx := <-c.txCh:
-								if err := conn.SendBytes(tx); err != nil {
+								if err := conn.SendRawBytes(tx); err != nil {
 									return errors.WithStack(err)
 								}
 							}
@@ -138,8 +146,8 @@ func (c *Client) Broadcast(ctx context.Context, tx []any) error {
 		return errors.Errorf("tx size %d exceeds allowed maximum %d", size, c.config.C2P.MaxMessageSize)
 	}
 
-	buf := make([]byte, size)
-	var i uint64
+	buf := make([]byte, size+varuint64.Size(size))
+	i := varuint64.Put(buf, size)
 	for _, o := range tx {
 		id, err := c.m.ID(o)
 		if err != nil {
