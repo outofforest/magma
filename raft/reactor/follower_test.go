@@ -48,12 +48,11 @@ func TestFollowerSetup(t *testing.T) {
 	r.role = types.RoleCandidate
 	r.leaderID = serverID
 	r.votedForMe = 2
-	r.nextIndex[peer1ID] = 100
-	r.matchIndex[peer1ID] = 100
-	r.transfers[peer1ID] = logTransfer{
-		Start: 100,
-		End:   100,
+	r.sync[peer1ID] = syncProgress{
+		NextIndex: 100,
+		End:       100,
 	}
+	r.matchIndex[peer1ID] = 100
 
 	r.lastLogTerm = 3
 	r.nextLogIndex = 10
@@ -66,9 +65,8 @@ func TestFollowerSetup(t *testing.T) {
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.Zero(r.votedForMe)
 	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Empty(r.nextIndex)
+	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
-	requireT.Empty(r.transfers)
 
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)

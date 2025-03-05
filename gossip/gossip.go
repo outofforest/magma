@@ -465,12 +465,8 @@ func (g *gossip) tx2pHandler(
 					return err
 				}
 
-				var ok bool
 				select {
-				case lCh, ok = <-leaderCh:
-					if !ok {
-						return errors.WithStack(ctx.Err())
-					}
+				case lCh = <-leaderCh:
 				default:
 				}
 
@@ -542,12 +538,8 @@ func (g *gossip) c2pHandler(
 					return err
 				}
 
-				var ok bool
 				select {
-				case lCh, ok = <-leaderCh:
-					if !ok {
-						return errors.WithStack(ctx.Err())
-					}
+				case lCh = <-leaderCh:
 				default:
 				}
 
@@ -563,11 +555,10 @@ func (g *gossip) c2pHandler(
 			loop:
 				for range 2 {
 					select {
+					case <-ctx.Done():
+						return errors.WithStack(ctx.Err())
 					case <-g.passthroughTimeoutTicker.C:
-					case lCh, ok = <-leaderCh:
-						if !ok {
-							return errors.WithStack(ctx.Err())
-						}
+					case lCh = <-leaderCh:
 						if lCh == meCh {
 							cmdCh <- rafttypes.Command{
 								Cmd: &rafttypes.ClientRequest{
@@ -578,6 +569,8 @@ func (g *gossip) c2pHandler(
 						}
 						if lCh != nil {
 							select {
+							case <-ctx.Done():
+								return errors.WithStack(ctx.Err())
 							case <-g.passthroughTimeoutTicker.C:
 							case lCh <- tx:
 								break loop

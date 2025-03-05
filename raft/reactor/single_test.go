@@ -38,8 +38,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 			NextLogIndex: 1,
 		},
 	}, result)
-	requireT.Empty(r.nextIndex)
-	requireT.Empty(r.transfers)
+	requireT.Empty(r.sync)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 1,
 	}, r.matchIndex)
@@ -90,8 +89,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 			NextLogIndex: 8,
 		},
 	}, result)
-	requireT.Empty(r.nextIndex)
-	requireT.Empty(r.transfers)
+	requireT.Empty(r.sync)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 8,
 	}, r.matchIndex)
@@ -142,8 +140,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 			NextLogIndex: 6,
 		},
 	}, result)
-	requireT.Empty(r.nextIndex)
-	requireT.Empty(r.transfers)
+	requireT.Empty(r.sync)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		serverID: 6,
 	}, r.matchIndex)
