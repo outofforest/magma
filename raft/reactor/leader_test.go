@@ -2,7 +2,6 @@ package reactor
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -18,11 +17,13 @@ func TestLeaderSetup(t *testing.T) {
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(3))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 
 	r.role = types.RoleCandidate
 	r.leaderID = peer1ID
 	r.votedForMe = 10
+	r.heartbeatTick = 1
+	r.ignoreHeartbeatTick = 0
 	r.indexTermStarted = 12
 	r.sync[peer1ID] = &syncProgress{
 		NextIndex: 100,
@@ -34,14 +35,14 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.EqualValues(3, r.nextLogIndex)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 2}
 
-	expectedHeartbeatTime := ts.Add(time.Hour)
 	result, err := r.transitionToLeader()
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(serverID, r.leaderID)
 	requireT.EqualValues(10, r.votedForMe)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.heartbeatTick)
+	requireT.EqualValues(2, r.ignoreHeartbeatTick)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
@@ -113,12 +114,10 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	_, _, err = s.Append(1, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
-
-	expectedElectionTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -146,7 +145,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
@@ -170,7 +169,7 @@ func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T
 	_, _, err = s.Append(1, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -192,11 +191,9 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
-
-	expectedElectionTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         3,
@@ -210,7 +207,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 			NextLogIndex: 0,
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -220,12 +217,10 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
-
-	expectedElectionTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         3,
@@ -250,7 +245,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -276,7 +271,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -344,7 +339,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -393,7 +388,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -435,7 +430,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -471,7 +466,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -513,7 +508,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -566,7 +561,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(0, 0, 5, []byte{0x00})
@@ -621,7 +616,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x00, 0x00})
@@ -688,7 +683,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -768,7 +763,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x00, 0x00})
@@ -863,7 +858,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -886,11 +881,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 		},
 	}
 
-	r.heartBeatTime = ts.Add(time.Hour)
-	heartbeatTimeoutTime := ts.Add(time.Hour)
-	expectedHeartbeatTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTimeout(heartbeatTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(2))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(Result{
@@ -915,7 +906,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(2, r.heartbeatTick)
 }
 
 func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
@@ -930,7 +921,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x04})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -953,11 +944,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 		},
 	}
 
-	heartbeatTimeoutTime := ts.Add(time.Hour)
-	r.heartBeatTime = ts.Add(time.Hour)
-	notExpectedHeartbeatTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTimeout(heartbeatTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(Result{
@@ -967,7 +954,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 			NextLogIndex: 0,
 		},
 	}, result)
-	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.heartbeatTick)
 }
 
 func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
@@ -980,7 +967,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1002,8 +989,6 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 			End:       6,
 		},
 	}
-
-	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x01, 0x01},
@@ -1032,7 +1017,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.Equal(map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 6,
@@ -1081,7 +1066,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1103,8 +1088,6 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 			End:       6,
 		},
 	}
-
-	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x03, 0x01, 0x02, 0x03},
@@ -1133,7 +1116,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.Equal(map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 6,
@@ -1184,7 +1167,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	_, _, err = s.Append(3, 3, 4, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(5))
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 

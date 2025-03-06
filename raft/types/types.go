@@ -1,8 +1,6 @@
 package types
 
 import (
-	"time"
-
 	"github.com/outofforest/magma/types"
 )
 
@@ -32,11 +30,11 @@ type Command struct {
 	Cmd    any
 }
 
-// HeartbeatTimeout is sent to raft reactor when it's time to send heartbeat to connected peers.
-type HeartbeatTimeout time.Time
+// HeartbeatTick is sent to raft reactor when it's time to send heartbeat to connected peers.
+type HeartbeatTick uint64
 
-// ElectionTimeout is sent to raft reactor when it's time to switch to election phase.
-type ElectionTimeout time.Time
+// ElectionTick is sent to raft reactor when it's time to switch to election phase.
+type ElectionTick uint64
 
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
