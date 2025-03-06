@@ -30,6 +30,7 @@ func New(config Config, m proton.Marshaller) *Client {
 		txCh:          make(chan []byte, 1),
 		m:             m,
 		timeoutTicker: time.NewTicker(time.Hour),
+		bufSize:       10 * (config.C2P.MaxMessageSize + varuint64.MaxSize),
 	}
 	c.timeoutTicker.Stop()
 	return c
@@ -42,6 +43,9 @@ type Client struct {
 	m             proton.Marshaller
 	nextLogIndex  rafttypes.Index
 	timeoutTicker *time.Ticker
+
+	buf     []byte
+	bufSize uint64
 }
 
 // Run runs client.
@@ -101,16 +105,19 @@ func (c *Client) Run(ctx context.Context) error {
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {
-						for {
-							select {
-							case <-ctx.Done():
-								return errors.WithStack(ctx.Err())
-							case tx := <-c.txCh:
-								if err := conn.SendRawBytes(tx); err != nil {
-									return errors.WithStack(err)
-								}
+						for tx := range c.txCh {
+							if err := conn.SendRawBytes(tx); err != nil {
+								return errors.WithStack(err)
 							}
 						}
+
+						return errors.WithStack(ctx.Err())
+					})
+					spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
+						defer close(c.txCh)
+
+						<-ctx.Done()
+						return errors.WithStack(ctx.Err())
 					})
 					return nil
 				})
@@ -125,29 +132,18 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 // Broadcast broadcasts transaction to the magma network.
-func (c *Client) Broadcast(ctx context.Context, tx []any) error {
+func (c *Client) Broadcast(tx []any) (retErr error) {
+	defer broadcastRecover(&retErr)
+
 	if len(tx) == 0 {
 		return nil
 	}
-	var size uint64
-	for _, o := range tx {
-		s, err := c.m.Size(o)
-		if err != nil {
-			return err
-		}
-		id, err := c.m.ID(o)
-		if err != nil {
-			return err
-		}
-		size += s + varuint64.Size(s) + varuint64.Size(id)
+
+	if uint64(len(c.buf)) < c.config.C2P.MaxMessageSize {
+		c.buf = make([]byte, c.bufSize)
 	}
 
-	if size > c.config.C2P.MaxMessageSize {
-		return errors.Errorf("tx size %d exceeds allowed maximum %d", size, c.config.C2P.MaxMessageSize)
-	}
-
-	buf := make([]byte, size+varuint64.Size(size))
-	i := varuint64.Put(buf, size)
+	i := uint64(varuint64.MaxSize)
 	for _, o := range tx {
 		id, err := c.m.ID(o)
 		if err != nil {
@@ -158,24 +154,36 @@ func (c *Client) Broadcast(ctx context.Context, tx []any) error {
 			return err
 		}
 		totalSize := msgSize + varuint64.Size(id)
-		i += varuint64.Put(buf[i:], totalSize)
-		i += varuint64.Put(buf[i:], id)
-		_, _, err = c.m.Marshal(o, buf[i:])
+		i += varuint64.Put(c.buf[i:], totalSize)
+		i += varuint64.Put(c.buf[i:], id)
+		_, _, err = c.m.Marshal(o, c.buf[i:])
 		if err != nil {
 			return err
 		}
 		i += msgSize
+
+		if i > c.config.C2P.MaxMessageSize {
+			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, c.config.C2P.MaxMessageSize)
+		}
 	}
+
+	n := varuint64.Size(i - varuint64.MaxSize)
+	varuint64.Put(c.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
 
 	for range 2 {
 		select {
-		case <-ctx.Done():
-			return errors.WithStack(ctx.Err())
 		case <-c.timeoutTicker.C:
-		case c.txCh <- buf:
+		case c.txCh <- c.buf[varuint64.MaxSize-n : i]:
+			c.buf = c.buf[i:]
 			return nil
 		}
 	}
 
 	return errors.New("timeout on sending transaction")
+}
+
+func broadcastRecover(err *error) {
+	if recover() != nil {
+		*err = errors.New("connection closed")
+	}
 }
