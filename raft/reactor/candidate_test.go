@@ -109,15 +109,6 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         4,
-				NextLogIndex: 5,
-			},
-		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
@@ -427,9 +418,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			End:       0,
 		},
 	}, r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 1,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(2, r.lastLogTerm)
 	requireT.EqualValues(1, r.nextLogIndex)

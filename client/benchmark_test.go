@@ -110,7 +110,6 @@ func TestCluster(t *testing.T) {
 		},
 		MaxLogSizePerMessage: 512 * 1024,
 		MaxLogSizeOnWire:     10 * 1024 * 1024,
-		PassthroughTimeout:   3 * time.Second,
 	}
 
 	group := parallel.NewGroup(ctx)

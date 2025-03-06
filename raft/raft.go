@@ -93,6 +93,8 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 		case <-t.Election():
 			electionTick++
 			cmdCh <- types.Command{Cmd: electionTick}
+		case <-t.Sync():
+			cmdCh <- types.Command{Cmd: types.SyncTick{}}
 		}
 	}
 }
@@ -124,13 +126,16 @@ func runReactor(
 		if result.Role != role {
 			role = result.Role
 			if len(roleCh) > 0 {
-				<-roleCh
+				select {
+				case <-roleCh:
+				default:
+				}
 			}
 			roleCh <- role
 		}
 
-		if len(result.Recipients) > 0 || result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex ||
-			result.LeaderID != leaderID {
+		if (len(result.Recipients) > 0 && len(result.Messages) > 0) || result.LeaderID != leaderID ||
+			result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
 			commitInfo = result.CommitInfo
 			leaderID = result.LeaderID
 			resultCh <- result

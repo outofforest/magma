@@ -214,13 +214,19 @@ func (g *gossip) runSupervisor(
 
 				for _, p := range peersTx2P {
 					if len(p.LeaderCh) > 0 {
-						<-p.LeaderCh
+						select {
+						case <-p.LeaderCh:
+						default:
+						}
 					}
 					p.LeaderCh <- pLeader
 				}
 				for _, cLCh := range clients {
 					if len(cLCh) > 0 {
-						<-cLCh
+						select {
+						case <-cLCh:
+						default:
+						}
 					}
 					cLCh <- pLeader
 				}
@@ -237,7 +243,10 @@ func (g *gossip) runSupervisor(
 				commitInfo = result.CommitInfo
 				for commitCh := range clients {
 					if len(commitCh) > 0 {
-						<-commitCh
+						select {
+						case <-commitCh:
+						default:
+						}
 					}
 					commitCh <- commitInfo
 				}
@@ -288,13 +297,19 @@ func (g *gossip) runSupervisor(
 					pLeader = p
 					for _, p := range peersTx2P {
 						if len(p.LeaderCh) > 0 {
-							<-p.LeaderCh
+							select {
+							case <-p.LeaderCh:
+							default:
+							}
 						}
 						p.LeaderCh <- pLeader
 					}
 					for _, cLCh := range clients {
 						if len(cLCh) > 0 {
-							<-cLCh
+							select {
+							case <-cLCh:
+							default:
+							}
 						}
 						cLCh <- pLeader
 					}

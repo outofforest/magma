@@ -13,6 +13,7 @@ import (
 const (
 	heartbeatInterval    = 500 * time.Millisecond
 	electionBaseInterval = 2 * time.Second
+	syncInterval         = 100 * time.Millisecond
 )
 
 // New creates new timeout manager.
@@ -22,6 +23,7 @@ func New(roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
 		majorityCh:      majorityCh,
 		tickerHeartbeat: newTicker(),
 		tickerElection:  newTicker(),
+		tickerSync:      newTicker(),
 	}
 }
 
@@ -32,6 +34,7 @@ type Timeouts struct {
 
 	tickerHeartbeat *ticker
 	tickerElection  *ticker
+	tickerSync      *ticker
 
 	role            types.Role
 	majorityPresent bool
@@ -39,8 +42,11 @@ type Timeouts struct {
 
 // Run runs the timeout manager.
 func (t *Timeouts) Run(ctx context.Context) error {
+	t.tickerSync.Start(syncInterval)
+
 	defer t.tickerHeartbeat.Stop()
 	defer t.tickerElection.Stop()
+	defer t.tickerSync.Stop()
 
 	for {
 		select {
@@ -63,6 +69,11 @@ func (t *Timeouts) Heartbeat() <-chan time.Time {
 // Election returns election ticks.
 func (t *Timeouts) Election() <-chan time.Time {
 	return t.tickerElection.Ticks()
+}
+
+// Sync returns sync ticks.
+func (t *Timeouts) Sync() <-chan time.Time {
+	return t.tickerSync.Ticks()
 }
 
 func (t *Timeouts) applyRole(role types.Role) {

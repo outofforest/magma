@@ -36,6 +36,9 @@ type HeartbeatTick uint64
 // ElectionTick is sent to raft reactor when it's time to switch to election phase.
 type ElectionTick uint64
 
+// SyncTick is sent to raft reactor when it's time to sync changes to persistent storage.
+type SyncTick struct{}
+
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
 type AppendEntriesRequest struct {
@@ -58,8 +61,10 @@ type AppendEntriesRequest struct {
 type AppendEntriesResponse struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
-	// NextLogIndex is the index of the next log item.
+	// NextLogIndex is the index of the next log item to receive.
 	NextLogIndex Index
+	// SyncLogIndex is the index synced to persistent storage.
+	SyncLogIndex Index
 }
 
 // VoteRequest represents the structure of a request sent by a Raft candidate
