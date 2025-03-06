@@ -147,7 +147,7 @@ func TestCluster(t *testing.T) {
 	fmt.Println("Start")
 
 	for range 1_000_000 {
-		err := client.Broadcast(group.Context(), []any{
+		err := client.Broadcast([]any{
 			&entities.Account{
 				FirstName: "Test1",
 				LastName:  "Test2",
