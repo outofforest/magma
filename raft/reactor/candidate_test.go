@@ -29,7 +29,7 @@ func TestCandidateSetup(t *testing.T) {
 
 	r.lastLogTerm = 3
 	r.nextLogIndex = 10
-	r.commitInfo = types.CommitInfo{NextLogIndex: 5}
+	r.commitInfo = types.CommitInfo{CommittedCount: 5}
 	result, err := r.transitionToCandidate()
 	requireT.NoError(err)
 
@@ -44,7 +44,7 @@ func TestCandidateSetup(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 5,
+			CommittedCount: 5,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -107,7 +107,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -145,7 +145,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -189,7 +189,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	requireT.Zero(r.votedForMe)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -222,7 +222,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -255,7 +255,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -284,7 +284,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -313,7 +313,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -334,7 +334,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -363,7 +363,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -381,7 +381,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -442,7 +442,7 @@ func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 }
@@ -463,7 +463,7 @@ func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 }

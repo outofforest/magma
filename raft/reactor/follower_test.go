@@ -21,14 +21,14 @@ var (
 	peers = []magmatypes.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
 )
 
-const maxReadLogSize = 128 * 1024
+const maxReadLogSize = 5
 
 func newState() *state.State {
 	return state.NewInMemory(1024 * 1024)
 }
 
 func newReactor(s *state.State) *Reactor {
-	return New(serverID, peers, s, maxReadLogSize, maxReadLogSize)
+	return New(serverID, peers, s, maxReadLogSize, 2*maxReadLogSize)
 }
 
 func TestFollowerInitialRole(t *testing.T) {
@@ -58,7 +58,7 @@ func TestFollowerSetup(t *testing.T) {
 
 	r.lastLogTerm = 3
 	r.nextLogIndex = 10
-	r.commitInfo = types.CommitInfo{NextLogIndex: 5}
+	r.commitInfo = types.CommitInfo{CommittedCount: 5}
 
 	r.transitionToFollower()
 
@@ -72,7 +72,7 @@ func TestFollowerSetup(t *testing.T) {
 
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
-	requireT.Equal(types.CommitInfo{NextLogIndex: 5}, r.commitInfo)
+	requireT.Equal(types.CommitInfo{CommittedCount: 5}, r.commitInfo)
 
 	requireT.EqualValues(0, s.CurrentTerm())
 
@@ -100,7 +100,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -135,7 +135,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -177,7 +177,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -199,19 +199,22 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00})
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
 	requireT.NoError(err)
 
 	r := newReactor(s)
+	r.syncedCount = 2
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 2,
 		NextLogTerm:  4,
 		LastLogTerm:  2,
-		Data:         []byte{0x01},
+		Data:         []byte{0x04},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -220,21 +223,111 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.EqualValues(2, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
+	requireT.EqualValues([]byte{0x01}, entries)
 	_, _, entries, err = s.Entries(1, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
+	requireT.EqualValues([]byte{0x02}, entries)
 	_, _, entries, err = s.Entries(2, maxReadLogSize)
 	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x04}, entries)
+}
+
+func TestFollowerAppendEntriesRequestReplaceEntriesAtSynced(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.syncedCount = 3
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         4,
+		NextLogIndex: 2,
+		NextLogTerm:  4,
+		LastLogTerm:  2,
+		Data:         []byte{0x04},
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.EqualValues(2, r.syncedCount)
+
+	requireT.EqualValues(4, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
 	requireT.EqualValues([]byte{0x01}, entries)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x02}, entries)
+	_, _, entries, err = s.Entries(2, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x04}, entries)
+}
+
+func TestFollowerAppendEntriesRequestReplaceEntriesBelowSynced(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.syncedCount = 3
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         4,
+		NextLogIndex: 1,
+		NextLogTerm:  4,
+		LastLogTerm:  1,
+		Data:         []byte{0x04, 0x05, 0x06},
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.EqualValues(1, r.syncedCount)
+
+	requireT.EqualValues(4, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x01}, entries)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x04, 0x05, 0x06}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) {
@@ -247,6 +340,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	requireT.NoError(err)
 
 	r := newReactor(s)
+	r.syncedCount = 2
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -262,7 +356,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -271,10 +365,12 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 			&types.AppendEntriesResponse{
 				Term:         4,
 				NextLogIndex: 1,
+				SyncLogIndex: 1,
 			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.EqualValues(1, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
@@ -314,7 +410,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -356,7 +452,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -406,7 +502,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -455,7 +551,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -495,7 +591,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -535,7 +631,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
@@ -567,8 +663,8 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
-	r.syncedLogIndex = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -584,7 +680,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 2,
+			CommittedCount: 2,
 		},
 	}, result)
 
@@ -602,8 +698,8 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
-	r.syncedLogIndex = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -619,7 +715,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 2,
+			CommittedCount: 2,
 		},
 	}, result)
 
@@ -637,8 +733,8 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
-	r.syncedLogIndex = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -654,7 +750,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 3,
+			CommittedCount: 3,
 		},
 	}, result)
 
@@ -675,8 +771,8 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
-	r.syncedLogIndex = 2
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 2
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -692,7 +788,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 2,
+			CommittedCount: 2,
 		},
 	}, result)
 
@@ -712,8 +808,8 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
-	r.syncedLogIndex = 1
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 1
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
@@ -729,7 +825,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 1,
+			CommittedCount: 1,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -760,8 +856,8 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
-	r.syncedLogIndex = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 3}
+	r.syncedCount = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -789,7 +885,7 @@ func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
+	r.commitInfo = types.CommitInfo{CommittedCount: 3}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         2,
@@ -821,7 +917,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -868,7 +964,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -915,7 +1011,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -958,7 +1054,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1005,7 +1101,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1031,7 +1127,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1069,7 +1165,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1095,7 +1191,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
@@ -1129,7 +1225,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1172,7 +1268,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1215,7 +1311,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1258,7 +1354,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1284,7 +1380,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
@@ -1317,7 +1413,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
@@ -1359,7 +1455,7 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	requireT.EqualValues(0, r.votedForMe)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 
@@ -1405,7 +1501,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 0,
+			CommittedCount: 0,
 		},
 	}, result)
 	requireT.Zero(r.ignoreHeartbeatTick)

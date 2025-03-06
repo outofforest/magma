@@ -59,7 +59,7 @@ func (c *Client) Run(ctx context.Context) error {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, c.config.C2P,
 			func(ctx context.Context, conn *resonance.Connection) error {
 				if err := conn.SendProton(&rafttypes.CommitInfo{
-					NextLogIndex: c.nextLogIndex,
+					CommittedCount: c.nextLogIndex,
 				}, c2p.NewMarshaller()); err != nil {
 					return errors.WithStack(err)
 				}

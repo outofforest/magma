@@ -239,7 +239,7 @@ func (g *gossip) runSupervisor(
 
 				p.SendCh <- result.Messages
 			}
-			if result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+			if result.CommitInfo.CommittedCount > commitInfo.CommittedCount {
 				commitInfo = result.CommitInfo
 				for commitCh := range clients {
 					if len(commitCh) > 0 {
@@ -333,7 +333,7 @@ func (g *gossip) runSupervisor(
 				close(c.LeaderCh)
 				delete(clients, c.CommitCh)
 			} else {
-				if commitInfo.NextLogIndex > 0 {
+				if commitInfo.CommittedCount > 0 {
 					c.CommitCh <- commitInfo
 				}
 				if pLeader.ID != types.ZeroServerID {
@@ -572,7 +572,7 @@ func (g *gossip) c2pHandler(
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
-			nextLogIndex := msgCommitInfo.NextLogIndex
+			nextLogIndex := msgCommitInfo.CommittedCount
 			var logF *os.File
 			for newCommitInfo := range commitCh {
 				if logF == nil {
@@ -588,8 +588,8 @@ func (g *gossip) c2pHandler(
 					}
 				}
 
-				if newCommitInfo.NextLogIndex > nextLogIndex {
-					toSend := uint64(newCommitInfo.NextLogIndex - nextLogIndex)
+				if newCommitInfo.CommittedCount > nextLogIndex {
+					toSend := uint64(newCommitInfo.CommittedCount - nextLogIndex)
 					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
 						return errors.WithStack(err)
 					}
