@@ -118,9 +118,8 @@ func runReactor(
 
 		if result.Role != role {
 			role = result.Role
-			select {
-			case <-roleCh:
-			default:
+			if len(roleCh) > 0 {
+				<-roleCh
 			}
 			roleCh <- role
 		}
@@ -136,17 +135,16 @@ func runReactor(
 }
 
 func fetchCommand(ctx context.Context, cmdP2PCh, cmdC2PCh <-chan types.Command) (types.Command, error) {
+	if len(cmdP2PCh) > 0 {
+		return <-cmdP2PCh, nil
+	}
+
 	select {
+	case <-ctx.Done():
+		return types.Command{}, errors.WithStack(ctx.Err())
 	case cmd := <-cmdP2PCh:
 		return cmd, nil
-	default:
-		select {
-		case <-ctx.Done():
-			return types.Command{}, errors.WithStack(ctx.Err())
-		case cmd := <-cmdP2PCh:
-			return cmd, nil
-		case cmd := <-cmdC2PCh:
-			return cmd, nil
-		}
+	case cmd := <-cmdC2PCh:
+		return cmd, nil
 	}
 }
