@@ -102,15 +102,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 1,
-			},
-		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
@@ -145,15 +136,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 5,
-			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -197,15 +179,6 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         3,
-				NextLogIndex: 5,
-			},
-		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
@@ -248,15 +221,6 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         4,
-				NextLogIndex: 3,
-			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -493,15 +457,6 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         4,
-				NextLogIndex: 3,
-			},
-		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
@@ -541,15 +496,6 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         2,
-				NextLogIndex: 3,
-			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -622,6 +568,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
+	r.syncedLogIndex = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -638,15 +585,6 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 2,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 4,
-			},
 		},
 	}, result)
 
@@ -665,6 +603,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
+	r.syncedLogIndex = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -682,15 +621,6 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 2,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 3,
-			},
-		},
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -699,7 +629,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
 
-func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -708,6 +638,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
+	r.syncedLogIndex = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -723,16 +654,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 4,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 4,
-			},
+			NextLogIndex: 3,
 		},
 	}, result)
 
@@ -745,7 +667,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	}, entries)
 }
 
-func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *testing.T) {
+func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -754,6 +676,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
+	r.syncedLogIndex = 2
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -769,16 +692,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 3,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 3,
-			},
+			NextLogIndex: 2,
 		},
 	}, result)
 
@@ -788,7 +702,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
 }
 
-func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *testing.T) {
+func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -799,6 +713,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
+	r.syncedLogIndex = 1
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
@@ -823,6 +738,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 			&types.AppendEntriesResponse{
 				Term:         3,
 				NextLogIndex: 3,
+				SyncLogIndex: 1,
 			},
 		},
 	}, result)
@@ -845,6 +761,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
+	r.syncedLogIndex = 3
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -854,24 +771,9 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 		Data:         nil,
 		LeaderCommit: 2,
 	})
-	requireT.NoError(err)
+	requireT.Error(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
-		CommitInfo: types.CommitInfo{
-			NextLogIndex: 3,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         1,
-				NextLogIndex: 3,
-			},
-		},
-	}, result)
+	requireT.Equal(Result{}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)

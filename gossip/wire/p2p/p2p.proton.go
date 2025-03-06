@@ -1065,7 +1065,7 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 }
 
 func size3(m *types.AppendEntriesResponse) uint64 {
-	var n uint64 = 2
+	var n uint64 = 3
 	{
 		// Term
 
@@ -1097,6 +1097,32 @@ func size3(m *types.AppendEntriesResponse) uint64 {
 
 		{
 			vi := m.NextLogIndex
+			switch {
+			case vi <= 0x7F:
+			case vi <= 0x3FFF:
+				n++
+			case vi <= 0x1FFFFF:
+				n += 2
+			case vi <= 0xFFFFFFF:
+				n += 3
+			case vi <= 0x7FFFFFFFF:
+				n += 4
+			case vi <= 0x3FFFFFFFFFF:
+				n += 5
+			case vi <= 0x1FFFFFFFFFFFF:
+				n += 6
+			case vi <= 0xFFFFFFFFFFFFFF:
+				n += 7
+			default:
+				n += 8
+			}
+		}
+	}
+	{
+		// SyncLogIndex
+
+		{
+			vi := m.SyncLogIndex
 			switch {
 			case vi <= 0x7F:
 			case vi <= 0x3FFF:
@@ -1411,6 +1437,150 @@ func marshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 			}
 		}
 	}
+	{
+		// SyncLogIndex
+
+		{
+			vi := m.SyncLogIndex
+			switch {
+			case vi <= 0x7F:
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x7FFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x3FFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0x1FFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			case vi <= 0xFFFFFFFFFFFFFF:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			default:
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi) | 0x80
+				o++
+				vi >>= 7
+				b[o] = byte(vi)
+				o++
+			}
+		}
+	}
 
 	return o
 }
@@ -1513,6 +1683,55 @@ func unmarshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 				}
 			}
 			m.NextLogIndex = vi
+		}
+	}
+	{
+		// SyncLogIndex
+
+		{
+			vi := types.Index(b[o] & 0x7F)
+			if b[o]&0x80 == 0 {
+				o++
+			} else {
+				vi |= types.Index(b[o+1]&0x7F) << 7
+				if b[o+1]&0x80 == 0 {
+					o += 2
+				} else {
+					vi |= types.Index(b[o+2]&0x7F) << 14
+					if b[o+2]&0x80 == 0 {
+						o += 3
+					} else {
+						vi |= types.Index(b[o+3]&0x7F) << 21
+						if b[o+3]&0x80 == 0 {
+							o += 4
+						} else {
+							vi |= types.Index(b[o+4]&0x7F) << 28
+							if b[o+4]&0x80 == 0 {
+								o += 5
+							} else {
+								vi |= types.Index(b[o+5]&0x7F) << 35
+								if b[o+5]&0x80 == 0 {
+									o += 6
+								} else {
+									vi |= types.Index(b[o+6]&0x7F) << 42
+									if b[o+6]&0x80 == 0 {
+										o += 7
+									} else {
+										vi |= types.Index(b[o+7]&0x7F) << 49
+										if b[o+7]&0x80 == 0 {
+											o += 8
+										} else {
+											vi |= types.Index(b[o+8]) << 56
+											o += 9
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			m.SyncLogIndex = vi
 		}
 	}
 

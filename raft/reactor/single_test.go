@@ -34,9 +34,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 		},
 	}, result)
 	requireT.Empty(r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 1,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.lastLogTerm)
 	requireT.EqualValues(1, r.nextLogIndex)
 
@@ -83,9 +81,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		},
 	}, result)
 	requireT.Empty(r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 8,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(8, r.nextLogIndex)
 
@@ -131,9 +127,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 		},
 	}, result)
 	requireT.Empty(r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 6,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.Equal(types.CommitInfo{NextLogIndex: 6}, r.commitInfo)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(6, r.nextLogIndex)

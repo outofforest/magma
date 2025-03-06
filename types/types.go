@@ -1,8 +1,6 @@
 package types
 
 import (
-	"time"
-
 	"github.com/google/uuid"
 
 	"github.com/outofforest/resonance"
@@ -23,7 +21,6 @@ type Config struct {
 	C2P                  resonance.Config
 	MaxLogSizePerMessage uint64
 	MaxLogSizeOnWire     uint64
-	PassthroughTimeout   time.Duration
 }
 
 // PeerConfig stores configuration of peer connection.

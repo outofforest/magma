@@ -85,9 +85,7 @@ func TestLeaderSetup(t *testing.T) {
 			End:       0,
 		},
 	}, r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 4,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 
 	requireT.EqualValues(3, r.lastLogTerm)
 	requireT.EqualValues(4, r.nextLogIndex)
@@ -134,15 +132,6 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesResponse{
-				Term:         4,
-				NextLogIndex: 5,
-			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -283,6 +272,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 2,
+		SyncLogIndex: 1,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -323,7 +313,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 		NextIndex: 2,
 		End:       5,
 	}, r.sync[peer1ID])
-	requireT.EqualValues(2, r.matchIndex[peer1ID])
+	requireT.EqualValues(1, r.matchIndex[peer1ID])
 	requireT.Equal(serverID, r.leaderID)
 }
 
@@ -400,6 +390,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 3,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -414,7 +405,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 		NextIndex: 5,
 		End:       5,
 	}, r.sync[peer1ID])
-	requireT.EqualValues(5, r.matchIndex[peer1ID])
+	requireT.EqualValues(3, r.matchIndex[peer1ID])
 	requireT.Equal(serverID, r.leaderID)
 }
 
@@ -523,6 +514,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -537,6 +529,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 	result, err = r.Apply(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -578,6 +571,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -592,6 +586,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 	result, err = r.Apply(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -632,7 +627,8 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
-		NextLogIndex: 6,
+		NextLogIndex: 7,
+		SyncLogIndex: 6,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -641,24 +637,13 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
 		},
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesRequest{
-				Term:         5,
-				NextLogIndex: 6,
-				NextLogTerm:  5,
-				LastLogTerm:  5,
-				Data:         []byte{0x00},
-			},
-		},
 	}, result)
 	requireT.EqualValues(6, r.matchIndex[peer1ID])
 
 	result, err = r.Apply(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 7,
+		SyncLogIndex: 7,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -712,6 +697,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -725,7 +711,8 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 
 	result, err = r.Apply(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
-		NextLogIndex: 4,
+		NextLogIndex: 5,
+		SyncLogIndex: 4,
 	})
 	requireT.NoError(err)
 	requireT.EqualValues(4, r.matchIndex[peer2ID])
@@ -734,19 +721,6 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex: 0,
-		},
-		Recipients: []magmatypes.ServerID{
-			peer2ID,
-		},
-		Messages: []any{
-			&types.AppendEntriesRequest{
-				Term:         5,
-				NextLogIndex: 4,
-				NextLogTerm:  5,
-				LastLogTerm:  4,
-				Data:         []byte{0x00},
-				LeaderCommit: 0,
-			},
 		},
 	}, result)
 }
@@ -794,6 +768,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 5,
+		SyncLogIndex: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -821,6 +796,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	result, err = r.Apply(peer2ID, &types.AppendEntriesResponse{
 		Term:         5,
 		NextLogIndex: 6,
+		SyncLogIndex: 6,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
@@ -1036,9 +1012,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 			End:       8,
 		},
 	}, r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 8,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(8, r.nextLogIndex)
 
@@ -1135,9 +1109,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 			End:       10,
 		},
 	}, r.sync)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
-		serverID: 10,
-	}, r.matchIndex)
+	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(10, r.nextLogIndex)
 

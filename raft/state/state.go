@@ -203,6 +203,17 @@ func (s *State) Append(
 	return revertTerm, s.nextLogIndex, nil
 }
 
+// Sync syncs data to persistent storage.
+func (s *State) Sync() (rafttypes.Index, error) {
+	if s.doMSync {
+		if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
+			return 0, errors.WithStack(err)
+		}
+	}
+
+	return s.nextLogIndex, nil
+}
+
 func (s *State) previousTerm(index rafttypes.Index) rafttypes.Term {
 	for i := len(s.terms) - 1; i >= 0; i-- {
 		if s.terms[i] < index {
@@ -228,12 +239,6 @@ func (s *State) appendLog(
 			s.terms = append(s.terms, nextLogIndex)
 		}
 		s.nextLogIndex += rafttypes.Index(copy(s.log[nextLogIndex:], data))
-
-		if s.doMSync {
-			if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
-				return 0, 0, errors.WithStack(err)
-			}
-		}
 	}
 	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
 }
