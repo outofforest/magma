@@ -71,10 +71,10 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 func size0(m *types.CommitInfo) uint64 {
 	var n uint64 = 1
 	{
-		// NextLogIndex
+		// CommittedCount
 
 		{
-			vi := m.NextLogIndex
+			vi := m.CommittedCount
 			switch {
 			case vi <= 0x7F:
 			case vi <= 0x3FFF:
@@ -102,10 +102,10 @@ func size0(m *types.CommitInfo) uint64 {
 func marshal0(m *types.CommitInfo, b []byte) uint64 {
 	var o uint64
 	{
-		// NextLogIndex
+		// CommittedCount
 
 		{
-			vi := m.NextLogIndex
+			vi := m.CommittedCount
 			switch {
 			case vi <= 0x7F:
 				b[o] = byte(vi)
@@ -252,7 +252,7 @@ func marshal0(m *types.CommitInfo, b []byte) uint64 {
 func unmarshal0(m *types.CommitInfo, b []byte) uint64 {
 	var o uint64
 	{
-		// NextLogIndex
+		// CommittedCount
 
 		{
 			vi := types.Index(b[o] & 0x7F)
@@ -297,7 +297,7 @@ func unmarshal0(m *types.CommitInfo, b []byte) uint64 {
 					}
 				}
 			}
-			m.NextLogIndex = vi
+			m.CommittedCount = vi
 		}
 	}
 

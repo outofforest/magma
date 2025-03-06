@@ -135,7 +135,7 @@ func runReactor(
 		}
 
 		if (len(result.Recipients) > 0 && len(result.Messages) > 0) || result.LeaderID != leaderID ||
-			result.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+			result.CommitInfo.CommittedCount > commitInfo.CommittedCount {
 			commitInfo = result.CommitInfo
 			leaderID = result.LeaderID
 			resultCh <- result

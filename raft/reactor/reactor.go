@@ -80,8 +80,8 @@ type Reactor struct {
 	role                types.Role
 	lastLogTerm         types.Term
 	nextLogIndex        types.Index
-	syncedLogIndex      types.Index
-	leaderCommit        types.Index
+	syncedCount         types.Index
+	leaderCommitIndex   types.Index
 	commitInfo          types.CommitInfo
 	ignoreElectionTick  types.ElectionTick
 	ignoreHeartbeatTick types.HeartbeatTick
@@ -172,7 +172,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 
 	if m.NextLogIndex > r.sync[peerID].NextIndex {
 		r.matchIndex[peerID] = m.SyncLogIndex
-		if m.SyncLogIndex > r.commitInfo.NextLogIndex {
+		if m.SyncLogIndex > r.commitInfo.CommittedCount {
 			r.updateLeaderCommit()
 		}
 	}
@@ -227,6 +227,10 @@ func (r *Reactor) applyAppendEntriesResponse(
 		pSync.NextIndex = m.NextLogIndex
 		pSync.End = endIndex
 
+		if len(reqs) == 0 {
+			return r.resultEmpty()
+		}
+
 		return r.resultMessagesAndRecipient(reqs, peerID)
 	}
 
@@ -277,6 +281,9 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if r.role != types.RoleLeader {
 		return r.resultEmpty()
 	}
+	if len(m.Data) == 0 {
+		return r.resultEmpty()
+	}
 
 	newLogIndex, err := r.appendData(m.Data)
 	if err != nil {
@@ -286,7 +293,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
-		r.commitInfo.NextLogIndex = r.nextLogIndex
+		r.commitInfo.CommittedCount = r.nextLogIndex
 		return r.resultEmpty()
 	}
 
@@ -344,22 +351,22 @@ func (r *Reactor) applyElectionTick(tick types.ElectionTick) (Result, error) {
 }
 
 func (r *Reactor) applySyncTick() (Result, error) {
-	if r.nextLogIndex == r.syncedLogIndex {
+	if r.nextLogIndex == r.syncedCount {
 		return r.resultEmpty()
 	}
-	if r.nextLogIndex < r.syncedLogIndex {
+	if r.nextLogIndex < r.syncedCount {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
 	var err error
-	r.syncedLogIndex, err = r.state.Sync()
+	r.syncedCount, err = r.state.Sync()
 	if err != nil {
 		return r.resultError(err)
 	}
 
 	if r.role == types.RoleLeader {
-		r.matchIndex[r.id] = r.syncedLogIndex
-		if r.syncedLogIndex > r.commitInfo.NextLogIndex {
+		r.matchIndex[r.id] = r.syncedCount
+		if r.syncedCount > r.commitInfo.CommittedCount {
 			r.updateLeaderCommit()
 		}
 		return r.resultEmpty()
@@ -374,7 +381,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	return r.resultMessageAndRecipient(&types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
-		SyncLogIndex: r.syncedLogIndex,
+		SyncLogIndex: r.syncedCount,
 	}, r.leaderID)
 }
 
@@ -479,7 +486,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
-		r.commitInfo.NextLogIndex = r.nextLogIndex
+		r.commitInfo.CommittedCount = r.nextLogIndex
 		return r.resultEmpty()
 	}
 
@@ -512,29 +519,29 @@ func (r *Reactor) newAppendEntriesRequest(
 		LastLogTerm:  lastLogTerm,
 		NextLogTerm:  nextLogTerm,
 		Data:         data,
-		LeaderCommit: r.commitInfo.NextLogIndex,
+		LeaderCommit: r.commitInfo.CommittedCount,
 	}, nil
 }
 
 func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
-	if req.NextLogIndex < r.commitInfo.NextLogIndex {
+	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
-	if req.LeaderCommit < r.commitInfo.NextLogIndex {
+	if req.LeaderCommit < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
 
 	resp := &types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
-		SyncLogIndex: r.syncedLogIndex,
+		SyncLogIndex: r.syncedCount,
 	}
 	if req.Term < r.state.CurrentTerm() {
 		return resp, nil
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
-	r.leaderCommit = req.LeaderCommit
+	r.leaderCommitIndex = req.LeaderCommit
 
 	var err error
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Data)
@@ -542,14 +549,17 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		return nil, err
 	}
 
-	if r.nextLogIndex < r.syncedLogIndex {
-		r.syncedLogIndex = r.nextLogIndex
-		resp.SyncLogIndex = r.syncedLogIndex
+	if r.nextLogIndex < r.syncedCount {
+		r.syncedCount = r.nextLogIndex
+	}
+	if req.NextLogIndex < r.syncedCount {
+		r.syncedCount = req.NextLogIndex
 	}
 
 	r.updateFollowerCommit()
 
 	if r.nextLogIndex < req.NextLogIndex {
+		resp.SyncLogIndex = r.syncedCount
 		resp.NextLogIndex = r.nextLogIndex
 		return resp, nil
 	}
@@ -583,10 +593,10 @@ func (r *Reactor) handleVoteRequest(
 }
 
 func (r *Reactor) updateFollowerCommit() {
-	if r.leaderCommit > r.commitInfo.NextLogIndex {
-		r.commitInfo.NextLogIndex = r.leaderCommit
-		if r.commitInfo.NextLogIndex > r.syncedLogIndex {
-			r.commitInfo.NextLogIndex = r.syncedLogIndex
+	if r.leaderCommitIndex > r.commitInfo.CommittedCount {
+		r.commitInfo.CommittedCount = r.leaderCommitIndex
+		if r.commitInfo.CommittedCount > r.syncedCount {
+			r.commitInfo.CommittedCount = r.syncedCount
 		}
 	}
 }
@@ -595,7 +605,7 @@ func (r *Reactor) updateLeaderCommit() {
 	// FIXME (wojciech): This is executed frequently and must be optimised.
 	r.commitIndexes = r.commitIndexes[:0]
 	for _, index := range r.matchIndex {
-		if index > r.commitInfo.NextLogIndex && index > r.indexTermStarted {
+		if index > r.commitInfo.CommittedCount && index > r.indexTermStarted {
 			r.commitIndexes = append(r.commitIndexes, index)
 		}
 	}
@@ -608,7 +618,7 @@ func (r *Reactor) updateLeaderCommit() {
 		return r.commitIndexes[i] > r.commitIndexes[j]
 	})
 
-	r.commitInfo.NextLogIndex = r.commitIndexes[r.majority-1]
+	r.commitInfo.CommittedCount = r.commitIndexes[r.majority-1]
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {

@@ -30,7 +30,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 1,
+			CommittedCount: 1,
 		},
 	}, result)
 	requireT.Empty(r.sync)
@@ -77,7 +77,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 8,
+			CommittedCount: 8,
 		},
 	}, result)
 	requireT.Empty(r.sync)
@@ -123,12 +123,12 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex: 6,
+			CommittedCount: 6,
 		},
 	}, result)
 	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
-	requireT.Equal(types.CommitInfo{NextLogIndex: 6}, r.commitInfo)
+	requireT.Equal(types.CommitInfo{CommittedCount: 6}, r.commitInfo)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(6, r.nextLogIndex)
 
