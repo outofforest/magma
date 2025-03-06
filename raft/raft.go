@@ -80,14 +80,19 @@ func Run(ctx context.Context, r *reactor.Reactor, gossipFunc GossipFunc) error {
 }
 
 func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- types.Command) error {
+	var heartbeatTick types.HeartbeatTick
+	var electionTick types.ElectionTick
+
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
-		case tm := <-t.Heartbeat():
-			cmdCh <- types.Command{Cmd: types.HeartbeatTimeout(tm.Add(-t.HeartbeatInterval()))}
-		case tm := <-t.Election():
-			cmdCh <- types.Command{Cmd: types.ElectionTimeout(tm.Add(-t.ElectionInterval()))}
+		case <-t.Heartbeat():
+			heartbeatTick++
+			cmdCh <- types.Command{Cmd: heartbeatTick}
+		case <-t.Election():
+			electionTick++
+			cmdCh <- types.Command{Cmd: electionTick}
 		}
 	}
 }

@@ -8,7 +8,6 @@ package reactor
 
 import (
 	"sort"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -43,14 +42,12 @@ func New(
 	peers []magmatypes.ServerID,
 	s *state.State,
 	maxLogSizePerMessage, maxLogSizeOnWire uint64,
-	timeSource TimeSource,
 ) *Reactor {
 	if maxLogSizePerMessage > maxLogSizeOnWire {
 		maxLogSizePerMessage = maxLogSizeOnWire
 	}
 
 	r := &Reactor{
-		timeSource:           timeSource,
 		id:                   id,
 		peers:                peers,
 		state:                s,
@@ -64,14 +61,13 @@ func New(
 		matchIndex:           map[magmatypes.ServerID]types.Index{},
 	}
 	r.transitionToFollower()
+	r.ignoreElectionTick = 0
 
 	return r
 }
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
-	timeSource TimeSource
-
 	id                                     magmatypes.ServerID
 	peers                                  []magmatypes.ServerID
 	leaderID                               magmatypes.ServerID
@@ -79,14 +75,16 @@ type Reactor struct {
 	varuint64Buf                           []byte
 	maxLogSizePerMessage, maxLogSizeOnWire uint64
 
-	majority     int
-	role         types.Role
-	lastLogTerm  types.Term
-	nextLogIndex types.Index
-	commitInfo   types.CommitInfo
+	majority            int
+	role                types.Role
+	lastLogTerm         types.Term
+	nextLogIndex        types.Index
+	commitInfo          types.CommitInfo
+	ignoreElectionTick  types.ElectionTick
+	ignoreHeartbeatTick types.HeartbeatTick
 
 	// Follower and candidate specific.
-	electionTime time.Time
+	electionTick types.ElectionTick
 
 	// Candidate specific.
 	votedForMe int
@@ -95,7 +93,7 @@ type Reactor struct {
 	indexTermStarted types.Index
 	sync             map[magmatypes.ServerID]*syncProgress
 	matchIndex       map[magmatypes.ServerID]types.Index
-	heartBeatTime    time.Time
+	heartbeatTick    types.HeartbeatTick
 }
 
 // Apply applies command to the state machine.
@@ -105,10 +103,10 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		switch c := cmd.(type) {
 		case *types.ClientRequest:
 			return r.applyClientRequest(c)
-		case types.HeartbeatTimeout:
-			return r.applyHeartbeatTimeout(time.Time(c))
-		case types.ElectionTimeout:
-			return r.applyElectionTimeout(time.Time(c))
+		case types.HeartbeatTick:
+			return r.applyHeartbeatTimeout(c)
+		case types.ElectionTick:
+			return r.applyElectionTimeout(c)
 		}
 	case cmd == nil:
 		return r.applyPeerConnected(peerID)
@@ -276,7 +274,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultError(err)
 	}
 
-	r.heartBeatTime = r.timeSource.Now()
+	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
 		r.commitInfo.NextLogIndex = r.nextLogIndex
@@ -302,12 +300,11 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	return r.resultMessageAndRecipients(req, recipients)
 }
 
-func (r *Reactor) applyHeartbeatTimeout(t time.Time) (Result, error) {
-	if r.role != types.RoleLeader || t.Before(r.heartBeatTime) {
+func (r *Reactor) applyHeartbeatTimeout(tick types.HeartbeatTick) (Result, error) {
+	r.heartbeatTick = tick
+	if r.role != types.RoleLeader || tick <= r.ignoreHeartbeatTick {
 		return r.resultEmpty()
 	}
-
-	r.heartBeatTime = r.timeSource.Now()
 
 	if r.majority == 1 {
 		return r.resultEmpty()
@@ -331,8 +328,9 @@ func (r *Reactor) applyHeartbeatTimeout(t time.Time) (Result, error) {
 	return r.resultMessageAndRecipients(req, recipients)
 }
 
-func (r *Reactor) applyElectionTimeout(t time.Time) (Result, error) {
-	if r.role == types.RoleLeader || t.Before(r.electionTime) {
+func (r *Reactor) applyElectionTimeout(tick types.ElectionTick) (Result, error) {
+	r.electionTick = tick
+	if r.role == types.RoleLeader || tick <= r.ignoreElectionTick {
 		return r.resultEmpty()
 	}
 
@@ -387,7 +385,7 @@ func (r *Reactor) maybeTransitionToFollower(
 func (r *Reactor) transitionToFollower() {
 	r.role = types.RoleFollower
 	r.leaderID = magmatypes.ZeroServerID
-	r.electionTime = r.timeSource.Now()
+	r.ignoreElectionTick = r.electionTick + 1
 	r.votedForMe = 0
 	clear(r.sync)
 	clear(r.matchIndex)
@@ -408,7 +406,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	r.role = types.RoleCandidate
 	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
-	r.electionTime = r.timeSource.Now()
+	r.ignoreElectionTick = r.electionTick + 1
 	clear(r.sync)
 	clear(r.matchIndex)
 
@@ -437,7 +435,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultError(err)
 	}
 
-	r.heartBeatTime = r.timeSource.Now()
+	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
 		r.commitInfo.NextLogIndex = r.nextLogIndex
@@ -492,8 +490,8 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		return nil, err
 	}
 
+	r.ignoreElectionTick = r.electionTick + 1
 	if r.nextLogIndex >= req.NextLogIndex {
-		r.electionTime = r.timeSource.Now()
 		if req.LeaderCommit > r.commitInfo.NextLogIndex {
 			r.commitInfo.NextLogIndex = req.LeaderCommit
 			if r.commitInfo.NextLogIndex > r.nextLogIndex {
@@ -522,7 +520,7 @@ func (r *Reactor) handleVoteRequest(
 		return nil, err
 	}
 	if granted {
-		r.electionTime = r.timeSource.Now()
+		r.ignoreElectionTick = r.electionTick + 1
 	}
 
 	return &types.VoteResponse{

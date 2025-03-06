@@ -30,9 +30,8 @@ type Timeouts struct {
 	roleCh     <-chan types.Role
 	majorityCh <-chan bool
 
-	electionInterval time.Duration
-	tickerHeartbeat  *ticker
-	tickerElection   *ticker
+	tickerHeartbeat *ticker
+	tickerElection  *ticker
 
 	role            types.Role
 	majorityPresent bool
@@ -56,16 +55,6 @@ func (t *Timeouts) Run(ctx context.Context) error {
 	}
 }
 
-// HeartbeatInterval returns interval of the heartbeat timeout.
-func (t *Timeouts) HeartbeatInterval() time.Duration {
-	return heartbeatInterval
-}
-
-// ElectionInterval returns interval of the election timeout.
-func (t *Timeouts) ElectionInterval() time.Duration {
-	return t.electionInterval
-}
-
 // Heartbeat returns heartbeat ticks.
 func (t *Timeouts) Heartbeat() <-chan time.Time {
 	return t.tickerHeartbeat.Ticks()
@@ -81,8 +70,7 @@ func (t *Timeouts) applyRole(role types.Role) {
 	case types.RoleFollower, types.RoleCandidate:
 		t.tickerHeartbeat.Stop()
 		if t.majorityPresent {
-			t.electionInterval = electionInterval()
-			t.tickerElection.Start(t.electionInterval)
+			t.tickerElection.Start(electionInterval())
 		} else {
 			t.tickerElection.Stop()
 		}
@@ -104,8 +92,7 @@ func (t *Timeouts) applyMajority(majorityPresent bool) {
 		t.tickerElection.Stop()
 		return
 	}
-	t.electionInterval = electionInterval()
-	t.tickerElection.Start(t.electionInterval)
+	t.tickerElection.Start(electionInterval())
 }
 
 func electionInterval() time.Duration {

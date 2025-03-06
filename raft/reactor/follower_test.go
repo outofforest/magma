@@ -2,7 +2,6 @@ package reactor
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -28,28 +27,29 @@ func newState() *state.State {
 	return state.NewInMemory(1024 * 1024)
 }
 
-func newReactor(s *state.State) (*Reactor, TimeAdvancer) {
-	timeSource := &TestTimeSource{}
-	return New(serverID, peers, s, maxReadLogSize, maxReadLogSize, timeSource), timeSource
+func newReactor(s *state.State) *Reactor {
+	return New(serverID, peers, s, maxReadLogSize, maxReadLogSize)
 }
 
 func TestFollowerInitialRole(t *testing.T) {
 	requireT := require.New(t)
-	r, ts := newReactor(newState())
-	expectedElectionTime := ts.Add(0)
+	r := newReactor(newState())
 
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(0, r.electionTick)
+	requireT.EqualValues(0, r.ignoreElectionTick)
 }
 
 func TestFollowerSetup(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactor(s)
+	r := newReactor(s)
 
 	r.role = types.RoleCandidate
 	r.leaderID = serverID
 	r.votedForMe = 2
+	r.electionTick = 1
+	r.ignoreElectionTick = 0
 	r.sync[peer1ID] = &syncProgress{
 		NextIndex: 100,
 		End:       100,
@@ -60,13 +60,13 @@ func TestFollowerSetup(t *testing.T) {
 	r.nextLogIndex = 10
 	r.commitInfo = types.CommitInfo{NextLogIndex: 5}
 
-	expectedElectionTime := ts.Add(time.Hour)
 	r.transitionToFollower()
 
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.Zero(r.votedForMe)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.electionTick)
+	requireT.EqualValues(2, r.ignoreElectionTick)
 	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
 
@@ -84,8 +84,7 @@ func TestFollowerSetup(t *testing.T) {
 func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -113,7 +112,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -129,8 +128,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -158,7 +156,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -181,8 +179,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
@@ -210,7 +207,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -234,8 +231,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	_, _, err = s.Append(1, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -263,7 +259,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
@@ -286,8 +282,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -315,7 +310,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
@@ -337,7 +332,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 	_, _, err = s.Append(3, 2, 3, []byte{0x03, 0x03})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 
 	// First time.
 
@@ -431,8 +426,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -460,7 +454,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
@@ -481,8 +475,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
@@ -510,7 +503,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
@@ -531,8 +524,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         2,
@@ -560,7 +552,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -581,8 +573,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer2ID, &types.AppendEntriesRequest{
 		Term:         3,
@@ -610,7 +601,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Zero(r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
@@ -629,7 +620,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -672,7 +663,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -715,7 +706,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLength(t *testing.T) 
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -761,7 +752,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLogLengthOnHeartbeat(t *
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -806,7 +797,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleLogLength(t *t
 	_, _, err = s.Append(3, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 1}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -852,7 +843,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -895,7 +886,7 @@ func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
 	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
 	requireT.NoError(err)
 
-	r, _ := newReactor(s)
+	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{NextLogIndex: 3}
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
@@ -915,8 +906,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         1,
@@ -941,7 +931,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -963,8 +953,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -989,7 +978,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -1011,8 +1000,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1037,7 +1025,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -1055,8 +1043,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         3,
@@ -1081,7 +1068,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -1103,8 +1090,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1129,10 +1115,8 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.EqualValues(2, s.CurrentTerm())
-
-	expectedElectionTime = ts.Add(time.Hour)
 
 	result, err = r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1157,7 +1141,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
@@ -1170,8 +1154,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1196,10 +1179,8 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.EqualValues(2, s.CurrentTerm())
-
-	expectedElectionTime = ts.Add(time.Hour)
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
 		Term:         3,
@@ -1224,7 +1205,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(3, s.CurrentTerm())
 }
@@ -1233,8 +1214,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         1,
@@ -1259,7 +1239,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Zero(r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -1277,8 +1257,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         3,
@@ -1303,7 +1282,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Zero(r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -1321,8 +1300,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1347,7 +1325,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.Zero(r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -1365,8 +1343,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	_, _, err = s.Append(2, 1, 2, []byte{0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
-	r, ts := newReactor(s)
-	expectedElectionTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
@@ -1391,10 +1368,8 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.EqualValues(2, s.CurrentTerm())
-
-	ts.Add(time.Hour)
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
 		Term:         2,
@@ -1419,7 +1394,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 			},
 		},
 	}, result)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(2, s.CurrentTerm())
 }
@@ -1427,15 +1402,13 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactor(s)
+	r := newReactor(s)
 
-	electionTimeoutTime := ts.Add(time.Hour)
-	expectedElectionTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTimeout(electionTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.Equal(expectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, r.ignoreElectionTick)
+	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Equal(Result{
@@ -1471,16 +1444,15 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactor(s)
+	r := newReactor(s)
 
-	electionTimeoutTime := ts.Add(time.Hour)
-	r.electionTime = ts.Add(time.Hour)
-	notExpectedElectionTime := ts.Add(time.Hour)
+	r.ignoreElectionTick = 2
 
-	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTimeout(electionTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.NotEqual(notExpectedElectionTime, r.electionTime)
+	requireT.EqualValues(2, r.ignoreElectionTick)
+	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(0, s.CurrentTerm())
 	requireT.EqualValues(0, r.votedForMe)
 	requireT.Equal(Result{
@@ -1497,22 +1469,20 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactor(s)
+	r := newReactor(s)
 
-	heartbeatTimeoutTime := ts.Add(time.Hour)
-	notExpectedHeartbeatTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTimeout(heartbeatTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.NotEqual(notExpectedHeartbeatTime, r.electionTime)
+	requireT.Zero(r.ignoreHeartbeatTick)
+	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.Equal(Result{}, result)
 }
 
 func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, _ := newReactor(s)
+	r := newReactor(s)
 
 	result, err := r.Apply(magmatypes.ServerID(uuid.New()), nil)
 	requireT.NoError(err)
@@ -1524,9 +1494,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	r, ts := newReactor(s)
-
-	notExpectedHeartbeatTime := ts.Add(time.Hour)
+	r := newReactor(s)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x01},
@@ -1538,7 +1506,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 			NextLogIndex: 0,
 		},
 	}, result)
-	requireT.NotEqual(notExpectedHeartbeatTime, r.heartBeatTime)
+	requireT.Zero(r.ignoreHeartbeatTick)
 	requireT.Zero(r.nextLogIndex)
 	requireT.Empty(r.nextLogIndex)
 	requireT.Empty(r.matchIndex)

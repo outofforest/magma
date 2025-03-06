@@ -2,7 +2,6 @@ package reactor
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -11,24 +10,20 @@ import (
 	magmatypes "github.com/outofforest/magma/types"
 )
 
-func newReactorSingleMode(s *state.State) (*Reactor, TimeAdvancer) {
-	timeSource := &TestTimeSource{}
-	return New(serverID, nil, s, maxReadLogSize, maxReadLogSize, timeSource), timeSource
+func newReactorSingleMode(s *state.State) *Reactor {
+	return New(serverID, nil, s, maxReadLogSize, maxReadLogSize)
 }
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	r, ts := newReactorSingleMode(s)
+	r := newReactorSingleMode(s)
 
-	electionTimeoutTime := ts.Add(time.Hour)
-	expectedElectionTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTimeout(electionTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(expectedElectionTime, r.electionTime)
-	requireT.Equal(expectedElectionTime, r.heartBeatTime)
+	requireT.EqualValues(2, r.ignoreElectionTick)
+	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.Equal(Result{
@@ -68,11 +63,9 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactorSingleMode(s)
+	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
-
-	expectedHeartbeatTime := ts.Add(time.Hour)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x01, 0x01},
@@ -80,7 +73,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
@@ -120,18 +113,15 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
 	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
-	r, ts := newReactorSingleMode(s)
+	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	heartbeatTimeoutTime := ts.Add(time.Hour)
-	expectedHeartbeatTime := ts.Add(time.Hour)
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTimeout(heartbeatTimeoutTime))
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(1))
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(expectedHeartbeatTime, r.heartBeatTime)
+	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
