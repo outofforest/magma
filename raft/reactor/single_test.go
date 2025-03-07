@@ -11,7 +11,9 @@ import (
 )
 
 func newReactorSingleMode(s *state.State) *Reactor {
-	return New(serverID, nil, s, maxReadLogSize, maxReadLogSize)
+	config := config
+	config.Servers = []magmatypes.PeerConfig{{ID: serverID}}
+	return New(config, s)
 }
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {

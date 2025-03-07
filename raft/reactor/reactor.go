@@ -35,28 +35,28 @@ type syncProgress struct {
 }
 
 // New creates new reactor of raft consensus algorithm.
-func New(
-	id magmatypes.ServerID,
-	peers []magmatypes.ServerID,
-	s *state.State,
-	maxLogSizePerMessage, maxLogSizeOnWire uint64,
-) *Reactor {
-	if maxLogSizePerMessage > maxLogSizeOnWire {
-		maxLogSizePerMessage = maxLogSizeOnWire
+func New(config magmatypes.Config, s *state.State) *Reactor {
+	if config.MaxLogSizePerMessage > config.MaxLogSizeOnWire {
+		config.MaxLogSizePerMessage = config.MaxLogSizeOnWire
+	}
+
+	peers := make([]magmatypes.ServerID, 0, len(config.Servers))
+	for _, s := range config.Servers {
+		if s.ID != config.ServerID {
+			peers = append(peers, s.ID)
+		}
 	}
 
 	r := &Reactor{
-		id:                   id,
-		peers:                peers,
-		state:                s,
-		varuint64Buf:         make([]byte, varuint64.MaxSize),
-		maxLogSizePerMessage: maxLogSizePerMessage,
-		maxLogSizeOnWire:     maxLogSizeOnWire,
-		majority:             (len(peers)+1)/2 + 1,
-		lastLogTerm:          s.LastLogTerm(),
-		nextLogIndex:         s.NextLogIndex(),
-		sync:                 map[magmatypes.ServerID]*syncProgress{},
-		matchIndex:           map[magmatypes.ServerID]types.Index{},
+		config:       config,
+		peers:        peers,
+		state:        s,
+		varuint64Buf: make([]byte, varuint64.MaxSize),
+		majority:     len(config.Servers)/2 + 1,
+		lastLogTerm:  s.LastLogTerm(),
+		nextLogIndex: s.NextLogIndex(),
+		sync:         map[magmatypes.ServerID]*syncProgress{},
+		matchIndex:   map[magmatypes.ServerID]types.Index{},
 	}
 	r.transitionToFollower()
 	r.ignoreElectionTick = 0
@@ -66,12 +66,11 @@ func New(
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
-	id                                     magmatypes.ServerID
-	peers                                  []magmatypes.ServerID
-	leaderID                               magmatypes.ServerID
-	state                                  *state.State
-	varuint64Buf                           []byte
-	maxLogSizePerMessage, maxLogSizeOnWire uint64
+	config       magmatypes.Config
+	peers        []magmatypes.ServerID
+	leaderID     magmatypes.ServerID
+	state        *state.State
+	varuint64Buf []byte
 
 	majority             int
 	role                 types.Role
@@ -181,7 +180,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 
 	//nolint:nestif
 	if m.NextLogIndex >= r.sync[peerID].NextIndex {
-		lenToSend := r.maxLogSizeOnWire
+		lenToSend := r.config.MaxLogSizeOnWire
 		endIndex := m.NextLogIndex
 		if r.sync[peerID].End > 0 {
 			endIndex = r.sync[peerID].End
@@ -198,9 +197,9 @@ func (r *Reactor) applyAppendEntriesResponse(
 
 		var reqs []any
 		if lenToSend > 0 {
-			reqs = make([]any, 0, (lenToSend+r.maxLogSizePerMessage-1)/r.maxLogSizePerMessage)
+			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
 			for endIndex < r.nextLogIndex && lenToSend > 0 {
-				maxSize := r.maxLogSizePerMessage
+				maxSize := r.config.MaxLogSizePerMessage
 				if maxSize > lenToSend {
 					maxSize = lenToSend
 				}
@@ -286,7 +285,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(newLogIndex, r.maxLogSizePerMessage)
+	req, err := r.newAppendEntriesRequest(newLogIndex, r.config.MaxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -340,7 +339,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	}
 
 	if r.role == types.RoleLeader {
-		r.matchIndex[r.id] = r.syncedCount
+		r.matchIndex[r.config.ServerID] = r.syncedCount
 		if r.updateLeaderCommit(r.syncedCount) {
 			return r.newHeartbeatRequest()
 		}
@@ -413,7 +412,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
 		return r.resultError(err)
 	}
-	granted, err := r.state.VoteFor(r.id)
+	granted, err := r.state.VoteFor(r.config.ServerID)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -443,7 +442,7 @@ var emptyTx = []byte{0x00}
 
 func (r *Reactor) transitionToLeader() (Result, error) {
 	r.role = types.RoleLeader
-	r.leaderID = r.id
+	r.leaderID = r.config.ServerID
 	clear(r.matchIndex)
 
 	// Add fake item to the log so commit is possible without waiting for a real one.
@@ -460,7 +459,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.indexTermStarted, r.maxLogSizePerMessage)
+	req, err := r.newAppendEntriesRequest(r.indexTermStarted, r.config.MaxLogSizePerMessage)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -620,7 +619,8 @@ func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
 
 	var greater int
 	nextCommittedCount := candidate
-	for _, index := range r.matchIndex {
+	for _, s := range r.config.Servers {
+		index := r.matchIndex[s.ID]
 		if index <= r.commitInfo.CommittedCount || index <= r.indexTermStarted {
 			continue
 		}

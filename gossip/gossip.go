@@ -46,11 +46,7 @@ type client struct {
 }
 
 // New returns gossiping function.
-func New(
-	config types.Config,
-	p2pListener, tx2pListener, c2pListener net.Listener,
-	stateDir string,
-) raft.GossipFunc {
+func New(config types.Config, p2pListener, tx2pListener, c2pListener net.Listener) raft.GossipFunc {
 	validPeers := map[types.ServerID]struct{}{}
 	for _, p := range config.Servers {
 		if p.ID != config.ServerID {
@@ -63,7 +59,6 @@ func New(
 		p2pListener:    p2pListener,
 		tx2pListener:   tx2pListener,
 		c2pListener:    c2pListener,
-		stateDir:       stateDir,
 		minority:       len(config.Servers) / 2,
 		validPeers:     validPeers,
 		p2pMarshaller:  p2p.NewMarshaller(),
@@ -76,7 +71,6 @@ func New(
 type gossip struct {
 	config                                 types.Config
 	p2pListener, tx2pListener, c2pListener net.Listener
-	stateDir                               string
 	minority                               int
 	validPeers                             map[types.ServerID]struct{}
 
@@ -582,7 +576,7 @@ func (g *gossip) c2pHandler(
 			for newCommitInfo := range commitCh {
 				if logF == nil {
 					var err error
-					logF, err = os.Open(filepath.Join(g.stateDir, "log"))
+					logF, err = os.Open(filepath.Join(g.config.StateDir, "log"))
 					if err != nil {
 						return errors.WithStack(err)
 					}
