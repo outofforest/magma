@@ -1105,6 +1105,129 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT.EqualValues(1, r.heartbeatTick)
 }
 
+func TestLeaderApplySyncTickSyncedBelowCommitted(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 10,
+	}
+	r.nextLogIndex = 3
+	r.matchIndex = map[magmatypes.ServerID]types.Index{
+		peer1ID: 10,
+		peer2ID: 10,
+		peer3ID: 10,
+	}
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.Error(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		peer1ID: 10,
+		peer2ID: 10,
+		peer3ID: 10,
+	}, r.matchIndex)
+	requireT.Equal(Result{}, result)
+}
+
+func TestLeaderApplySyncTickOnMinority(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x05, 0x06, 0x07})
+	requireT.NoError(err)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 1,
+	}
+	r.nextLogIndex = 7
+	r.matchIndex = map[magmatypes.ServerID]types.Index{
+		peer1ID: 7,
+	}
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		serverID: 8,
+		peer1ID:  7,
+	}, r.matchIndex)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 1,
+		},
+	}, result)
+}
+
+func TestLeaderApplySyncTickOnMajority(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(5))
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(5, 5, 5, []byte{0x05, 0x06, 0x07})
+	requireT.NoError(err)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 1,
+	}
+	r.nextLogIndex = 7
+	r.matchIndex = map[magmatypes.ServerID]types.Index{
+		peer1ID: 7,
+		peer2ID: 6,
+	}
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(map[magmatypes.ServerID]types.Index{
+		serverID: 8,
+		peer1ID:  7,
+		peer2ID:  6,
+	}, r.matchIndex)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 6,
+		},
+	}, result)
+}
+
 func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()

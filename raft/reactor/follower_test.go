@@ -348,10 +348,11 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 		NextLogTerm:  4,
 		LastLogTerm:  3,
 		Data:         []byte{0x01},
-		LeaderCommit: 0,
+		LeaderCommit: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Zero(r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -676,6 +677,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(2, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -711,6 +713,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(2, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -746,6 +749,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(100, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -784,6 +788,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(100, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -821,6 +826,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Zero(r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
@@ -869,6 +875,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Zero(r.leaderCommittedCount)
 	requireT.Equal(Result{}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -897,6 +904,7 @@ func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Zero(r.leaderCommittedCount)
 	requireT.Equal(Result{}, result)
 }
 
@@ -1475,6 +1483,135 @@ func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT.Zero(r.ignoreHeartbeatTick)
 	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.Equal(Result{}, result)
+}
+
+func TestFollowerApplySyncTickSyncedBelowCommitted(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 10,
+	}
+	r.nextLogIndex = 3
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.Error(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{}, result)
+}
+
+func TestFollowerApplySyncTickCommitToLeader(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 1,
+	}
+	r.leaderCommittedCount = 3
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 3,
+		},
+	}, result)
+}
+
+func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 1,
+	}
+	r.leaderCommittedCount = 10
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 4,
+		},
+	}, result)
+}
+
+func TestFollowerApplySyncTickSendResponse(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01})
+	requireT.NoError(err)
+	_, _, err = s.Append(1, 1, 2, []byte{0x02})
+	requireT.NoError(err)
+	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(err)
+	_, _, err = s.Append(3, 3, 4, []byte{0x04})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(4))
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 1,
+	}
+	r.leaderCommittedCount = 10
+	r.leaderID = peer1ID
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 4,
+		},
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesResponse{
+				Term:         4,
+				NextLogIndex: 4,
+				SyncLogIndex: 4,
+			},
+		},
+	}, result)
 }
 
 func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
