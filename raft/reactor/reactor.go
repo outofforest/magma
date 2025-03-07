@@ -186,7 +186,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 	}
 
 	//nolint:nestif
-	if m.NextLogIndex > r.sync[peerID].NextIndex {
+	if m.NextLogIndex >= r.sync[peerID].NextIndex {
 		lenToSend := r.maxLogSizeOnWire
 		endIndex := m.NextLogIndex
 		if r.sync[peerID].End > 0 {
@@ -234,14 +234,9 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultMessagesAndRecipient(reqs, peerID)
 	}
 
-	req, err := r.newAppendEntriesRequest(m.NextLogIndex, r.maxLogSizePerMessage)
-	if err != nil {
-		return Result{}, err
-	}
-
-	r.sync[peerID].NextIndex = req.NextLogIndex
-
-	return r.resultMessageAndRecipient(req, peerID)
+	// We send no logs until a common point is found.
+	r.sync[peerID].NextIndex = m.NextLogIndex
+	return r.resultMessageAndRecipient(r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
 }
 
 func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
@@ -380,16 +375,11 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	delete(r.matchIndex, peerID)
 
-	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
 	pSync := r.sync[peerID]
 	pSync.NextIndex = r.nextLogIndex
 	pSync.End = 0
 
-	return r.resultMessageAndRecipient(req, peerID)
+	return r.resultMessageAndRecipient(r.newAppendEntriesRequestNext(), peerID)
 }
 
 func (r *Reactor) maybeTransitionToFollower(
@@ -511,6 +501,28 @@ func (r *Reactor) newAppendEntriesRequest(
 	}, nil
 }
 
+func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.AppendEntriesRequest {
+	return &types.AppendEntriesRequest{
+		Term:         r.state.CurrentTerm(),
+		NextLogIndex: nextLogIndex,
+		LastLogTerm:  r.state.PreviousTerm(nextLogIndex),
+		NextLogTerm:  r.state.PreviousTerm(nextLogIndex + 1),
+		Data:         nil,
+		LeaderCommit: r.commitInfo.CommittedCount,
+	}
+}
+
+func (r *Reactor) newAppendEntriesRequestNext() *types.AppendEntriesRequest {
+	return &types.AppendEntriesRequest{
+		Term:         r.state.CurrentTerm(),
+		NextLogIndex: r.nextLogIndex,
+		LastLogTerm:  r.lastLogTerm,
+		NextLogTerm:  r.lastLogTerm,
+		Data:         nil,
+		LeaderCommit: r.commitInfo.CommittedCount,
+	}
+}
+
 func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
@@ -543,7 +555,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		r.syncedCount = req.NextLogIndex
 	}
 
-	if r.nextLogIndex < req.NextLogIndex {
+	if r.lastLogTerm < req.NextLogTerm || r.nextLogIndex < req.NextLogIndex {
 		resp.SyncLogIndex = r.syncedCount
 		resp.NextLogIndex = r.nextLogIndex
 		return resp, nil
@@ -597,12 +609,7 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
-	return r.resultMessageAndRecipients(req, recipients)
+	return r.resultMessageAndRecipients(r.newAppendEntriesRequestNext(), recipients)
 }
 
 func (r *Reactor) updateFollowerCommit() {

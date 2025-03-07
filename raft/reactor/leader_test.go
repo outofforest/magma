@@ -506,7 +506,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 				NextLogIndex: 2,
 				NextLogTerm:  3,
 				LastLogTerm:  2,
-				Data:         []byte{0x03},
+				Data:         nil,
 			},
 		},
 	}, result)
