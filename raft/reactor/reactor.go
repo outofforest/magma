@@ -76,15 +76,15 @@ type Reactor struct {
 	varuint64Buf                           []byte
 	maxLogSizePerMessage, maxLogSizeOnWire uint64
 
-	majority            int
-	role                types.Role
-	lastLogTerm         types.Term
-	nextLogIndex        types.Index
-	syncedCount         types.Index
-	leaderCommitIndex   types.Index
-	commitInfo          types.CommitInfo
-	ignoreElectionTick  types.ElectionTick
-	ignoreHeartbeatTick types.HeartbeatTick
+	majority             int
+	role                 types.Role
+	lastLogTerm          types.Term
+	nextLogIndex         types.Index
+	syncedCount          types.Index
+	leaderCommittedCount types.Index
+	commitInfo           types.CommitInfo
+	ignoreElectionTick   types.ElectionTick
+	ignoreHeartbeatTick  types.HeartbeatTick
 
 	// Follower and candidate specific.
 	electionTick types.ElectionTick
@@ -363,6 +363,9 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	if err != nil {
 		return r.resultError(err)
 	}
+	if r.syncedCount < r.commitInfo.CommittedCount {
+		return r.resultError(errors.New("bug in protocol"))
+	}
 
 	if r.role == types.RoleLeader {
 		r.matchIndex[r.id] = r.syncedCount
@@ -541,7 +544,6 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
-	r.leaderCommitIndex = req.LeaderCommit
 
 	var err error
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Data)
@@ -556,13 +558,14 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		r.syncedCount = req.NextLogIndex
 	}
 
-	r.updateFollowerCommit()
-
 	if r.nextLogIndex < req.NextLogIndex {
 		resp.SyncLogIndex = r.syncedCount
 		resp.NextLogIndex = r.nextLogIndex
 		return resp, nil
 	}
+
+	r.leaderCommittedCount = req.LeaderCommit
+	r.updateFollowerCommit()
 
 	return nil, nil //nolint:nilnil
 }
@@ -593,8 +596,8 @@ func (r *Reactor) handleVoteRequest(
 }
 
 func (r *Reactor) updateFollowerCommit() {
-	if r.leaderCommitIndex > r.commitInfo.CommittedCount {
-		r.commitInfo.CommittedCount = r.leaderCommitIndex
+	if r.leaderCommittedCount > r.commitInfo.CommittedCount {
+		r.commitInfo.CommittedCount = r.leaderCommittedCount
 		if r.commitInfo.CommittedCount > r.syncedCount {
 			r.commitInfo.CommittedCount = r.syncedCount
 		}
