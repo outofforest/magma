@@ -103,7 +103,7 @@ func (s *State) VoteFor(candidate types.ServerID) (bool, error) {
 // LastLogTerm returns the term of the last log entry in the state.
 // If the log is empty, it returns 0.
 func (s *State) LastLogTerm() rafttypes.Term {
-	return s.previousTerm(s.nextLogIndex)
+	return s.PreviousTerm(s.nextLogIndex)
 }
 
 // NextLogIndex returns the index of the next log entry.
@@ -111,6 +111,16 @@ func (s *State) LastLogTerm() rafttypes.Term {
 // It effectively points to the position where a new log entry would be appended.
 func (s *State) NextLogIndex() rafttypes.Index {
 	return s.nextLogIndex
+}
+
+// PreviousTerm returns term of previous log item.
+func (s *State) PreviousTerm(index rafttypes.Index) rafttypes.Term {
+	for i := len(s.terms) - 1; i >= 0; i-- {
+		if s.terms[i] < index {
+			return rafttypes.Term(i + 1)
+		}
+	}
+	return 0
 }
 
 // Entries retrieves the log entries starting from the given nextLogIndex.
@@ -122,11 +132,11 @@ func (s *State) Entries(startIndex rafttypes.Index, maxSize uint64) (rafttypes.T
 		return 0, 0, nil, errors.New("bug in protocol")
 	}
 
-	previousTerm := s.previousTerm(startIndex)
+	previousTerm := s.PreviousTerm(startIndex)
 	if startIndex == s.nextLogIndex {
 		return previousTerm, previousTerm, nil, nil
 	}
-	nextTerm := s.previousTerm(startIndex + 1)
+	nextTerm := s.PreviousTerm(startIndex + 1)
 
 	entries := s.log[startIndex:s.nextLogIndex]
 	if nextTerm < rafttypes.Term(len(s.terms)) {
@@ -189,14 +199,14 @@ func (s *State) Append(
 	}
 
 	if nextLogIndex > s.nextLogIndex {
-		return s.previousTerm(s.nextLogIndex), s.nextLogIndex, nil
+		return s.PreviousTerm(s.nextLogIndex), s.nextLogIndex, nil
 	}
 
-	if s.previousTerm(nextLogIndex) == lastLogTerm {
+	if s.PreviousTerm(nextLogIndex) == lastLogTerm {
 		return s.appendLog(nextLogIndex, lastLogTerm, term, data)
 	}
 
-	revertTerm := s.previousTerm(nextLogIndex) - 1
+	revertTerm := s.PreviousTerm(nextLogIndex) - 1
 	s.nextLogIndex = s.terms[revertTerm]
 	s.terms = s.terms[:revertTerm]
 
@@ -214,22 +224,13 @@ func (s *State) Sync() (rafttypes.Index, error) {
 	return s.nextLogIndex, nil
 }
 
-func (s *State) previousTerm(index rafttypes.Index) rafttypes.Term {
-	for i := len(s.terms) - 1; i >= 0; i-- {
-		if s.terms[i] < index {
-			return rafttypes.Term(i + 1)
-		}
-	}
-	return 0
-}
-
 func (s *State) appendLog(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm,
 	term rafttypes.Term,
 	data []byte,
 ) (rafttypes.Term, rafttypes.Index, error) {
-	if s.nextLogIndex > nextLogIndex && term <= s.previousTerm(nextLogIndex+1) {
+	if s.nextLogIndex > nextLogIndex && term <= s.PreviousTerm(nextLogIndex+1) {
 		return 0, 0, errors.New("bug in protocol")
 	}
 	s.terms = s.terms[:lastLogTerm]

@@ -206,6 +206,51 @@ func TestNextLogIndex(t *testing.T) {
 	requireT.EqualValues(2, s.NextLogIndex())
 }
 
+func TestPreviousTerm(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.EqualValues(0, s.PreviousTerm(1000))
+	requireT.EqualValues(0, s.PreviousTerm(1))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{0}
+	requireT.EqualValues(1, s.PreviousTerm(1000))
+	requireT.EqualValues(1, s.PreviousTerm(1))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{1}
+	requireT.EqualValues(1, s.PreviousTerm(1000))
+	requireT.EqualValues(0, s.PreviousTerm(1))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{0, 0, 0}
+	requireT.EqualValues(3, s.PreviousTerm(1000))
+	requireT.EqualValues(3, s.PreviousTerm(1))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{0, 1, 2}
+	requireT.EqualValues(3, s.PreviousTerm(1000))
+	requireT.EqualValues(1, s.PreviousTerm(1))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{0, 1, 2}
+	requireT.EqualValues(3, s.PreviousTerm(1000))
+	requireT.EqualValues(2, s.PreviousTerm(2))
+	requireT.EqualValues(0, s.PreviousTerm(0))
+
+	s.terms = []rafttypes.Index{0, 0, 3, 3, 3, 5, 5}
+	requireT.EqualValues(0, s.PreviousTerm(0))
+	requireT.EqualValues(2, s.PreviousTerm(1))
+	requireT.EqualValues(2, s.PreviousTerm(2))
+	requireT.EqualValues(2, s.PreviousTerm(3))
+	requireT.EqualValues(5, s.PreviousTerm(4))
+	requireT.EqualValues(5, s.PreviousTerm(5))
+	requireT.EqualValues(7, s.PreviousTerm(6))
+	requireT.EqualValues(7, s.PreviousTerm(7))
+}
+
 func TestEntries(t *testing.T) {
 	requireT := require.New(t)
 

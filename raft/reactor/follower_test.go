@@ -533,15 +533,14 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, 1, []byte{0x00})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
-
 	r := newReactor(s)
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 3,
-		NextLogTerm:  4,
+		NextLogTerm:  2,
 		LastLogTerm:  2,
 		Data:         nil,
 		LeaderCommit: 0,
@@ -553,6 +552,104 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.Equal(peer1ID, r.leaderID)
+
+	requireT.EqualValues(4, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x00}, entries)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+}
+
+func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         4,
+		NextLogIndex: 3,
+		NextLogTerm:  3,
+		LastLogTerm:  2,
+		Data:         nil,
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 0,
+		},
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesResponse{
+				Term:         4,
+				NextLogIndex: 3,
+				SyncLogIndex: 0,
+			},
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.Equal(peer1ID, r.leaderID)
+
+	requireT.EqualValues(4, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x00}, entries)
+	_, _, entries, err = s.Entries(1, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+}
+
+func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         4,
+		NextLogIndex: 4,
+		NextLogTerm:  2,
+		LastLogTerm:  2,
+		Data:         nil,
+		LeaderCommit: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 0,
+		},
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesResponse{
+				Term:         4,
+				NextLogIndex: 3,
+				SyncLogIndex: 0,
+			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
