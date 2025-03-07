@@ -27,9 +27,10 @@ import (
 const queueCapacity = 10
 
 type peerP2P struct {
-	ID        types.ServerID
-	SendCh    chan []any
-	Connected bool
+	ID          types.ServerID
+	SendCh      chan []any
+	InstalledCh chan struct{}
+	Connected   bool
 }
 
 type peerTx2P struct {
@@ -266,6 +267,7 @@ func (g *gossip) runSupervisor(
 					close(pOld.SendCh)
 				}
 				peersP2P[p.ID] = p
+				close(p.InstalledCh)
 				if !exists && len(peersP2P) == g.minority {
 					majorityCh <- true
 				}
@@ -387,15 +389,18 @@ func (g *gossip) p2pHandler(
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
 			p := peerP2P{
-				ID:        h.ServerID,
-				SendCh:    ch,
-				Connected: true,
+				ID:          h.ServerID,
+				SendCh:      ch,
+				InstalledCh: make(chan struct{}),
+				Connected:   true,
 			}
 			peerCh <- p
 			defer func() {
 				p.Connected = false
 				peerCh <- p
 			}()
+
+			<-p.InstalledCh
 
 			cmdCh <- rafttypes.Command{
 				PeerID: h.ServerID,
