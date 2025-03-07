@@ -11,6 +11,8 @@ import (
 	magmatypes "github.com/outofforest/magma/types"
 )
 
+const maxReadLogSize = 5
+
 var (
 	serverID = magmatypes.ServerID(uuid.New())
 	peer1ID  = magmatypes.ServerID(uuid.New())
@@ -18,17 +20,26 @@ var (
 	peer3ID  = magmatypes.ServerID(uuid.New())
 	peer4ID  = magmatypes.ServerID(uuid.New())
 
-	peers = []magmatypes.ServerID{peer1ID, peer2ID, peer3ID, peer4ID}
+	config = magmatypes.Config{
+		ServerID: serverID,
+		Servers: []magmatypes.PeerConfig{
+			{ID: serverID},
+			{ID: peer1ID},
+			{ID: peer2ID},
+			{ID: peer3ID},
+			{ID: peer4ID},
+		},
+		MaxLogSizePerMessage: maxReadLogSize,
+		MaxLogSizeOnWire:     2 * maxReadLogSize,
+	}
 )
-
-const maxReadLogSize = 5
 
 func newState() *state.State {
 	return state.NewInMemory(1024 * 1024)
 }
 
 func newReactor(s *state.State) *Reactor {
-	return New(serverID, peers, s, maxReadLogSize, 2*maxReadLogSize)
+	return New(config, s)
 }
 
 func TestFollowerInitialRole(t *testing.T) {
