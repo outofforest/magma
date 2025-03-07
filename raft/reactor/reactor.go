@@ -353,9 +353,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	if r.role == types.RoleLeader {
 		r.matchIndex[r.id] = r.syncedCount
 		if r.syncedCount > r.commitInfo.CommittedCount {
-			oldCommit := r.commitInfo.CommittedCount
-			r.updateLeaderCommit()
-			if r.commitInfo.CommittedCount != oldCommit {
+			if r.updateLeaderCommit() {
 				return r.newHeartbeatRequest()
 			}
 		}
