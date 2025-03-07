@@ -321,24 +321,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	if r.majority == 1 {
-		return r.resultEmpty()
-	}
-
-	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
-	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	for _, p := range r.peers {
-		pSync := r.sync[p]
-		if pSync.NextIndex == r.nextLogIndex && pSync.End == r.nextLogIndex {
-			recipients = append(recipients, p)
-		}
-	}
-
-	return r.resultMessageAndRecipients(req, recipients)
+	return r.newHeartbeatRequest()
 }
 
 func (r *Reactor) applyElectionTick(tick types.ElectionTick) (Result, error) {
@@ -370,7 +353,9 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	if r.role == types.RoleLeader {
 		r.matchIndex[r.id] = r.syncedCount
 		if r.syncedCount > r.commitInfo.CommittedCount {
-			r.updateLeaderCommit()
+			if r.updateLeaderCommit() {
+				return r.newHeartbeatRequest()
+			}
 		}
 		return r.resultEmpty()
 	}
@@ -595,6 +580,31 @@ func (r *Reactor) handleVoteRequest(
 	}, nil
 }
 
+func (r *Reactor) newHeartbeatRequest() (Result, error) {
+	if r.majority == 1 {
+		return r.resultEmpty()
+	}
+
+	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
+	for _, p := range r.peers {
+		pSync := r.sync[p]
+		if pSync.NextIndex == r.nextLogIndex && pSync.End == r.nextLogIndex {
+			recipients = append(recipients, p)
+		}
+	}
+
+	if len(recipients) == 0 {
+		return r.resultEmpty()
+	}
+
+	req, err := r.newAppendEntriesRequest(r.nextLogIndex, r.maxLogSizePerMessage)
+	if err != nil {
+		return r.resultError(err)
+	}
+
+	return r.resultMessageAndRecipients(req, recipients)
+}
+
 func (r *Reactor) updateFollowerCommit() {
 	if r.leaderCommittedCount > r.commitInfo.CommittedCount {
 		r.commitInfo.CommittedCount = r.leaderCommittedCount
@@ -604,7 +614,7 @@ func (r *Reactor) updateFollowerCommit() {
 	}
 }
 
-func (r *Reactor) updateLeaderCommit() {
+func (r *Reactor) updateLeaderCommit() bool {
 	// FIXME (wojciech): This is executed frequently and must be optimised.
 	r.commitIndexes = r.commitIndexes[:0]
 	for _, index := range r.matchIndex {
@@ -614,7 +624,7 @@ func (r *Reactor) updateLeaderCommit() {
 	}
 
 	if len(r.commitIndexes) < r.majority {
-		return
+		return false
 	}
 
 	sort.Slice(r.commitIndexes, func(i, j int) bool {
@@ -622,6 +632,7 @@ func (r *Reactor) updateLeaderCommit() {
 	})
 
 	r.commitInfo.CommittedCount = r.commitIndexes[r.majority-1]
+	return true
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {
