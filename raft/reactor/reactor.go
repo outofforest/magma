@@ -7,8 +7,6 @@ package reactor
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
 
 import (
-	"sort"
-
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/state"
@@ -59,7 +57,6 @@ func New(
 		nextLogIndex:         s.NextLogIndex(),
 		sync:                 map[magmatypes.ServerID]*syncProgress{},
 		matchIndex:           map[magmatypes.ServerID]types.Index{},
-		commitIndexes:        make([]types.Index, len(peers)+1),
 	}
 	r.transitionToFollower()
 	r.ignoreElectionTick = 0
@@ -96,7 +93,6 @@ type Reactor struct {
 	indexTermStarted types.Index
 	sync             map[magmatypes.ServerID]*syncProgress
 	matchIndex       map[magmatypes.ServerID]types.Index
-	commitIndexes    []types.Index
 	heartbeatTick    types.HeartbeatTick
 }
 
@@ -172,9 +168,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 
 	if m.NextLogIndex > r.sync[peerID].NextIndex {
 		r.matchIndex[peerID] = m.SyncLogIndex
-		if m.SyncLogIndex > r.commitInfo.CommittedCount {
-			r.updateLeaderCommit()
-		}
+		r.updateLeaderCommit(m.SyncLogIndex)
 	}
 
 	if m.NextLogIndex == r.nextLogIndex {
@@ -347,10 +341,8 @@ func (r *Reactor) applySyncTick() (Result, error) {
 
 	if r.role == types.RoleLeader {
 		r.matchIndex[r.id] = r.syncedCount
-		if r.syncedCount > r.commitInfo.CommittedCount {
-			if r.updateLeaderCommit() {
-				return r.newHeartbeatRequest()
-			}
+		if r.updateLeaderCommit(r.syncedCount) {
+			return r.newHeartbeatRequest()
 		}
 		return r.resultEmpty()
 	}
@@ -621,25 +613,27 @@ func (r *Reactor) updateFollowerCommit() {
 	}
 }
 
-func (r *Reactor) updateLeaderCommit() bool {
-	// FIXME (wojciech): This is executed frequently and must be optimised.
-	r.commitIndexes = r.commitIndexes[:0]
-	for _, index := range r.matchIndex {
-		if index > r.commitInfo.CommittedCount && index > r.indexTermStarted {
-			r.commitIndexes = append(r.commitIndexes, index)
-		}
-	}
-
-	if len(r.commitIndexes) < r.majority {
+func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
+	if candidate <= r.commitInfo.CommittedCount || candidate <= r.indexTermStarted {
 		return false
 	}
 
-	sort.Slice(r.commitIndexes, func(i, j int) bool {
-		return r.commitIndexes[i] > r.commitIndexes[j]
-	})
-
-	r.commitInfo.CommittedCount = r.commitIndexes[r.majority-1]
-	return true
+	var greater int
+	nextCommittedCount := candidate
+	for _, index := range r.matchIndex {
+		if index <= r.commitInfo.CommittedCount || index <= r.indexTermStarted {
+			continue
+		}
+		if index < nextCommittedCount {
+			nextCommittedCount = index
+		}
+		greater++
+		if greater == r.majority {
+			r.commitInfo.CommittedCount = nextCommittedCount
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Reactor) appendData(data []byte) (types.Index, error) {
