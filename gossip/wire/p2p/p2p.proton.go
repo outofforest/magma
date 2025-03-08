@@ -3,7 +3,6 @@ package p2p
 import (
 	"unsafe"
 
-	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
@@ -11,8 +10,7 @@ import (
 )
 
 const (
-	id4 uint64 = iota + 1
-	id3
+	id3 uint64 = iota + 1
 	id2
 	id1
 	id0
@@ -34,14 +32,12 @@ type Marshaller struct {
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
 	case *types.AppendEntriesRequest:
-		return id4, nil
-	case *types.AppendEntriesResponse:
 		return id3, nil
-	case *types.VoteRequest:
+	case *types.AppendEntriesResponse:
 		return id2, nil
-	case *types.VoteResponse:
+	case *types.VoteRequest:
 		return id1, nil
-	case *wire.Hello:
+	case *types.VoteResponse:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -52,14 +48,12 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *types.AppendEntriesRequest:
-		return size4(msg2), nil
-	case *types.AppendEntriesResponse:
 		return size3(msg2), nil
-	case *types.VoteRequest:
+	case *types.AppendEntriesResponse:
 		return size2(msg2), nil
-	case *types.VoteResponse:
+	case *types.VoteRequest:
 		return size1(msg2), nil
-	case *wire.Hello:
+	case *types.VoteResponse:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -72,14 +66,12 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 	switch msg2 := msg.(type) {
 	case *types.AppendEntriesRequest:
-		return id4, marshal4(msg2, buf), nil
-	case *types.AppendEntriesResponse:
 		return id3, marshal3(msg2, buf), nil
-	case *types.VoteRequest:
+	case *types.AppendEntriesResponse:
 		return id2, marshal2(msg2, buf), nil
-	case *types.VoteResponse:
+	case *types.VoteRequest:
 		return id1, marshal1(msg2, buf), nil
-	case *wire.Hello:
+	case *types.VoteResponse:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -91,56 +83,24 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
-	case id4:
-		msg := &types.AppendEntriesRequest{}
-		return msg, unmarshal4(msg, buf), nil
 	case id3:
-		msg := &types.AppendEntriesResponse{}
+		msg := &types.AppendEntriesRequest{}
 		return msg, unmarshal3(msg, buf), nil
 	case id2:
-		msg := &types.VoteRequest{}
+		msg := &types.AppendEntriesResponse{}
 		return msg, unmarshal2(msg, buf), nil
 	case id1:
-		msg := &types.VoteResponse{}
+		msg := &types.VoteRequest{}
 		return msg, unmarshal1(msg, buf), nil
 	case id0:
-		msg := &wire.Hello{}
+		msg := &types.VoteResponse{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
 }
 
-func size0(m *wire.Hello) uint64 {
-	var n uint64 = 16
-	return n
-}
-
-func marshal0(m *wire.Hello, b []byte) uint64 {
-	var o uint64
-	{
-		// ServerID
-
-		copy(b[o:o+16], unsafe.Slice(&m.ServerID[0], 16))
-		o += 16
-	}
-
-	return o
-}
-
-func unmarshal0(m *wire.Hello, b []byte) uint64 {
-	var o uint64
-	{
-		// ServerID
-
-		copy(unsafe.Slice(&m.ServerID[0], 16), b[o:o+16])
-		o += 16
-	}
-
-	return o
-}
-
-func size1(m *types.VoteResponse) uint64 {
+func size0(m *types.VoteResponse) uint64 {
 	var n uint64 = 2
 	{
 		// Term
@@ -171,7 +131,7 @@ func size1(m *types.VoteResponse) uint64 {
 	return n
 }
 
-func marshal1(m *types.VoteResponse, b []byte) uint64 {
+func marshal0(m *types.VoteResponse, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// Term
@@ -330,7 +290,7 @@ func marshal1(m *types.VoteResponse, b []byte) uint64 {
 	return o
 }
 
-func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
+func unmarshal0(m *types.VoteResponse, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// Term
@@ -390,7 +350,7 @@ func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
 	return o
 }
 
-func size2(m *types.VoteRequest) uint64 {
+func size1(m *types.VoteRequest) uint64 {
 	var n uint64 = 3
 	{
 		// Term
@@ -473,7 +433,7 @@ func size2(m *types.VoteRequest) uint64 {
 	return n
 }
 
-func marshal2(m *types.VoteRequest, b []byte) uint64 {
+func marshal1(m *types.VoteRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -911,7 +871,7 @@ func marshal2(m *types.VoteRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
+func unmarshal1(m *types.VoteRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -1064,7 +1024,7 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 	return o
 }
 
-func size3(m *types.AppendEntriesResponse) uint64 {
+func size2(m *types.AppendEntriesResponse) uint64 {
 	var n uint64 = 3
 	{
 		// Term
@@ -1147,7 +1107,7 @@ func size3(m *types.AppendEntriesResponse) uint64 {
 	return n
 }
 
-func marshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
+func marshal2(m *types.AppendEntriesResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -1585,7 +1545,7 @@ func marshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 	return o
 }
 
-func unmarshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
+func unmarshal2(m *types.AppendEntriesResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -1738,7 +1698,7 @@ func unmarshal3(m *types.AppendEntriesResponse, b []byte) uint64 {
 	return o
 }
 
-func size4(m *types.AppendEntriesRequest) uint64 {
+func size3(m *types.AppendEntriesRequest) uint64 {
 	var n uint64 = 6
 	{
 		// Term
@@ -1901,7 +1861,7 @@ func size4(m *types.AppendEntriesRequest) uint64 {
 	return n
 }
 
-func marshal4(m *types.AppendEntriesRequest, b []byte) uint64 {
+func marshal3(m *types.AppendEntriesRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -2776,7 +2736,7 @@ func marshal4(m *types.AppendEntriesRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal4(m *types.AppendEntriesRequest, b []byte) uint64 {
+func unmarshal3(m *types.AppendEntriesRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term

@@ -8,7 +8,7 @@ import (
 //go:generate go run .
 
 func main() {
-	proton.Generate("../tx2p.proton.go",
+	proton.Generate("../hello.proton.go",
 		wire.Hello{},
 	)
 }

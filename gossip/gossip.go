@@ -14,8 +14,8 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
+	"github.com/outofforest/magma/gossip/wire/hello"
 	"github.com/outofforest/magma/gossip/wire/p2p"
-	"github.com/outofforest/magma/gossip/wire/tx2p"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/reactor"
 	rafttypes "github.com/outofforest/magma/raft/types"
@@ -55,15 +55,15 @@ func New(config types.Config, p2pListener, tx2pListener, c2pListener net.Listene
 	}
 
 	g := &gossip{
-		config:         config,
-		p2pListener:    p2pListener,
-		tx2pListener:   tx2pListener,
-		c2pListener:    c2pListener,
-		minority:       len(config.Servers) / 2,
-		validPeers:     validPeers,
-		p2pMarshaller:  p2p.NewMarshaller(),
-		tx2pMarshaller: tx2p.NewMarshaller(),
-		c2pMarshaller:  c2p.NewMarshaller(),
+		config:          config,
+		p2pListener:     p2pListener,
+		tx2pListener:    tx2pListener,
+		c2pListener:     c2pListener,
+		minority:        len(config.Servers) / 2,
+		validPeers:      validPeers,
+		helloMarshaller: hello.NewMarshaller(),
+		p2pMarshaller:   p2p.NewMarshaller(),
+		c2pMarshaller:   c2p.NewMarshaller(),
 	}
 	return g.Run
 }
@@ -74,9 +74,9 @@ type gossip struct {
 	minority                               int
 	validPeers                             map[types.ServerID]struct{}
 
-	p2pMarshaller  p2p.Marshaller
-	tx2pMarshaller tx2p.Marshaller
-	c2pMarshaller  c2p.Marshaller
+	helloMarshaller hello.Marshaller
+	p2pMarshaller   p2p.Marshaller
+	c2pMarshaller   c2p.Marshaller
 }
 
 func (g *gossip) Run(
@@ -348,33 +348,9 @@ func (g *gossip) p2pHandler(
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	if err := c.SendProton(&wire.Hello{
-		ServerID: g.config.ServerID,
-	}, g.p2pMarshaller); err != nil {
-		return err
-	}
-
-	m, err := c.ReceiveProton(g.p2pMarshaller)
+	peerID, err := g.hello(c, expectedPeerID)
 	if err != nil {
 		return err
-	}
-
-	h, ok := m.(*wire.Hello)
-	if !ok {
-		return errors.New("expected hello, got sth else")
-	}
-
-	if _, exists := g.validPeers[h.ServerID]; !exists {
-		return errors.New("unknown peer")
-	}
-
-	switch {
-	case expectedPeerID == types.ZeroServerID:
-		if initConnection(g.config.ServerID, h.ServerID) {
-			return errors.New("peer should wait for my connection")
-		}
-	case h.ServerID != expectedPeerID:
-		return errors.New("unexpected peer")
 	}
 
 	ch := make(chan []any, queueCapacity)
@@ -383,7 +359,7 @@ func (g *gossip) p2pHandler(
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
 			p := peerP2P{
-				ID:          h.ServerID,
+				ID:          peerID,
 				SendCh:      ch,
 				InstalledCh: make(chan struct{}),
 				Connected:   true,
@@ -397,7 +373,7 @@ func (g *gossip) p2pHandler(
 			<-p.InstalledCh
 
 			cmdCh <- rafttypes.Command{
-				PeerID: h.ServerID,
+				PeerID: peerID,
 			}
 
 			for {
@@ -406,14 +382,9 @@ func (g *gossip) p2pHandler(
 					return err
 				}
 
-				switch m.(type) {
-				case *wire.Hello:
-					return errors.New("unexpected hello")
-				default:
-					cmdCh <- rafttypes.Command{
-						PeerID: h.ServerID,
-						Cmd:    m,
-					}
+				cmdCh <- rafttypes.Command{
+					PeerID: peerID,
+					Cmd:    m,
 				}
 			}
 		})
@@ -445,39 +416,15 @@ func (g *gossip) tx2pHandler(
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	if err := c.SendProton(&wire.Hello{
-		ServerID: g.config.ServerID,
-	}, g.tx2pMarshaller); err != nil {
-		return err
-	}
-
-	m, err := c.ReceiveProton(g.tx2pMarshaller)
+	peerID, err := g.hello(c, expectedPeerID)
 	if err != nil {
 		return err
-	}
-
-	h, ok := m.(*wire.Hello)
-	if !ok {
-		return errors.New("expected hello, got sth else")
-	}
-
-	if _, exists := g.validPeers[h.ServerID]; !exists {
-		return errors.New("unknown peer")
-	}
-
-	switch {
-	case expectedPeerID == types.ZeroServerID:
-		if initConnection(g.config.ServerID, h.ServerID) {
-			return errors.New("peer should wait for my connection")
-		}
-	case h.ServerID != expectedPeerID:
-		return errors.New("unexpected peer")
 	}
 
 	ch := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch
 	p := peerTx2P{
-		ID:         h.ServerID,
+		ID:         peerID,
 		LeaderCh:   ch,
 		Connection: c,
 		Connected:  true,
@@ -601,6 +548,39 @@ func (g *gossip) c2pHandler(
 
 		return nil
 	})
+}
+
+func (g *gossip) hello(c *resonance.Connection, expectedPeerID types.ServerID) (types.ServerID, error) {
+	if err := c.SendProton(&wire.Hello{
+		ServerID: g.config.ServerID,
+	}, g.helloMarshaller); err != nil {
+		return types.ZeroServerID, err
+	}
+
+	m, err := c.ReceiveProton(g.helloMarshaller)
+	if err != nil {
+		return types.ZeroServerID, err
+	}
+
+	h, ok := m.(*wire.Hello)
+	if !ok {
+		return types.ZeroServerID, errors.New("expected hello, got sth else")
+	}
+
+	if _, exists := g.validPeers[h.ServerID]; !exists {
+		return types.ZeroServerID, errors.New("unknown peer")
+	}
+
+	switch {
+	case expectedPeerID == types.ZeroServerID:
+		if initConnection(g.config.ServerID, h.ServerID) {
+			return types.ZeroServerID, errors.New("peer should wait for my connection")
+		}
+	case h.ServerID != expectedPeerID:
+		return types.ZeroServerID, errors.New("unexpected peer")
+	}
+
+	return h.ServerID, nil
 }
 
 func initConnection(serverID, peerID types.ServerID) bool {
