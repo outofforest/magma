@@ -513,17 +513,14 @@ func (g *gossip) l2pHandler(
 
 				switch m := msg.(type) {
 				case *l2p.RawBytesAnnouncement:
-					// for m.Length > 0 {
 					data, err := c.ReceiveBytes()
 					if err != nil {
 						return err
 					}
-					m.Length -= uint64(len(data))
 					cmdCh <- rafttypes.Command{
 						PeerID: peerID,
 						Cmd:    data,
 					}
-					// }
 				default:
 					cmdCh <- rafttypes.Command{
 						PeerID: peerID,
@@ -543,9 +540,7 @@ func (g *gossip) l2pHandler(
 				for _, msg := range msgs {
 					switch m := msg.(type) {
 					case []byte:
-						if err := c.SendProton(&l2p.RawBytesAnnouncement{
-							Length: uint64(len(m)),
-						}, g.l2pMarshaller); err != nil {
+						if err := c.SendProton(&l2p.RawBytesAnnouncement{}, g.l2pMarshaller); err != nil {
 							return err
 						}
 						if err := c.SendBytes(m); err != nil {

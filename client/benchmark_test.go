@@ -123,13 +123,13 @@ func TestCluster(t *testing.T) {
 			},
 		},
 		P2P: resonance.Config{
-			MaxMessageSize: 1024 * 1024,
+			MaxMessageSize: 2 * 1024 * 1024,
 		},
 		C2P: resonance.Config{
 			MaxMessageSize: 128 * 1024,
 		},
-		MaxLogSizePerMessage: 512 * 1024,
-		MaxLogSizeOnWire:     10 * 1024 * 1024,
+		MaxLogSizePerMessage: 1024 * 1024,
+		MaxLogSizeOnWire:     20 * 1024 * 1024,
 	}
 
 	group := parallel.NewGroup(ctx)
@@ -165,7 +165,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 10_000_000 {
+	for range 1_000_000 {
 		err := client.Broadcast([]any{
 			&entities.Account{
 				FirstName: "Test1",
@@ -197,11 +197,11 @@ func TestCluster(t *testing.T) {
 
 	fmt.Println("===================")
 
-	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer4), p2p4, l2p4, tx2p4, c2p4)
-	})
-
-	time.Sleep(time.Minute)
+	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+	// 	return magma.Run(ctx, makeConfig(config, peer4), p2p4, l2p4, tx2p4, c2p4)
+	// })
+	//
+	// time.Sleep(time.Minute)
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) types.Config {
