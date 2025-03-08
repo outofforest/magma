@@ -15,6 +15,16 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+// Channel defines channel to use for sending the messages.
+type Channel int
+
+// Available channels.
+const (
+	ChannelNone Channel = iota
+	ChannelP2P
+	ChannelL2P
+)
+
 // Result is the result of state transition.
 type Result struct {
 	// Role is the current role.
@@ -23,6 +33,8 @@ type Result struct {
 	LeaderID magmatypes.ServerID
 	// CommitInfo reports latest committed log index.
 	CommitInfo types.CommitInfo
+	// Channel to use when sending message.
+	Channel Channel
 	// PeerID is the recipient, if equal to `ZeroServerID` message is broadcasted to all connected peers.
 	Recipients []magmatypes.ServerID
 	// Messages is the list of messages to send.
@@ -143,7 +155,7 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 	if resp == nil {
 		return r.resultEmpty()
 	}
-	return r.resultMessageAndRecipient(resp, peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, resp, peerID)
 }
 
 func (r *Reactor) applyAppendEntriesResponse(
@@ -224,12 +236,12 @@ func (r *Reactor) applyAppendEntriesResponse(
 			return r.resultEmpty()
 		}
 
-		return r.resultMessagesAndRecipient(reqs, peerID)
+		return r.resultMessagesAndRecipient(ChannelL2P, reqs, peerID)
 	}
 
 	// We send no logs until a common point is found.
 	r.sync[peerID].NextIndex = m.NextLogIndex
-	return r.resultMessageAndRecipient(r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
 }
 
 func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
@@ -241,7 +253,7 @@ func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequ
 	if err != nil {
 		return r.resultError(err)
 	}
-	return r.resultMessageAndRecipient(resp, peerID)
+	return r.resultMessageAndRecipient(ChannelP2P, resp, peerID)
 }
 
 func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteResponse) (Result, error) {
@@ -300,7 +312,11 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		}
 	}
 
-	return r.resultMessageAndRecipients(req, recipients)
+	if len(recipients) == 0 {
+		return r.resultEmpty()
+	}
+
+	return r.resultMessageAndRecipients(ChannelL2P, req, recipients)
 }
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
@@ -352,7 +368,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultMessageAndRecipient(&types.AppendEntriesResponse{
+	return r.resultMessageAndRecipient(ChannelL2P, &types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		SyncLogIndex: r.syncedCount,
@@ -370,7 +386,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 	pSync.NextIndex = r.nextLogIndex
 	pSync.End = 0
 
-	return r.resultMessageAndRecipient(r.newAppendEntriesRequestNext(), peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestNext(), peerID)
 }
 
 func (r *Reactor) maybeTransitionToFollower(
@@ -431,7 +447,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 		return r.transitionToLeader()
 	}
 
-	return r.resultBroadcastMessage(&types.VoteRequest{
+	return r.resultBroadcastMessage(ChannelP2P, &types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
@@ -471,7 +487,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		}
 	}
 
-	return r.resultBroadcastMessage(req)
+	return r.resultBroadcastMessage(ChannelL2P, req)
 }
 
 func (r *Reactor) newAppendEntriesRequest(
@@ -600,7 +616,7 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultMessageAndRecipients(r.newAppendEntriesRequestNext(), recipients)
+	return r.resultMessageAndRecipients(ChannelL2P, r.newAppendEntriesRequestNext(), recipients)
 }
 
 func (r *Reactor) updateFollowerCommit() {
@@ -666,41 +682,57 @@ func (r *Reactor) resultEmpty() (Result, error) {
 	}, nil
 }
 
-func (r *Reactor) resultMessageAndRecipient(message any, recipient magmatypes.ServerID) (Result, error) {
+func (r *Reactor) resultMessageAndRecipient(
+	channel Channel,
+	message any,
+	recipient magmatypes.ServerID,
+) (Result, error) {
 	return Result{
 		Role:       r.role,
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
+		Channel:    channel,
 		Messages:   []any{message},
 		Recipients: []magmatypes.ServerID{recipient},
 	}, nil
 }
 
-func (r *Reactor) resultMessagesAndRecipient(messages []any, recipient magmatypes.ServerID) (Result, error) {
+func (r *Reactor) resultMessagesAndRecipient(
+	channel Channel,
+	messages []any,
+	recipient magmatypes.ServerID,
+) (Result, error) {
 	return Result{
 		Role:       r.role,
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
+		Channel:    channel,
 		Messages:   messages,
 		Recipients: []magmatypes.ServerID{recipient},
 	}, nil
 }
 
-func (r *Reactor) resultMessageAndRecipients(message any, recipients []magmatypes.ServerID) (Result, error) {
+func (r *Reactor) resultMessageAndRecipients(
+	channel Channel,
+	message any,
+	recipients []magmatypes.ServerID,
+) (Result, error) {
 	return Result{
 		Role:       r.role,
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
+		Channel:    channel,
 		Messages:   []any{message},
 		Recipients: recipients,
 	}, nil
 }
 
-func (r *Reactor) resultBroadcastMessage(message any) (Result, error) {
+func (r *Reactor) resultBroadcastMessage(channel Channel, message any) (Result, error) {
 	return Result{
 		Role:       r.role,
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
+		Channel:    channel,
 		Messages:   []any{message},
 		Recipients: r.peers,
 	}, nil

@@ -46,6 +46,7 @@ func TestCandidateSetup(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 5,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -147,6 +148,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -383,6 +385,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
