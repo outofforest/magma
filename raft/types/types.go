@@ -50,8 +50,6 @@ type AppendEntriesRequest struct {
 	NextLogTerm Term
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
-	// Data are the bytes to store (empty for a heartbeat).
-	Data []byte
 	// LeaderCommit is the leader's commit index.
 	LeaderCommit Index
 }
@@ -85,6 +83,13 @@ type VoteResponse struct {
 	Term Term
 	// VoteGranted indicates whether the candidate received the vote.
 	VoteGranted bool
+}
+
+type Heartbeat struct {
+	// Term is the current term of the server receiving the request, for leader to update itself.
+	Term Term
+	// LeaderCommit is the leader's commit index.
+	LeaderCommit Index
 }
 
 // ClientRequest represents a client's request to append item to the log.

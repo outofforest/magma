@@ -458,7 +458,7 @@ func (g *gossip) p2pHandler(
 			for ms := range sendCh {
 				for _, m := range ms {
 					if err := c.SendProton(m, g.p2pMarshaller); err != nil {
-						return errors.WithStack(err)
+						return err
 					}
 				}
 			}
@@ -506,14 +506,29 @@ func (g *gossip) l2pHandler(
 			}
 
 			for {
-				m, err := c.ReceiveProton(g.l2pMarshaller)
+				msg, err := c.ReceiveProton(g.l2pMarshaller)
 				if err != nil {
 					return err
 				}
 
-				cmdCh <- rafttypes.Command{
-					PeerID: peerID,
-					Cmd:    m,
+				switch m := msg.(type) {
+				case *l2p.RawBytesAnnouncement:
+					// for m.Length > 0 {
+					data, err := c.ReceiveBytes()
+					if err != nil {
+						return err
+					}
+					m.Length -= uint64(len(data))
+					cmdCh <- rafttypes.Command{
+						PeerID: peerID,
+						Cmd:    data,
+					}
+					// }
+				default:
+					cmdCh <- rafttypes.Command{
+						PeerID: peerID,
+						Cmd:    m,
+					}
 				}
 			}
 		})
@@ -524,11 +539,24 @@ func (g *gossip) l2pHandler(
 				}
 			}()
 
-			for ms := range sendCh {
-				for _, m := range ms {
-					if err := c.SendProton(m, g.l2pMarshaller); err != nil {
-						return errors.WithStack(err)
+			for msgs := range sendCh {
+				for _, msg := range msgs {
+					switch m := msg.(type) {
+					case []byte:
+						if err := c.SendProton(&l2p.RawBytesAnnouncement{
+							Length: uint64(len(m)),
+						}, g.l2pMarshaller); err != nil {
+							return err
+						}
+						if err := c.SendBytes(m); err != nil {
+							return err
+						}
+					default:
+						if err := c.SendProton(m, g.l2pMarshaller); err != nil {
+							return err
+						}
 					}
+
 				}
 			}
 
@@ -666,7 +694,7 @@ func (g *gossip) c2pHandler(
 				if newCommitInfo.CommittedCount > nextLogIndex {
 					toSend := uint64(newCommitInfo.CommittedCount - nextLogIndex)
 					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
-						return errors.WithStack(err)
+						return err
 					}
 					nextLogIndex += rafttypes.Index(toSend)
 				}

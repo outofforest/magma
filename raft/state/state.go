@@ -161,6 +161,38 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 	return s.appendLog(s.nextLogIndex, s.LastLogTerm(), termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n])
 }
 
+func (s *State) Validate(nextLogIndex rafttypes.Index, lastLogTerm rafttypes.Term) (rafttypes.Term, rafttypes.Index, error) {
+	if nextLogIndex == 0 {
+		if lastLogTerm != 0 {
+			return 0, 0, errors.New("bug in protocol")
+		}
+		s.terms = s.terms[:lastLogTerm]
+		s.nextLogIndex = nextLogIndex
+
+		return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+	}
+	if lastLogTerm == 0 {
+		return 0, 0, errors.New("bug in protocol")
+	}
+
+	if nextLogIndex > s.nextLogIndex {
+		return s.PreviousTerm(s.nextLogIndex), s.nextLogIndex, nil
+	}
+
+	if s.PreviousTerm(nextLogIndex) == lastLogTerm {
+		s.terms = s.terms[:lastLogTerm]
+		s.nextLogIndex = nextLogIndex
+
+		return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+	}
+
+	revertTerm := s.PreviousTerm(nextLogIndex) - 1
+	s.nextLogIndex = s.terms[revertTerm]
+	s.terms = s.terms[:revertTerm]
+
+	return revertTerm, s.nextLogIndex, nil
+}
+
 // Append attempts to apply the given log entries starting at a specified index in the log.
 // It verifies that the provided `nextLogIndex` and `lastLogTerm` are consistent with the
 // existing log. If they are not consistent, it either truncates conflicting entries or

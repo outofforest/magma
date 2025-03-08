@@ -128,6 +128,8 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		return r.applyPeerConnected(peerID)
 	default:
 		switch c := cmd.(type) {
+		case []byte:
+			return r.applyAppendBytes(peerID, c)
 		case *types.AppendEntriesRequest:
 			return r.applyAppendEntriesRequest(peerID, c)
 		case *types.AppendEntriesResponse:
@@ -136,10 +138,28 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 			return r.applyVoteRequest(peerID, c)
 		case *types.VoteResponse:
 			return r.applyVoteResponse(peerID, c)
+		case *types.Heartbeat:
+			return r.applyHeartbeat(peerID, c)
 		}
 	}
 
 	return r.resultError(errors.Errorf("unexpected message type %T", cmd))
+}
+
+func (r *Reactor) applyAppendBytes(peerID magmatypes.ServerID, data []byte) (Result, error) {
+	if peerID != r.leaderID {
+		return r.resultEmpty()
+	}
+
+	var err error
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, data)
+	if err != nil {
+		return r.resultError(err)
+	}
+
+	r.ignoreElectionTick = r.electionTick + 1
+
+	return r.resultEmpty()
 }
 
 func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types.AppendEntriesRequest) (Result, error) {
@@ -180,7 +200,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex > r.sync[peerID].NextIndex {
+	if m.SyncLogIndex > r.matchIndex[peerID] {
 		r.matchIndex[peerID] = m.SyncLogIndex
 		r.updateLeaderCommit(m.SyncLogIndex)
 	}
@@ -210,6 +230,8 @@ func (r *Reactor) applyAppendEntriesResponse(
 			lenToSend = remaining
 		}
 
+		// =================
+
 		var reqs []any
 		if lenToSend > 0 {
 			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
@@ -219,15 +241,15 @@ func (r *Reactor) applyAppendEntriesResponse(
 					maxSize = lenToSend
 				}
 
-				req, err := r.newAppendEntriesRequest(endIndex, maxSize)
+				_, _, data, err := r.state.Entries(endIndex, maxSize)
 				if err != nil {
-					return Result{}, err
+					return r.resultError(err)
 				}
 
-				reqs = append(reqs, req)
+				reqs = append(reqs, data)
 
-				endIndex += types.Index(len(req.Data))
-				dataLen := uint64(len(req.Data))
+				dataLen := uint64(len(data))
+				endIndex += types.Index(dataLen)
 				if dataLen >= lenToSend {
 					break
 				}
@@ -235,13 +257,24 @@ func (r *Reactor) applyAppendEntriesResponse(
 			}
 		}
 
+		/*
+			if lenToSend == 0 {
+				return r.resultEmpty()
+			}
+
+			maxSize := r.config.MaxLogSizeOnWire
+			if maxSize > lenToSend {
+				maxSize = lenToSend
+			}
+
+			_, _, data, err := r.state.Entries(endIndex, maxSize)
+			if err != nil {
+				return r.resultError(err)
+			}
+		*/
 		pSync := r.sync[peerID]
 		pSync.NextIndex = m.NextLogIndex
 		pSync.End = endIndex
-
-		if len(reqs) == 0 {
-			return r.resultEmpty()
-		}
 
 		return r.resultMessagesAndRecipient(ChannelL2P, reqs, peerID)
 	}
@@ -284,6 +317,22 @@ func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteRes
 	return r.transitionToLeader()
 }
 
+func (r *Reactor) applyHeartbeat(peerID magmatypes.ServerID, m *types.Heartbeat) (Result, error) {
+	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+
+	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
+		return r.resultError(err)
+	}
+
+	r.ignoreElectionTick = r.electionTick + 1
+	r.leaderCommittedCount = m.LeaderCommit
+	r.updateFollowerCommit()
+
+	return r.resultEmpty()
+}
+
 func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if r.role != types.RoleLeader {
 		return r.resultEmpty()
@@ -306,16 +355,11 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(newLogIndex, r.config.MaxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
 	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	endIndex := req.NextLogIndex + types.Index(len(req.Data))
+	endIndex := newLogIndex + types.Index(len(m.Data))
 	for _, p := range r.peers {
 		pSync := r.sync[p]
-		if pSync.NextIndex == req.NextLogIndex && pSync.End == req.NextLogIndex {
+		if pSync.NextIndex == newLogIndex && pSync.End == newLogIndex {
 			recipients = append(recipients, p)
 			pSync.End = endIndex
 		}
@@ -325,7 +369,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultMessageAndRecipients(ChannelL2P, req, recipients)
+	return r.resultMessageAndRecipients(ChannelL2P, m.Data, recipients)
 }
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
@@ -366,6 +410,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 	if r.role == types.RoleLeader {
 		r.matchIndex[r.config.ServerID] = r.syncedCount
 		if r.updateLeaderCommit(r.syncedCount) {
+			r.ignoreHeartbeatTick = r.heartbeatTick + 1
 			return r.newHeartbeatRequest()
 		}
 		return r.resultEmpty()
@@ -482,11 +527,6 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.indexTermStarted, r.config.MaxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
 	for _, p := range r.peers {
 		r.sync[p] = &syncProgress{
 			NextIndex: r.indexTermStarted,
@@ -494,25 +534,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		}
 	}
 
-	return r.resultBroadcastMessage(ChannelL2P, req)
-}
-
-func (r *Reactor) newAppendEntriesRequest(
-	nextLogIndex types.Index,
-	maxLogSize uint64,
-) (*types.AppendEntriesRequest, error) {
-	lastLogTerm, nextLogTerm, data, err := r.state.Entries(nextLogIndex, maxLogSize)
-	if err != nil {
-		return nil, err
-	}
-	return &types.AppendEntriesRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: nextLogIndex,
-		LastLogTerm:  lastLogTerm,
-		NextLogTerm:  nextLogTerm,
-		Data:         data,
-		LeaderCommit: r.commitInfo.CommittedCount,
-	}, nil
+	return r.resultBroadcastMessage(ChannelL2P, r.newAppendEntriesRequestEmpty(r.indexTermStarted))
 }
 
 func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.AppendEntriesRequest {
@@ -521,7 +543,6 @@ func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  r.state.PreviousTerm(nextLogIndex),
 		NextLogTerm:  r.state.PreviousTerm(nextLogIndex + 1),
-		Data:         nil,
 		LeaderCommit: r.commitInfo.CommittedCount,
 	}
 }
@@ -532,16 +553,12 @@ func (r *Reactor) newAppendEntriesRequestNext() *types.AppendEntriesRequest {
 		NextLogIndex: r.nextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 		NextLogTerm:  r.lastLogTerm,
-		Data:         nil,
 		LeaderCommit: r.commitInfo.CommittedCount,
 	}
 }
 
 func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
-		return nil, errors.New("bug in protocol")
-	}
-	if req.LeaderCommit < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
 
@@ -557,7 +574,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	r.ignoreElectionTick = r.electionTick + 1
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Data)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
 	if err != nil {
 		return nil, err
 	}
@@ -611,19 +628,10 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	for _, p := range r.peers {
-		pSync := r.sync[p]
-		if pSync.NextIndex == r.nextLogIndex && pSync.End == r.nextLogIndex {
-			recipients = append(recipients, p)
-		}
-	}
-
-	if len(recipients) == 0 {
-		return r.resultEmpty()
-	}
-
-	return r.resultMessageAndRecipients(ChannelL2P, r.newAppendEntriesRequestNext(), recipients)
+	return r.resultBroadcastMessage(ChannelL2P, &types.Heartbeat{
+		Term:         r.state.CurrentTerm(),
+		LeaderCommit: r.commitInfo.CommittedCount,
+	})
 }
 
 func (r *Reactor) updateFollowerCommit() {
