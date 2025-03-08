@@ -66,6 +66,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
+					loop:
 						for {
 							msg, err := conn.ReceiveBytes()
 							if err != nil {
@@ -75,14 +76,18 @@ func (c *Client) Run(ctx context.Context) error {
 							msgLen := uint64(len(msg))
 							if msgLen == 0 {
 								c.nextLogIndex++
-								continue
+								continue loop
 							}
 
 							var n uint64
 							buf := msg
 							for len(buf) > 0 {
-								n++
 								size, n2 := varuint64.Parse(buf)
+								if n2 == msgLen {
+									// This is a term mark. Ignore.
+									continue loop
+								}
+								n++
 								buf = buf[n2+size:]
 							}
 
@@ -152,6 +157,9 @@ func (c *Client) Broadcast(tx []any) (retErr error) {
 		msgSize, err := c.m.Size(o)
 		if err != nil {
 			return err
+		}
+		if msgSize == 0 {
+			return errors.New("tx message has 0 size")
 		}
 		totalSize := msgSize + varuint64.Size(id)
 		i += varuint64.Put(c.buf[i:], totalSize)
