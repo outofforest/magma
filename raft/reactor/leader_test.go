@@ -49,6 +49,7 @@ func TestLeaderSetup(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 2,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -224,6 +225,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -282,6 +284,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -345,6 +348,7 @@ func TestLeaderApplyAppendEntriesResponseSplitLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -407,6 +411,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingWireCapacity(t *testing.T)
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -497,6 +502,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -949,6 +955,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 7,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -977,6 +984,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 7,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
 		},
@@ -1038,6 +1046,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -1276,6 +1285,7 @@ func TestLeaderApplySyncTickOnMajoritySendHeartbeat(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 6,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer3ID,
@@ -1501,6 +1511,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -1598,6 +1609,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -1724,6 +1736,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},

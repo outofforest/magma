@@ -370,6 +370,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -424,6 +425,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -466,6 +468,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -516,6 +519,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -603,6 +607,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -652,6 +657,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -742,6 +748,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
 		},
@@ -941,6 +948,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 1,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1035,6 +1043,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1082,6 +1091,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1129,6 +1139,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1172,6 +1183,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1219,6 +1231,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1245,6 +1258,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1283,6 +1297,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1309,6 +1324,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
 		},
@@ -1343,6 +1359,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1386,6 +1403,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1429,6 +1447,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1472,6 +1491,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
@@ -1498,6 +1518,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
 		},
@@ -1531,6 +1552,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 			peer2ID,
@@ -1709,6 +1731,7 @@ func TestFollowerApplySyncTickSendResponse(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 4,
 		},
+		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
