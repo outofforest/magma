@@ -230,8 +230,6 @@ func (r *Reactor) applyAppendEntriesResponse(
 			lenToSend = remaining
 		}
 
-		// =================
-
 		var reqs []any
 		if lenToSend > 0 {
 			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
@@ -257,21 +255,6 @@ func (r *Reactor) applyAppendEntriesResponse(
 			}
 		}
 
-		/*
-			if lenToSend == 0 {
-				return r.resultEmpty()
-			}
-
-			maxSize := r.config.MaxLogSizeOnWire
-			if maxSize > lenToSend {
-				maxSize = lenToSend
-			}
-
-			_, _, data, err := r.state.Entries(endIndex, maxSize)
-			if err != nil {
-				return r.resultError(err)
-			}
-		*/
 		pSync := r.sync[peerID]
 		pSync.NextIndex = m.NextLogIndex
 		pSync.End = endIndex
