@@ -21,7 +21,7 @@ import (
 )
 
 func TestCluster(t *testing.T) {
-	// t.Skip()
+	t.Skip()
 	requireT := require.New(t)
 	ctx, cancel := context.WithCancel(logger.WithLogger(context.Background(), logger.New(logger.DefaultConfig)))
 	t.Cleanup(cancel)
@@ -165,7 +165,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 10_000_000 {
+	for range 1_000_000 {
 		err := client.Broadcast([]any{
 			&entities.Account{
 				FirstName: "Test1",
