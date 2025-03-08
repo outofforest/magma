@@ -9,8 +9,6 @@ import (
 
 func main() {
 	proton.Generate("../p2p.proton.go",
-		types.AppendEntriesRequest{},
-		types.AppendEntriesResponse{},
 		types.VoteRequest{},
 		types.VoteResponse{},
 	)

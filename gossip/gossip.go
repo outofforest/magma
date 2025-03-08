@@ -224,14 +224,14 @@ func (g *gossip) runSupervisor(
 
 	for {
 		select {
-		case result, ok := <-resultCh:
+		case res, ok := <-resultCh:
 			if !ok {
 				resultCh = nil
 				continue
 			}
 			//nolint:nestif
-			if leaderID != result.LeaderID {
-				leaderID = result.LeaderID
+			if leaderID != res.LeaderID {
+				leaderID = res.LeaderID
 				if leaderID == g.config.ServerID {
 					pLeader = peerTx2P{
 						ID: g.config.ServerID,
@@ -263,16 +263,23 @@ func (g *gossip) runSupervisor(
 					cLCh <- pLeader
 				}
 			}
-			for _, peerID := range result.Recipients {
-				p, exists := peersP2P[peerID]
-				if !exists {
-					continue
+			switch res.Channel {
+			case reactor.ChannelP2P:
+				for _, peerID := range res.Recipients {
+					if p := peersP2P[peerID]; p.SendCh != nil {
+						p.SendCh <- res.Messages
+					}
 				}
-
-				p.SendCh <- result.Messages
+			case reactor.ChannelL2P:
+				for _, peerID := range res.Recipients {
+					if p := peersL2P[peerID]; p.SendCh != nil {
+						p.SendCh <- res.Messages
+					}
+				}
 			}
-			if result.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-				commitInfo = result.CommitInfo
+
+			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
+				commitInfo = res.CommitInfo
 				for commitCh := range clients {
 					if len(commitCh) > 0 {
 						select {
@@ -429,10 +436,6 @@ func (g *gossip) p2pHandler(
 
 			<-p.InstalledCh
 
-			cmdCh <- rafttypes.Command{
-				PeerID: peerID,
-			}
-
 			for {
 				m, err := c.ReceiveProton(g.p2pMarshaller)
 				if err != nil {
@@ -498,6 +501,10 @@ func (g *gossip) l2pHandler(
 
 			<-p.InstalledCh
 
+			cmdCh <- rafttypes.Command{
+				PeerID: peerID,
+			}
+
 			for {
 				m, err := c.ReceiveProton(g.l2pMarshaller)
 				if err != nil {
@@ -519,7 +526,7 @@ func (g *gossip) l2pHandler(
 
 			for ms := range sendCh {
 				for _, m := range ms {
-					if err := c.SendProton(m, g.p2pMarshaller); err != nil {
+					if err := c.SendProton(m, g.l2pMarshaller); err != nil {
 						return errors.WithStack(err)
 					}
 				}

@@ -118,13 +118,13 @@ func runReactor(
 			return err
 		}
 
-		result, err := r.Apply(cmd.PeerID, cmd.Cmd)
+		res, err := r.Apply(cmd.PeerID, cmd.Cmd)
 		if err != nil {
 			return err
 		}
 
-		if result.Role != role {
-			role = result.Role
+		if res.Role != role {
+			role = res.Role
 			if len(roleCh) > 0 {
 				select {
 				case <-roleCh:
@@ -134,11 +134,11 @@ func runReactor(
 			roleCh <- role
 		}
 
-		if (len(result.Recipients) > 0 && len(result.Messages) > 0) || result.LeaderID != leaderID ||
-			result.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-			commitInfo = result.CommitInfo
-			leaderID = result.LeaderID
-			resultCh <- result
+		if res.Channel != reactor.ChannelNone || res.LeaderID != leaderID ||
+			res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
+			commitInfo = res.CommitInfo
+			leaderID = res.LeaderID
+			resultCh <- res
 		}
 		continue
 	}
