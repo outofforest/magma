@@ -27,5 +27,6 @@ type Config struct {
 type PeerConfig struct {
 	ID          ServerID
 	P2PAddress  string
+	L2PAddress  string
 	Tx2PAddress string
 }
