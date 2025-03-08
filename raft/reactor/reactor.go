@@ -15,8 +15,10 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+// Channel defines channel to use for sending the messages.
 type Channel int
 
+// Available channels.
 const (
 	ChannelNone Channel = iota
 	ChannelP2P
