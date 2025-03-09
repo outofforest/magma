@@ -9,6 +9,7 @@ package reactor
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -156,6 +157,8 @@ func (r *Reactor) applyAppendBytes(peerID magmatypes.ServerID, data []byte) (Res
 		return r.resultEmpty()
 	}
 
+	// fmt.Println(data)
+
 	var err error
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, data)
 	if err != nil {
@@ -232,7 +235,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 			r.files[peerID] = f
 		}
 
-		lenToSend := r.config.MaxLogSizeOnWire
+		lenToSend := uint64(math.MaxUint64) // r.config.MaxLogSizeOnWire
 		endIndex := m.NextLogIndex
 		if pSync.End > 0 {
 			endIndex = pSync.End
@@ -325,8 +328,6 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if err != nil {
 		return r.resultError(err)
 	}
-
-	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
 		r.commitInfo.CommittedCount = r.nextLogIndex
@@ -561,6 +562,11 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
+	if req.LeaderCommit < r.leaderCommittedCount {
+		return nil, errors.New("bug in protocol")
+	}
+	r.leaderCommittedCount = req.LeaderCommit
+	r.updateFollowerCommit()
 
 	var err error
 	r.lastLogTerm, r.nextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
@@ -580,9 +586,6 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		resp.NextLogIndex = r.nextLogIndex
 		return resp, nil
 	}
-
-	r.leaderCommittedCount = req.LeaderCommit
-	r.updateFollowerCommit()
 
 	return nil, nil //nolint:nilnil
 }
