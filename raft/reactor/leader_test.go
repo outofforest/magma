@@ -438,6 +438,69 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingWireCapacity(t *testing.T)
 	}, r.sync[peer1ID])
 }
 
+func TestLeaderApplyAppendEntriesResponseSendRemainingRest(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	_, _, err := s.Append(0, 0, 1, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c})
+	requireT.NoError(err)
+	requireT.NoError(s.SetCurrentTerm(2))
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.sync[peer1ID] = &syncProgress{
+		NextIndex: 0,
+		End:       6,
+	}
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+		Term:         2,
+		NextLogIndex: 4,
+		SyncLogIndex: 1,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 0,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Messages: []any{
+			&types.AppendEntriesRequest{
+				Term:         2,
+				NextLogIndex: 6,
+				NextLogTerm:  1,
+				LastLogTerm:  1,
+				Data:         []byte{0x07, 0x08, 0x09, 0x0a, 0x0b},
+			},
+			&types.AppendEntriesRequest{
+				Term:         2,
+				NextLogIndex: 11,
+				NextLogTerm:  1,
+				LastLogTerm:  1,
+				Data:         []byte{0x0c},
+			},
+			&types.AppendEntriesRequest{
+				Term:         2,
+				NextLogIndex: 12,
+				NextLogTerm:  2,
+				LastLogTerm:  1,
+				Data:         []byte{0x00},
+			},
+		},
+	}, result)
+	requireT.EqualValues(&syncProgress{
+		NextIndex: 4,
+		End:       13,
+	}, r.sync[peer1ID])
+}
+
 func TestLeaderApplyAppendEntriesResponseCantSendMore(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()

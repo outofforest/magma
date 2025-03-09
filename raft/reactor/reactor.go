@@ -203,7 +203,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 			}
 		}
 
-		if remaining := uint64(r.nextLogIndex - m.NextLogIndex); remaining < lenToSend {
+		if remaining := uint64(r.nextLogIndex - endIndex); remaining < lenToSend {
 			lenToSend = remaining
 		}
 
