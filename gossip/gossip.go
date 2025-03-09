@@ -513,13 +513,16 @@ func (g *gossip) l2pHandler(
 
 				switch m := msg.(type) {
 				case *l2p.RawBytesAnnouncement:
-					data, err := c.ReceiveBytes()
-					if err != nil {
-						return err
-					}
-					cmdCh <- rafttypes.Command{
-						PeerID: peerID,
-						Cmd:    data,
+					for m.Length > 0 {
+						data, err := c.ReceiveRawBytes()
+						if err != nil {
+							return err
+						}
+						m.Length -= uint64(len(data))
+						cmdCh <- rafttypes.Command{
+							PeerID: peerID,
+							Cmd:    data,
+						}
 					}
 				default:
 					cmdCh <- rafttypes.Command{
@@ -539,11 +542,22 @@ func (g *gossip) l2pHandler(
 			for msgs := range sendCh {
 				for _, msg := range msgs {
 					switch m := msg.(type) {
-					case []byte:
-						if err := c.SendProton(&l2p.RawBytesAnnouncement{}, g.l2pMarshaller); err != nil {
+					case *io.LimitedReader:
+						if err := c.SendProton(&l2p.RawBytesAnnouncement{
+							Length: uint64(m.N),
+						}, g.l2pMarshaller); err != nil {
 							return err
 						}
-						if err := c.SendBytes(m); err != nil {
+						if err := c.SendStream(m); err != nil {
+							return err
+						}
+					case []byte:
+						if err := c.SendProton(&l2p.RawBytesAnnouncement{
+							Length: uint64(len(m)),
+						}, g.l2pMarshaller); err != nil {
+							return err
+						}
+						if err := c.SendRawBytes(m); err != nil {
 							return err
 						}
 					default:

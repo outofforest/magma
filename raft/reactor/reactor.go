@@ -8,6 +8,9 @@ package reactor
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -72,6 +75,7 @@ func New(config magmatypes.Config, s *state.State) *Reactor {
 		nextLogIndex: s.NextLogIndex(),
 		sync:         map[magmatypes.ServerID]*syncProgress{},
 		matchIndex:   map[magmatypes.ServerID]types.Index{},
+		files:        map[magmatypes.ServerID]*os.File{},
 	}
 	r.transitionToFollower()
 	r.ignoreElectionTick = 0
@@ -107,6 +111,7 @@ type Reactor struct {
 	indexTermStarted types.Index
 	sync             map[magmatypes.ServerID]*syncProgress
 	matchIndex       map[magmatypes.ServerID]types.Index
+	files            map[magmatypes.ServerID]*os.File
 	heartbeatTick    types.HeartbeatTick
 }
 
@@ -205,20 +210,32 @@ func (r *Reactor) applyAppendEntriesResponse(
 		r.updateLeaderCommit(m.SyncLogIndex)
 	}
 
+	pSync := r.sync[peerID]
 	if m.NextLogIndex == r.nextLogIndex {
-		pSync := r.sync[peerID]
 		pSync.NextIndex = m.NextLogIndex
 		pSync.End = m.NextLogIndex
-
 		return r.resultEmpty()
 	}
 
 	//nolint:nestif
-	if m.NextLogIndex >= r.sync[peerID].NextIndex {
+	if m.NextLogIndex >= pSync.NextIndex {
+		f := r.files[peerID]
+		if f == nil {
+			var err error
+			f, err = os.Open(filepath.Join(r.config.StateDir, "log"))
+			if err != nil {
+				return r.resultError(errors.WithStack(err))
+			}
+			if _, err := f.Seek(int64(m.NextLogIndex), io.SeekStart); err != nil {
+				return r.resultError(errors.WithStack(err))
+			}
+			r.files[peerID] = f
+		}
+
 		lenToSend := r.config.MaxLogSizeOnWire
 		endIndex := m.NextLogIndex
-		if r.sync[peerID].End > 0 {
-			endIndex = r.sync[peerID].End
+		if pSync.End > 0 {
+			endIndex = pSync.End
 			if lenOnWire := uint64(endIndex - m.NextLogIndex); lenOnWire < lenToSend {
 				lenToSend -= lenOnWire
 			} else {
@@ -230,40 +247,18 @@ func (r *Reactor) applyAppendEntriesResponse(
 			lenToSend = remaining
 		}
 
-		var reqs []any
-		if lenToSend > 0 {
-			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
-			for endIndex < r.nextLogIndex {
-				maxSize := r.config.MaxLogSizePerMessage
-				if maxSize > lenToSend {
-					maxSize = lenToSend
-				}
+		pSync.NextIndex = m.NextLogIndex
+		pSync.End = endIndex + types.Index(lenToSend)
 
-				_, _, data, err := r.state.Entries(endIndex, maxSize)
-				if err != nil {
-					return r.resultError(err)
-				}
-
-				reqs = append(reqs, data)
-
-				dataLen := uint64(len(data))
-				endIndex += types.Index(dataLen)
-				if dataLen >= lenToSend {
-					break
-				}
-				lenToSend -= dataLen
-			}
+		if lenToSend == 0 {
+			return r.resultEmpty()
 		}
 
-		pSync := r.sync[peerID]
-		pSync.NextIndex = m.NextLogIndex
-		pSync.End = endIndex
-
-		return r.resultMessagesAndRecipient(ChannelL2P, reqs, peerID)
+		return r.resultMessageAndRecipient(ChannelL2P, io.LimitReader(f, int64(lenToSend)), peerID)
 	}
 
 	// We send no logs until a common point is found.
-	r.sync[peerID].NextIndex = m.NextLogIndex
+	pSync.NextIndex = m.NextLogIndex
 	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
 }
 
@@ -419,6 +414,11 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	delete(r.matchIndex, peerID)
 
+	if f := r.files[peerID]; f != nil {
+		_ = f.Close()
+		delete(r.files, peerID)
+	}
+
 	pSync := r.sync[peerID]
 	pSync.NextIndex = r.nextLogIndex
 	pSync.End = 0
@@ -459,6 +459,12 @@ func (r *Reactor) transitionToFollower() {
 	r.votedForMe = 0
 	clear(r.sync)
 	clear(r.matchIndex)
+
+	for _, f := range r.files {
+		_ = f.Close()
+	}
+
+	clear(r.files)
 }
 
 func (r *Reactor) transitionToCandidate() (Result, error) {
