@@ -157,6 +157,7 @@ func (s *State) Entries(startIndex rafttypes.Index, maxSize uint64) (rafttypes.T
 
 var termEntry = bytes.Repeat([]byte{0x00}, 2*varuint64.MaxSize)
 
+// AppendTerm appends term to the log.
 func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 	n := varuint64.Put(termEntry[varuint64.MaxSize:], uint64(s.currentTerm))
 	n2 := varuint64.Size(n)
@@ -245,6 +246,7 @@ func (s *State) appendLog(
 
 	s.terms = s.terms[:lastLogTerm]
 	s.nextLogIndex = nextLogIndex
+	//nolint:nestif
 	if len(data) > 0 {
 		d := data
 		var i uint64
