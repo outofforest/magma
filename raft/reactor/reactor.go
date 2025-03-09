@@ -177,6 +177,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
+	// FIXME (wojciech): Make a test failing if this condition is: m.SyncLogIndex > r.matchIndex[peerID]
 	if m.NextLogIndex > r.sync[peerID].NextIndex {
 		r.matchIndex[peerID] = m.SyncLogIndex
 		r.updateLeaderCommit(m.SyncLogIndex)
@@ -210,7 +211,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 		var reqs []any
 		if lenToSend > 0 {
 			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
-			for endIndex < r.nextLogIndex && lenToSend > 0 {
+			for endIndex < r.nextLogIndex {
 				maxSize := r.config.MaxLogSizePerMessage
 				if maxSize > lenToSend {
 					maxSize = lenToSend
@@ -221,10 +222,15 @@ func (r *Reactor) applyAppendEntriesResponse(
 					return Result{}, err
 				}
 
-				endIndex += types.Index(len(req.Data))
-				lenToSend -= uint64(len(req.Data))
+				dataLen := uint64(len(req.Data))
+				if dataLen == 0 {
+					break
+				}
 
 				reqs = append(reqs, req)
+
+				endIndex += types.Index(dataLen)
+				lenToSend -= dataLen
 			}
 		}
 
@@ -285,7 +291,9 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	newLogIndex, err := r.appendData(m.Data)
+	newLogIndex := r.nextLogIndex
+	var err error
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, m.Data)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -454,16 +462,14 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	})
 }
 
-var emptyTx = []byte{0x00}
-
 func (r *Reactor) transitionToLeader() (Result, error) {
 	r.role = types.RoleLeader
 	r.leaderID = r.config.ServerID
 	clear(r.matchIndex)
 
-	// Add fake item to the log so commit is possible without waiting for a real one.
+	r.indexTermStarted = r.nextLogIndex
 	var err error
-	r.indexTermStarted, err = r.appendData(emptyTx)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.AppendTerm()
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -547,10 +553,8 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		return resp, nil
 	}
 
-	r.ignoreElectionTick = r.electionTick + 1
-
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.NextLogTerm, req.Data)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -562,14 +566,15 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 		r.syncedCount = req.NextLogIndex
 	}
 
+	r.ignoreElectionTick = r.electionTick + 1
+	r.leaderCommittedCount = req.LeaderCommit
+	r.updateFollowerCommit()
+
 	if r.lastLogTerm < req.NextLogTerm || r.nextLogIndex < req.NextLogIndex {
 		resp.SyncLogIndex = r.syncedCount
 		resp.NextLogIndex = r.nextLogIndex
 		return resp, nil
 	}
-
-	r.leaderCommittedCount = req.LeaderCommit
-	r.updateFollowerCommit()
 
 	return nil, nil //nolint:nilnil
 }
@@ -650,24 +655,6 @@ func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
 		}
 	}
 	return false
-}
-
-func (r *Reactor) appendData(data []byte) (types.Index, error) {
-	if len(data) == 0 {
-		return 0, errors.New("bug in protocol")
-	}
-
-	startIndex := r.nextLogIndex
-	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, r.state.CurrentTerm(), data)
-	if err != nil {
-		return 0, err
-	}
-	if r.nextLogIndex != startIndex+types.Index(len(data)) {
-		return 0, errors.New("bug in protocol")
-	}
-
-	return startIndex, nil
 }
 
 func (r *Reactor) resultError(err error) (Result, error) {

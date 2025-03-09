@@ -84,9 +84,10 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -96,10 +97,10 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  3,
 		LastLogTerm:  2,
-		Data:         []byte{0x01, 0x02},
+		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x00},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -117,13 +118,11 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01, 0x02}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x04, 0x02, 0x01, 0x00,
+	}, entries)
 }
 
 func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
@@ -398,7 +397,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 				NextLogIndex: 0,
 				NextLogTerm:  2,
 				LastLogTerm:  0,
-				Data:         []byte{0x00},
+				Data:         []byte{0x01, 0x02},
 				LeaderCommit: 0,
 			},
 		},
@@ -424,7 +423,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(2, r.lastLogTerm)
-	requireT.EqualValues(1, r.nextLogIndex)
+	requireT.EqualValues(2, r.nextLogIndex)
 
 	requireT.EqualValues(2, s.CurrentTerm())
 }

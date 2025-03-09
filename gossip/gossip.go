@@ -458,7 +458,7 @@ func (g *gossip) p2pHandler(
 			for ms := range sendCh {
 				for _, m := range ms {
 					if err := c.SendProton(m, g.p2pMarshaller); err != nil {
-						return errors.WithStack(err)
+						return err
 					}
 				}
 			}
@@ -527,7 +527,7 @@ func (g *gossip) l2pHandler(
 			for ms := range sendCh {
 				for _, m := range ms {
 					if err := c.SendProton(m, g.l2pMarshaller); err != nil {
-						return errors.WithStack(err)
+						return err
 					}
 				}
 			}
@@ -666,7 +666,7 @@ func (g *gossip) c2pHandler(
 				if newCommitInfo.CommittedCount > nextLogIndex {
 					toSend := uint64(newCommitInfo.CommittedCount - nextLogIndex)
 					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
-						return errors.WithStack(err)
+						return err
 					}
 					nextLogIndex += rafttypes.Index(toSend)
 				}

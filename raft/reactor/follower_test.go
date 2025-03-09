@@ -11,7 +11,7 @@ import (
 	magmatypes "github.com/outofforest/magma/types"
 )
 
-const maxReadLogSize = 5
+const maxReadLogSize = 25
 
 var (
 	serverID = magmatypes.ServerID(uuid.New())
@@ -102,7 +102,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 		NextLogIndex: 0,
 		NextLogTerm:  1,
 		LastLogTerm:  0,
-		Data:         []byte{0x01},
+		Data:         []byte{0x01, 0x01, 0x02, 0x01, 0x00},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -120,24 +120,26 @@ func TestFollowerAppendEntriesRequestAppendEntriesToEmptyLog(t *testing.T) {
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
+	requireT.EqualValues([]byte{0x01, 0x01, 0x02, 0x01, 0x00}, entries)
 }
 
 func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
-		NextLogIndex: 2,
+		NextLogIndex: 6,
 		NextLogTerm:  1,
 		LastLogTerm:  1,
-		Data:         []byte{0x01, 0x02, 0x03},
+		Data:         []byte{0x04, 0x03, 0x01, 0x02, 0x03},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -156,10 +158,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{
-		0x00, 0x00,
-		0x01,
-		0x02,
-		0x03,
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00, 0x04, 0x03, 0x01, 0x02, 0x03,
 	}, entries)
 }
 
@@ -167,19 +166,20 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(3))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  3,
 		LastLogTerm:  2,
-		Data:         []byte{0x01, 0x02},
+		Data:         []byte{0x01, 0x03, 0x03, 0x02, 0x01, 0x02},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -197,35 +197,33 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	requireT.EqualValues(3, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01, 0x02}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x01, 0x02,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(s.SetCurrentTerm(3))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.syncedCount = 2
+	r.syncedCount = 5
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 2,
+		NextLogIndex: 10,
 		NextLogTerm:  4,
 		LastLogTerm:  2,
-		Data:         []byte{0x04},
+		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x04},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -238,40 +236,38 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.EqualValues(2, r.syncedCount)
+	requireT.EqualValues(5, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x02}, entries)
-	_, _, entries, err = s.Entries(2, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x04}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestReplaceEntriesAtSynced(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(s.SetCurrentTerm(3))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.syncedCount = 3
+	r.syncedCount = 10
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 2,
+		NextLogIndex: 10,
 		NextLogTerm:  4,
 		LastLogTerm:  2,
-		Data:         []byte{0x04},
+		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x04},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -284,40 +280,38 @@ func TestFollowerAppendEntriesRequestReplaceEntriesAtSynced(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.EqualValues(2, r.syncedCount)
+	requireT.EqualValues(10, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x02}, entries)
-	_, _, entries, err = s.Entries(2, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x04}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestReplaceEntriesBelowSynced(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
+	requireT.NoError(s.SetCurrentTerm(3))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.syncedCount = 3
+	r.syncedCount = 10
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 1,
+		NextLogIndex: 5,
 		NextLogTerm:  4,
 		LastLogTerm:  1,
-		Data:         []byte{0x04, 0x05, 0x06},
+		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x04},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -330,45 +324,46 @@ func TestFollowerAppendEntriesRequestReplaceEntriesBelowSynced(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.EqualValues(1, r.syncedCount)
+	requireT.EqualValues(5, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x04, 0x05, 0x06}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.syncedCount = 2
+	r.syncedCount = 11
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  4,
 		LastLogTerm:  3,
-		Data:         []byte{0x01},
+		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x04},
 		LeaderCommit: 5,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Zero(r.leaderCommittedCount)
+	requireT.EqualValues(5, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 0,
+			CommittedCount: 5,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -377,32 +372,31 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 1,
-				SyncLogIndex: 1,
+				NextLogIndex: 5,
+				SyncLogIndex: 5,
 			},
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.EqualValues(1, r.syncedCount)
+	requireT.EqualValues(5, r.syncedCount)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.Empty(entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(3))
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02, 0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 2, 3, []byte{0x03, 0x03})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x03, 0x02, 0x02, 0x02,
+		0x01, 0x03, 0x03, 0x02, 0x03, 0x03,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -411,10 +405,10 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         5,
-		NextLogIndex: 5,
+		NextLogIndex: 17,
 		NextLogTerm:  5,
 		LastLogTerm:  4,
-		Data:         []byte{0x05},
+		Data:         []byte{0x01, 0x05},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -432,32 +426,29 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         5,
-				NextLogIndex: 3,
+				NextLogIndex: 11,
 			},
 		},
 	}, result)
-	requireT.EqualValues(3, r.nextLogIndex)
+	requireT.EqualValues(11, r.nextLogIndex)
 	requireT.EqualValues(2, r.lastLogTerm)
 
 	requireT.EqualValues(5, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x02, 0x02}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.Empty(entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x03, 0x02, 0x02, 0x02,
+	}, entries)
 
 	// Second time.
 
 	result, err = r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         6,
-		NextLogIndex: 3,
+		NextLogIndex: 6,
 		NextLogTerm:  6,
 		LastLogTerm:  3,
-		Data:         []byte{0x06},
+		Data:         []byte{0x01, 0x06},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -475,30 +466,29 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         6,
-				NextLogIndex: 1,
+				NextLogIndex: 5,
 			},
 		},
 	}, result)
-	requireT.EqualValues(1, r.nextLogIndex)
+	requireT.EqualValues(5, r.nextLogIndex)
 	requireT.EqualValues(1, r.lastLogTerm)
 
 	requireT.EqualValues(6, s.CurrentTerm())
 	_, _, entries, err = s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x01}, entries)
-
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.Empty(entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -508,7 +498,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		NextLogIndex: 1000,
 		NextLogTerm:  4,
 		LastLogTerm:  3,
-		Data:         []byte{0x01},
+		Data:         []byte{0x01, 0x04},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -526,7 +516,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 3,
+				NextLogIndex: 11,
 			},
 		},
 	}, result)
@@ -536,25 +526,26 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 	r := newReactor(s)
-	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  2,
 		LastLogTerm:  2,
 		Data:         nil,
@@ -575,25 +566,26 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 	r := newReactor(s)
-	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  3,
 		LastLogTerm:  2,
 		Data:         nil,
@@ -614,7 +606,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 3,
+				NextLogIndex: 11,
 				SyncLogIndex: 0,
 			},
 		},
@@ -625,25 +617,26 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 	r := newReactor(s)
-	r.lastLogTerm, r.nextLogIndex, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
-		NextLogIndex: 4,
+		NextLogIndex: 12,
 		NextLogTerm:  2,
 		LastLogTerm:  2,
 		Data:         nil,
@@ -664,7 +657,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 3,
+				NextLogIndex: 11,
 				SyncLogIndex: 0,
 			},
 		},
@@ -675,26 +668,27 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  2,
 		LastLogTerm:  2,
 		Data:         nil,
@@ -715,29 +709,29 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	requireT.EqualValues(2, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(4))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
-
 	r := newReactor(s)
 
 	result, err := r.Apply(peer2ID, &types.AppendEntriesRequest{
 		Term:         3,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  3,
 		LastLogTerm:  2,
-		Data:         []byte{0x01},
+		Data:         []byte{0x01, 0x03},
 		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
@@ -755,7 +749,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 3,
+				NextLogIndex: 11,
 			},
 		},
 	}, result)
@@ -765,111 +759,41 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT.EqualValues(4, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{CommittedCount: 1}
-	r.syncedCount = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 0}
+	r.syncedCount = 10
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
-		NextLogIndex: 3,
+		NextLogIndex: 10,
 		NextLogTerm:  1,
 		LastLogTerm:  1,
-		Data:         []byte{0x01},
-		LeaderCommit: 2,
+		Data:         []byte{0x02, 0x01, 0x01, 0x03, 0x02, 0x02, 0x02},
+		LeaderCommit: 7,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.EqualValues(2, r.leaderCommittedCount)
+	requireT.EqualValues(7, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 2,
-		},
-	}, result)
-
-	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00, 0x00, 0x01}, entries)
-}
-
-func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(t *testing.T) {
-	requireT := require.New(t)
-	s := newState()
-	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
-	requireT.NoError(err)
-
-	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{CommittedCount: 1}
-	r.syncedCount = 3
-
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
-		Term:         1,
-		NextLogIndex: 3,
-		NextLogTerm:  1,
-		LastLogTerm:  1,
-		Data:         nil,
-		LeaderCommit: 2,
-	})
-	requireT.NoError(err)
-	requireT.Equal(types.RoleFollower, r.role)
-	requireT.EqualValues(2, r.leaderCommittedCount)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
-		CommitInfo: types.CommitInfo{
-			CommittedCount: 2,
-		},
-	}, result)
-
-	requireT.EqualValues(1, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
-}
-
-func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.T) {
-	requireT := require.New(t)
-	s := newState()
-	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
-	requireT.NoError(err)
-
-	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{CommittedCount: 1}
-	r.syncedCount = 3
-
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
-		Term:         1,
-		NextLogIndex: 3,
-		NextLogTerm:  1,
-		LastLogTerm:  1,
-		Data:         []byte{0x01},
-		LeaderCommit: 100,
-	})
-	requireT.NoError(err)
-	requireT.Equal(types.RoleFollower, r.role)
-	requireT.EqualValues(100, r.leaderCommittedCount)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
-		CommitInfo: types.CommitInfo{
-			CommittedCount: 3,
+			CommittedCount: 7,
 		},
 	}, result)
 
@@ -877,8 +801,87 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
 	requireT.EqualValues([]byte{
-		0x00, 0x00, 0x00,
-		0x01,
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x01, 0x03, 0x02, 0x02, 0x02,
+	}, entries)
+}
+
+func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(1))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x01, 0x02, 0x02, 0x02,
+	})
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 10
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         1,
+		NextLogIndex: 13,
+		NextLogTerm:  1,
+		LastLogTerm:  1,
+		Data:         nil,
+		LeaderCommit: 7,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(7, r.leaderCommittedCount)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 7,
+		},
+	}, result)
+
+	requireT.EqualValues(1, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x01, 0x02, 0x02, 0x02,
+	}, entries)
+}
+
+func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(1))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00,
+	})
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.commitInfo = types.CommitInfo{CommittedCount: 1}
+	r.syncedCount = 7
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+		Term:         1,
+		NextLogIndex: 11,
+		NextLogTerm:  1,
+		LastLogTerm:  1,
+		Data:         []byte{0x02, 0x01, 0x00},
+		LeaderCommit: 100,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.EqualValues(100, r.leaderCommittedCount)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 7,
+		},
+	}, result)
+
+	requireT.EqualValues(1, s.CurrentTerm())
+	_, _, entries, err := s.Entries(0, maxReadLogSize)
+	requireT.NoError(err)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00, 0x02, 0x01, 0x00,
 	}, entries)
 }
 
@@ -886,16 +889,18 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
 	r.commitInfo = types.CommitInfo{CommittedCount: 1}
-	r.syncedCount = 2
+	r.syncedCount = 7
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		NextLogTerm:  1,
 		LastLogTerm:  1,
 		Data:         nil,
@@ -908,45 +913,48 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 2,
+			CommittedCount: 7,
 		},
 	}, result)
 
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 1, 2, []byte{0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{CommittedCount: 1}
-	r.syncedCount = 1
+	r.commitInfo = types.CommitInfo{CommittedCount: 7}
+	r.syncedCount = 7
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         3,
-		NextLogIndex: 5,
+		NextLogIndex: 13,
 		NextLogTerm:  3,
 		LastLogTerm:  3,
 		Data:         nil,
-		LeaderCommit: 3,
+		LeaderCommit: 13,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Zero(r.leaderCommittedCount)
+	requireT.EqualValues(13, r.leaderCommittedCount)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 1,
+			CommittedCount: 7,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -955,8 +963,8 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         3,
-				NextLogIndex: 3,
-				SyncLogIndex: 1,
+				NextLogIndex: 7,
+				SyncLogIndex: 7,
 			},
 		},
 	}, result)
@@ -964,22 +972,23 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 	requireT.EqualValues(3, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.Empty(entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
-	r.commitInfo = types.CommitInfo{CommittedCount: 3}
-	r.syncedCount = 3
+	r.commitInfo = types.CommitInfo{CommittedCount: 10}
+	r.syncedCount = 10
 
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         1,
@@ -987,7 +996,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 		NextLogTerm:  1,
 		LastLogTerm:  1,
 		Data:         nil,
-		LeaderCommit: 2,
+		LeaderCommit: 7,
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -997,14 +1006,18 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT.EqualValues(1, s.CurrentTerm())
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00, 0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00,
+	}, entries)
 }
 
 func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00, 0x00})
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00,
+	})
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -1071,16 +1084,17 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x02, 0x01, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1119,16 +1133,17 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 4,
+		NextLogIndex: 15,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1211,16 +1226,17 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x02, 0x01, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1247,7 +1263,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 
 	result, err = r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1277,16 +1293,18 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x02, 0x01, 0x00,
+	})
+	requireT.NoError(err)
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1313,7 +1331,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
 		Term:         3,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1383,16 +1401,17 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x02, 0x01, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         3,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  1,
 	})
 	requireT.NoError(err)
@@ -1427,16 +1446,17 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1471,16 +1491,17 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 1, 2, []byte{0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(2))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x02, 0x02, 0x01, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1507,7 +1528,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
 		Term:         2,
-		NextLogIndex: 3,
+		NextLogIndex: 11,
 		LastLogTerm:  2,
 	})
 	requireT.NoError(err)
@@ -1618,21 +1639,20 @@ func TestFollowerApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 func TestFollowerApplySyncTickSyncedBelowCommitted(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 3, 4, []byte{0x04})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	r.commitInfo = types.CommitInfo{
-		CommittedCount: 10,
+		CommittedCount: 25,
 	}
-	r.nextLogIndex = 3
+	r.leaderCommittedCount = 25
 
 	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
 	requireT.Error(err)
@@ -1643,50 +1663,18 @@ func TestFollowerApplySyncTickSyncedBelowCommitted(t *testing.T) {
 func TestFollowerApplySyncTickCommitToLeader(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 3, 4, []byte{0x04})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	r.commitInfo = types.CommitInfo{
-		CommittedCount: 1,
-	}
-	r.leaderCommittedCount = 3
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
-	requireT.NoError(err)
-	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: magmatypes.ZeroServerID,
-		CommitInfo: types.CommitInfo{
-			CommittedCount: 3,
-		},
-	}, result)
-}
-
-func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
-	requireT := require.New(t)
-	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 3, 4, []byte{0x04})
-	requireT.NoError(err)
-	requireT.NoError(s.SetCurrentTerm(4))
-	r := newReactor(s)
-
-	r.commitInfo = types.CommitInfo{
-		CommittedCount: 1,
+		CommittedCount: 5,
 	}
 	r.leaderCommittedCount = 10
 
@@ -1697,7 +1685,37 @@ func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 4,
+			CommittedCount: 10,
+		},
+	}, result)
+}
+
+func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	})
+	requireT.NoError(err)
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		CommittedCount: 5,
+	}
+	r.leaderCommittedCount = 100
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.SyncTick{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			CommittedCount: 20,
 		},
 	}, result)
 }
@@ -1705,19 +1723,18 @@ func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
 func TestFollowerApplySyncTickSendResponse(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x01})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x02})
-	requireT.NoError(err)
-	_, _, err = s.Append(2, 2, 3, []byte{0x03})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 3, 4, []byte{0x04})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x01,
+		0x01, 0x02, 0x02, 0x01, 0x02,
+		0x01, 0x03, 0x02, 0x01, 0x03,
+		0x01, 0x04, 0x02, 0x01, 0x04,
+	})
+	requireT.NoError(err)
 	r := newReactor(s)
 
 	r.commitInfo = types.CommitInfo{
-		CommittedCount: 1,
+		CommittedCount: 5,
 	}
 	r.leaderCommittedCount = 10
 	r.leaderID = peer1ID
@@ -1729,7 +1746,7 @@ func TestFollowerApplySyncTickSendResponse(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 4,
+			CommittedCount: 10,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -1738,8 +1755,8 @@ func TestFollowerApplySyncTickSendResponse(t *testing.T) {
 		Messages: []any{
 			&types.AppendEntriesResponse{
 				Term:         4,
-				NextLogIndex: 4,
-				SyncLogIndex: 4,
+				NextLogIndex: 20,
+				SyncLogIndex: 20,
 			},
 		},
 	}, result)
