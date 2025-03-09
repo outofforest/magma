@@ -19,7 +19,7 @@ const logSize = 1024 * 1024 * 1024
 type CloseFunc func()
 
 // Open opens state existing in directory or creates a new one there.
-func Open(dir string) (*State, CloseFunc, error) {
+func Open(dir string, noCopy bool) (*State, CloseFunc, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
@@ -38,6 +38,7 @@ func Open(dir string) (*State, CloseFunc, error) {
 	}
 
 	return &State{
+			noCopy:       noCopy,
 			log:          log,
 			nextLogIndex: rafttypes.Index(0),
 			doMSync:      true,
@@ -56,6 +57,7 @@ func NewInMemory(logSize uint64) *State {
 
 // State represents the persistent state of the Raft consensus algorithm.
 type State struct {
+	noCopy       bool
 	currentTerm  rafttypes.Term
 	votedFor     types.ServerID
 	terms        []rafttypes.Index
@@ -286,7 +288,11 @@ func (s *State) appendLog(
 			i += n1 + size
 			d = data[i:]
 		}
-		s.nextLogIndex += rafttypes.Index(copy(s.log[nextLogIndex:], data))
+		if s.noCopy {
+			s.nextLogIndex += rafttypes.Index(len(data))
+		} else {
+			s.nextLogIndex += rafttypes.Index(copy(s.log[nextLogIndex:], data))
+		}
 	}
 	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
 }

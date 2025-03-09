@@ -17,7 +17,7 @@ func Run(
 	config types.Config,
 	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener,
 ) error {
-	s, closeState, err := state.Open(config.StateDir)
+	s, closeState, err := state.Open(config.StateDir, config.ServerID == config.Servers[len(config.Servers)-1].ID)
 	if err != nil {
 		return err
 	}
