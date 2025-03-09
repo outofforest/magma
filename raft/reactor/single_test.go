@@ -32,13 +32,13 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 1,
+			CommittedCount: 2,
 		},
 	}, result)
 	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.lastLogTerm)
-	requireT.EqualValues(1, r.nextLogIndex)
+	requireT.EqualValues(2, r.nextLogIndex)
 
 	granted, err := s.VoteFor(peer1ID)
 	requireT.NoError(err)
@@ -50,25 +50,25 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
+	requireT.EqualValues([]byte{0x01, 0x01}, entries)
 }
 
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
-		Data: []byte{0x01, 0x01},
+		Data: []byte{0x02, 0x01, 0x00},
 	})
 	requireT.NoError(err)
 
@@ -79,38 +79,34 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 8,
+			CommittedCount: 22,
 		},
 	}, result)
 	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(8, r.nextLogIndex)
+	requireT.EqualValues(22, r.nextLogIndex)
 
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x01, 0x01}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x04, 0x02, 0x01, 0x00,
+	}, entries)
 }
 
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
-	_, _, err := s.Append(0, 0, 1, []byte{0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(1, 1, 2, []byte{0x00, 0x00})
-	requireT.NoError(err)
-	_, _, err = s.Append(3, 2, 3, []byte{0x00, 0x00})
-	requireT.NoError(err)
 	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
+	})
+	requireT.NoError(err)
 	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
@@ -125,25 +121,21 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 6,
+			CommittedCount: 19,
 		},
 	}, result)
 	requireT.Empty(r.sync)
 	requireT.Empty(r.matchIndex)
-	requireT.Equal(types.CommitInfo{CommittedCount: 6}, r.commitInfo)
+	requireT.Equal(types.CommitInfo{CommittedCount: 19}, r.commitInfo)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(6, r.nextLogIndex)
+	requireT.EqualValues(19, r.nextLogIndex)
 
 	_, _, entries, err := s.Entries(0, maxReadLogSize)
 	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
-	_, _, entries, err = s.Entries(1, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(3, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00, 0x00}, entries)
-	_, _, entries, err = s.Entries(5, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{0x00}, entries)
+	requireT.EqualValues([]byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x04,
+	}, entries)
 }
