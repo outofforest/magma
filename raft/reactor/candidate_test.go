@@ -87,7 +87,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)

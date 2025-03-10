@@ -318,7 +318,7 @@ func TestAppendErrorIfCurrentTermNotSet(t *testing.T) {
 
 	s := newState()
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -332,7 +332,7 @@ func TestAppendErrorOnInvalidTxSize(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(200))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x80})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x80}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -347,7 +347,7 @@ func TestAppendErrorIfTxSizeIsTooLow(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -361,7 +361,7 @@ func TestAppendErrorIfTxSizeIsTooBig1(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -375,7 +375,7 @@ func TestAppendErrorIfTxSizeIsTooBig2(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00, 0x02, 0x03})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00, 0x02, 0x03}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -389,7 +389,7 @@ func TestAppendErrorIfTxSizeIsZero(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x00}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -403,7 +403,7 @@ func TestAppendErrorOnInvalidTermNumber(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(200))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x80})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x80}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -418,7 +418,7 @@ func TestAppendErrorOnNoTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -432,7 +432,7 @@ func TestAppendErrorOnTermNumberAboveCurrentTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x7f})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x7f}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -447,7 +447,7 @@ func TestAppendErrorOnZeroNextLogIndex(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 1, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 1, []byte{0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -461,7 +461,7 @@ func TestAppendErrorOnZeroLastLogTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(1, 0, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(1, 0, []byte{0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -475,7 +475,7 @@ func TestAppendErrorOnNewZeroTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x00}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -489,7 +489,7 @@ func TestAppendErrorIfSameTermCreatedInSameOperation(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -503,7 +503,7 @@ func TestAppendErrorIfSameTermCreatedInNextOperation(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(2, nextIndex)
@@ -514,7 +514,7 @@ func TestAppendErrorIfSameTermCreatedInNextOperation(t *testing.T) {
 		0,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -527,7 +527,7 @@ func TestAppendErrorIfLowerTermCreatedInSameOperation(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02, 0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02, 0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -541,7 +541,7 @@ func TestAppendErrorIfLowerTermCreatedInNextOperation(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(2, nextIndex)
@@ -553,7 +553,7 @@ func TestAppendErrorIfLowerTermCreatedInNextOperation(t *testing.T) {
 		0,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 2, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err = s.Append(2, 2, []byte{0x01, 0x01}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -566,7 +566,7 @@ func TestAppendErrorIfOverwrittenWithExistingHigherTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x02, 0x01, 0x03})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x02, 0x01, 0x03}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
@@ -579,7 +579,7 @@ func TestAppendErrorIfOverwrittenWithExistingHigherTerm(t *testing.T) {
 		4,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x03})
+	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x03}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -592,7 +592,7 @@ func TestAppendErrorIfOverwrittenWithExistingSameTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x02, 0x01, 0x03})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x01, 0x02, 0x01, 0x03}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(6, nextIndex)
@@ -605,7 +605,7 @@ func TestAppendErrorIfOverwrittenWithExistingSameTerm(t *testing.T) {
 		4,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(4, 2, []byte{0x01, 0x03})
+	lastTerm, nextIndex, err = s.Append(4, 2, []byte{0x01, 0x03}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -618,7 +618,7 @@ func TestAppendErrorIfOverwrittenInTheMiddleOfTheTermWithTheSameTerm(t *testing.
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(5, nextIndex)
@@ -629,7 +629,7 @@ func TestAppendErrorIfOverwrittenInTheMiddleOfTheTermWithTheSameTerm(t *testing.
 		0,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 1, []byte{0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err = s.Append(3, 1, []byte{0x02, 0x01, 0x00}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -642,7 +642,7 @@ func TestAppendErrorIfOverwrittenInTheMiddleOfTheTermWithHigherTerm(t *testing.T
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(5, nextIndex)
@@ -653,7 +653,7 @@ func TestAppendErrorIfOverwrittenInTheMiddleOfTheTermWithHigherTerm(t *testing.T
 		0,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(3, 1, []byte{0x01, 0x02})
+	lastTerm, nextIndex, err = s.Append(3, 1, []byte{0x01, 0x02}, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -666,7 +666,68 @@ func TestAppendErrorIfNoTerm(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x02, 0x01, 0x00}, true)
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+}
+
+func TestAppendErrorTermMarkNotAllowed1(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.NoError(s.SetCurrentTerm(100))
+
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, false)
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+}
+
+func TestAppendErrorTermMarkNotAllowed2(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.NoError(s.SetCurrentTerm(100))
+
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, true)
+	requireT.NoError(err)
+	requireT.EqualValues(1, lastTerm)
+	requireT.EqualValues(2, nextIndex)
+	logEqual(requireT, s,
+		0x01, 0x01,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(0, 0, []byte{0x01, 0x02}, false)
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+}
+
+func TestAppendErrorTermMarkNotAllowed3(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.NoError(s.SetCurrentTerm(100))
+
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, true)
+	requireT.NoError(err)
+	requireT.EqualValues(1, lastTerm)
+	requireT.EqualValues(2, nextIndex)
+	logEqual(requireT, s,
+		0x01, 0x01,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(0, 0, []byte{0x02, 0x00, 0x00, 0x01, 0x01}, false)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -679,7 +740,7 @@ func TestAppendNothingHappensIfPreviousIndexDoesNotExist(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(1, 1, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(1, 1, []byte{0x01, 0x01}, true)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -693,7 +754,7 @@ func TestAppendNilOnEmptyLog(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, nil)
+	lastTerm, nextIndex, err := s.Append(0, 0, nil, true)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
@@ -707,7 +768,7 @@ func TestAppendOnEmptyOnlyTerm1(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(2, nextIndex)
@@ -726,7 +787,7 @@ func TestAppendOnEmptyOnlyTerm2(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(2, nextIndex)
@@ -746,7 +807,7 @@ func TestAppendOnEmptyLogWithTerm1(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x01, 0x02, 0x01, 0x00}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(5, nextIndex)
@@ -765,7 +826,7 @@ func TestAppendOnEmptyLogWithTerm2(t *testing.T) {
 
 	requireT.NoError(s.SetCurrentTerm(100))
 
-	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02, 0x02, 0x01, 0x00})
+	lastTerm, nextIndex, err := s.Append(0, 0, []byte{0x01, 0x02, 0x02, 0x01, 0x00}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(5, nextIndex)
@@ -788,7 +849,7 @@ func TestAppendHappyPath(t *testing.T) {
 	lastTerm, nextIndex, err := s.Append(0, 0, []byte{
 		0x01, 0x01,
 		0x01, 0x02, 0x02, 0x03, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(7, nextIndex)
@@ -803,7 +864,7 @@ func TestAppendHappyPath(t *testing.T) {
 
 	lastTerm, nextIndex, err = s.Append(7, 2, []byte{
 		0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(9, nextIndex)
@@ -818,7 +879,7 @@ func TestAppendHappyPath(t *testing.T) {
 		7,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(9, 3, nil)
+	lastTerm, nextIndex, err = s.Append(9, 3, nil, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(9, nextIndex)
@@ -833,7 +894,7 @@ func TestAppendHappyPath(t *testing.T) {
 		7,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x04, 0x03, 0x00, 0x01, 0x02})
+	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x04, 0x03, 0x00, 0x01, 0x02}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(8, nextIndex)
@@ -848,7 +909,7 @@ func TestAppendHappyPath(t *testing.T) {
 		2,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(8, 4, []byte{0x01, 0x06})
+	lastTerm, nextIndex, err = s.Append(8, 4, []byte{0x01, 0x06}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(10, nextIndex)
@@ -866,13 +927,31 @@ func TestAppendHappyPath(t *testing.T) {
 		8,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x07, 0x02, 0x00, 0x00})
+	lastTerm, nextIndex, err = s.Append(2, 1, []byte{0x01, 0x07, 0x02, 0x00, 0x00}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(7, nextIndex)
 	logEqual(requireT, s,
 		0x01, 0x01,
 		0x01, 0x07, 0x02, 0x00, 0x00,
+	)
+	requireT.EqualValues([]rafttypes.Index{
+		0,
+		2,
+		2,
+		2,
+		2,
+		2,
+		2,
+	}, s.terms)
+
+	lastTerm, nextIndex, err = s.Append(7, 7, []byte{0x02, 0x01, 0x01}, false)
+	requireT.NoError(err)
+	requireT.EqualValues(7, lastTerm)
+	requireT.EqualValues(10, nextIndex)
+	logEqual(requireT, s,
+		0x01, 0x01,
+		0x01, 0x07, 0x02, 0x00, 0x00, 0x02, 0x01, 0x01,
 	)
 	requireT.EqualValues([]rafttypes.Index{
 		0,
@@ -896,7 +975,7 @@ func TestAppendRevertWhenLastLogDoesNotMatch(t *testing.T) {
 		0x01, 0x01,
 		0x01, 0x02, 0x02, 0x03, 0x04,
 		0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(9, nextIndex)
@@ -911,7 +990,7 @@ func TestAppendRevertWhenLastLogDoesNotMatch(t *testing.T) {
 		7,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(7, 4, nil)
+	lastTerm, nextIndex, err = s.Append(7, 4, nil, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(2, nextIndex)
@@ -934,7 +1013,7 @@ func TestAppendRevertToNothing(t *testing.T) {
 		0x01, 0x01,
 		0x01, 0x02, 0x02, 0x03, 0x04,
 		0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(9, nextIndex)
@@ -949,7 +1028,7 @@ func TestAppendRevertToNothing(t *testing.T) {
 		7,
 	}, s.terms)
 
-	lastTerm, nextIndex, err = s.Append(2, 4, nil)
+	lastTerm, nextIndex, err = s.Append(2, 4, nil, true)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
