@@ -219,9 +219,6 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 		return r.resultError(err)
 	}
 
-	if resp == nil {
-		return r.resultEmpty()
-	}
 	return r.resultMessageAndRecipient(ChannelL2P, resp, peerID)
 }
 
@@ -567,13 +564,9 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	r.leaderCommittedCount = req.LeaderCommit
 	r.updateFollowerCommit()
 
-	if r.lastLogTerm < req.NextLogTerm || r.nextLogIndex < req.NextLogIndex {
-		resp.SyncLogIndex = r.syncedCount
-		resp.NextLogIndex = r.nextLogIndex
-		return resp, nil
-	}
-
-	return nil, nil //nolint:nilnil
+	resp.SyncLogIndex = r.syncedCount
+	resp.NextLogIndex = r.nextLogIndex
+	return resp, nil
 }
 
 func (r *Reactor) handleVoteRequest(
@@ -613,10 +606,10 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 }
 
 func (r *Reactor) updateFollowerCommit() {
-	if r.leaderCommittedCount > r.commitInfo.CommittedCount {
-		r.commitInfo.CommittedCount = r.leaderCommittedCount
-		if r.commitInfo.CommittedCount > r.syncedCount {
-			r.commitInfo.CommittedCount = r.syncedCount
+	if r.syncedCount > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
+		r.commitInfo.CommittedCount = r.syncedCount
+		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
+			r.commitInfo.CommittedCount = r.leaderCommittedCount
 		}
 		fmt.Printf(" %s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
 	}
