@@ -16,7 +16,7 @@ func TestLeaderSetup(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -110,7 +110,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -155,7 +155,7 @@ func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -258,7 +258,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingLogs(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -316,7 +316,7 @@ func TestLeaderApplyAppendEntriesResponseSplitLog(t *testing.T) {
 		0x01, 0x01,
 		0x0b, 0x0a, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
 		0x0b, 0x0a, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -380,7 +380,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingWireCapacity(t *testing.T)
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -447,7 +447,7 @@ func TestLeaderApplyAppendEntriesResponseSendRemainingRest(t *testing.T) {
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x09, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -511,7 +511,7 @@ func TestLeaderApplyAppendEntriesResponseCantSendMore(t *testing.T) {
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 		0x0d, 0x0c, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -551,7 +551,7 @@ func TestLeaderApplyAppendEntriesResponseSendEarlierLogs(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -600,7 +600,7 @@ func TestLeaderApplyAppendEntriesResponseNothingMoreToSend(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -642,7 +642,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -674,7 +674,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfSyncIsAheadLog(t *testing.T) {
 	requireT.NoError(s.SetCurrentTerm(2))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x01, 0x02, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -699,7 +699,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -740,7 +740,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToLast(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -794,14 +794,14 @@ func TestLeaderApplyAppendEntriesResponseCommitToPrevious(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	_, _, err = s.Append(22, 5, []byte{
 		0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.sync[peer1ID] = &syncProgress{
@@ -852,7 +852,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -861,7 +861,7 @@ func TestLeaderApplyAppendEntriesResponseCommitToCommonHeight(t *testing.T) {
 		0x03, 0x02, 0x00, 0x00,
 		0x03, 0x02, 0x00, 0x00,
 		0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.sync[peer1ID] = &syncProgress{
@@ -912,7 +912,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitToOldTerm(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -980,7 +980,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -988,7 +988,7 @@ func TestLeaderApplyAppendEntriesResponseNoCommitBelowPreviousOne(t *testing.T) 
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x03, 0x02, 0x00, 0x00,
 		0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.sync = map[magmatypes.ServerID]*syncProgress{
@@ -1053,7 +1053,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1116,7 +1116,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1163,7 +1163,7 @@ func TestLeaderApplySyncTickSyncedBelowCommitted(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1199,14 +1199,14 @@ func TestLeaderApplySyncTickOnMinority(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x04, 0x03, 0x05, 0x06, 0x07,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.commitInfo = types.CommitInfo{
@@ -1242,14 +1242,14 @@ func TestLeaderApplySyncTickOnMajority(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x04, 0x03, 0x05, 0x06, 0x07,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.commitInfo = types.CommitInfo{
@@ -1287,14 +1287,14 @@ func TestLeaderApplySyncTickOnMajoritySendHeartbeat(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x04, 0x03, 0x05, 0x06, 0x07,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.commitInfo = types.CommitInfo{
@@ -1354,14 +1354,14 @@ func TestLeaderApplySyncTickCommitAtFirstTermIndex(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x04, 0x03, 0x05, 0x06, 0x07,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.commitInfo = types.CommitInfo{
@@ -1398,14 +1398,14 @@ func TestLeaderApplySyncTickCommitBelowCurrentOne(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	r.lastLogTerm, r.nextLogIndex, err = s.Append(22, 5, []byte{
 		0x04, 0x03, 0x05, 0x06, 0x07,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r.commitInfo = types.CommitInfo{
@@ -1441,7 +1441,7 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1491,6 +1491,47 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 	}, entries)
 }
 
+func TestLeaderApplyClientRequestNoTermMarkAllowed(t *testing.T) {
+	requireT := require.New(t)
+	s := newState()
+	requireT.NoError(s.SetCurrentTerm(4))
+	_, _, err := s.Append(0, 0, []byte{
+		0x01, 0x01, 0x02, 0x01, 0x00,
+		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
+		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
+	}, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.sync = map[magmatypes.ServerID]*syncProgress{
+		peer1ID: {
+			NextIndex: 19,
+			End:       19,
+		},
+		peer2ID: {
+			NextIndex: 19,
+			End:       19,
+		},
+		peer3ID: {
+			NextIndex: 19,
+			End:       19,
+		},
+		peer4ID: {
+			NextIndex: 19,
+			End:       19,
+		},
+	}
+
+	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
+		Data: []byte{0x01, 0x05},
+	})
+	requireT.Error(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{}, result)
+}
+
 func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 	requireT := require.New(t)
 	s := newState()
@@ -1499,7 +1540,7 @@ func TestLeaderApplyClientRequestAppendAndBroadcast(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1593,7 +1634,7 @@ func TestLeaderApplyClientRequestAppendManyAndBroadcast(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()
@@ -1688,7 +1729,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x00,
 		0x01, 0x03, 0x02, 0x01, 0x00,
 		0x01, 0x04, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 	_, err = r.transitionToLeader()

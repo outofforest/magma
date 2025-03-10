@@ -129,7 +129,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLog(t *testing.T) {
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -169,7 +169,7 @@ func TestFollowerAppendEntriesRequestAppendEntriesToNonEmptyLogOnFutureTerm(t *t
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -212,7 +212,7 @@ func TestFollowerAppendEntriesRequestReplaceEntries(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x01,
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -256,7 +256,7 @@ func TestFollowerAppendEntriesRequestReplaceEntriesAtSynced(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x01,
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -300,7 +300,7 @@ func TestFollowerAppendEntriesRequestReplaceEntriesBelowSynced(t *testing.T) {
 		0x01, 0x01, 0x02, 0x01, 0x01,
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -342,7 +342,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatch(t *testing.T) 
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -396,7 +396,7 @@ func TestFollowerAppendEntriesRequestDiscardEntriesOnTermMismatchTwice(t *testin
 		0x01, 0x01, 0x02, 0x01, 0x01,
 		0x01, 0x02, 0x03, 0x02, 0x02, 0x02,
 		0x01, 0x03, 0x03, 0x02, 0x03, 0x03,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -488,7 +488,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -539,7 +539,7 @@ func TestFollowerAppendEntriesRequestUpdateCurrentTermOnHeartbeat(t *testing.T) 
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -579,7 +579,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -630,7 +630,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -681,7 +681,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnHeartbeat(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -722,7 +722,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -771,7 +771,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommit(t *testing.
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -811,7 +811,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToLeaderCommitOnHeartbeat(
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x01, 0x02, 0x02, 0x02,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -851,7 +851,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLength(t *testing.
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -891,7 +891,7 @@ func TestFollowerAppendEntriesRequestSetCommittedCountToSyncedLengthOnHeartbeat(
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -932,7 +932,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleSyncedLength(t
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -983,7 +983,7 @@ func TestFollowerAppendEntriesRequestDoNotSetCommittedCountToStaleCommit(t *test
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -1017,7 +1017,7 @@ func TestFollowerAppendEntriesRequestErrorIfBelowCommit(t *testing.T) {
 	requireT.NoError(s.SetCurrentTerm(1))
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x04, 0x03, 0x00, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 
 	r := newReactor(s)
@@ -1088,7 +1088,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1137,7 +1137,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1230,7 +1230,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1297,7 +1297,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	requireT.NoError(err)
 	r := newReactor(s)
@@ -1405,7 +1405,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1450,7 +1450,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1495,7 +1495,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	_, _, err := s.Append(0, 0, []byte{
 		0x01, 0x01, 0x03, 0x02, 0x00, 0x00,
 		0x01, 0x02, 0x02, 0x01, 0x00,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1645,7 +1645,7 @@ func TestFollowerApplySyncTickSyncedBelowCommitted(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1669,7 +1669,7 @@ func TestFollowerApplySyncTickCommitToLeader(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1699,7 +1699,7 @@ func TestFollowerApplySyncTickCommitToSynced(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 
@@ -1729,7 +1729,7 @@ func TestFollowerApplySyncTickSendResponse(t *testing.T) {
 		0x01, 0x02, 0x02, 0x01, 0x02,
 		0x01, 0x03, 0x02, 0x01, 0x03,
 		0x01, 0x04, 0x02, 0x01, 0x04,
-	})
+	}, true)
 	requireT.NoError(err)
 	r := newReactor(s)
 

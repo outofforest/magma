@@ -164,7 +164,7 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 	n := varuint64.Put(termEntry[varuint64.MaxSize:], uint64(s.currentTerm))
 	n2 := varuint64.Size(n)
 	varuint64.Put(termEntry[varuint64.MaxSize-n2:], n)
-	return s.appendLog(s.nextLogIndex, s.LastLogTerm(), termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n])
+	return s.appendLog(s.nextLogIndex, s.LastLogTerm(), termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], true)
 }
 
 // Append attempts to apply the given log entries starting at a specified index in the log.
@@ -199,9 +199,10 @@ func (s *State) Append(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
 	data []byte,
+	allowTermMark bool,
 ) (rafttypes.Term, rafttypes.Index, error) {
 	if nextLogIndex == 0 {
-		return s.appendLog(nextLogIndex, lastLogTerm, data)
+		return s.appendLog(nextLogIndex, lastLogTerm, data, allowTermMark)
 	}
 	if lastLogTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
@@ -212,7 +213,7 @@ func (s *State) Append(
 	}
 
 	if s.PreviousTerm(nextLogIndex) == lastLogTerm {
-		return s.appendLog(nextLogIndex, lastLogTerm, data)
+		return s.appendLog(nextLogIndex, lastLogTerm, data, allowTermMark)
 	}
 
 	revertTerm := s.PreviousTerm(nextLogIndex) - 1
@@ -236,6 +237,7 @@ func (s *State) appendLog(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
 	data []byte,
+	allowTermMark bool,
 ) (_ rafttypes.Term, _ rafttypes.Index, retErr error) {
 	if s.currentTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
@@ -271,6 +273,10 @@ func (s *State) appendLog(
 			term, n2 := varuint64.Parse(d[n1:])
 			switch {
 			case n2 == size:
+				if !allowTermMark {
+					return 0, 0, errors.New("term mark not allowed")
+				}
+
 				// This is a term mark.
 				if rafttypes.Term(term) <= s.highestTermSeen {
 					return 0, 0, errors.New("bug in protocol")

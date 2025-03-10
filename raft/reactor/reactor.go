@@ -293,7 +293,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 
 	newLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, m.Data)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, m.Data, false)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -554,7 +554,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Data)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Data, true)
 	if err != nil {
 		return nil, err
 	}
