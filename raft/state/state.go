@@ -164,7 +164,7 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 	n := varuint64.Put(termEntry[varuint64.MaxSize:], uint64(s.currentTerm))
 	n2 := varuint64.Size(n)
 	varuint64.Put(termEntry[varuint64.MaxSize-n2:], n)
-	return s.appendLog(s.nextLogIndex, s.LastLogTerm(), termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], true)
+	return s.appendLog(termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], true)
 }
 
 // Append attempts to apply the given log entries starting at a specified index in the log.
@@ -195,14 +195,12 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 //
 // The function will ensure that no log entry is appended out of order or violates
 // the consistency guarantees of the Raft protocol.
-func (s *State) Append(
+func (s *State) Validate(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
-	data []byte,
-	allowTermMark bool,
 ) (rafttypes.Term, rafttypes.Index, error) {
 	if nextLogIndex == 0 {
-		return s.appendLog(nextLogIndex, lastLogTerm, data, allowTermMark)
+		return s.validate(nextLogIndex, lastLogTerm)
 	}
 	if lastLogTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
@@ -213,7 +211,7 @@ func (s *State) Append(
 	}
 
 	if s.PreviousTerm(nextLogIndex) == lastLogTerm {
-		return s.appendLog(nextLogIndex, lastLogTerm, data, allowTermMark)
+		return s.validate(nextLogIndex, lastLogTerm)
 	}
 
 	revertTerm := s.PreviousTerm(nextLogIndex) - 1
@@ -221,6 +219,13 @@ func (s *State) Append(
 	s.terms = s.terms[:revertTerm]
 
 	return revertTerm, s.nextLogIndex, nil
+}
+
+func (s *State) Append(
+	data []byte,
+	allowTermMark bool,
+) (rafttypes.Term, rafttypes.Index, error) {
+	return s.appendLog(data, allowTermMark)
 }
 
 // Sync syncs data to persistent storage.
@@ -233,11 +238,9 @@ func (s *State) Sync() (rafttypes.Index, error) {
 	return s.nextLogIndex, nil
 }
 
-func (s *State) appendLog(
+func (s *State) validate(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
-	data []byte,
-	allowTermMark bool,
 ) (_ rafttypes.Term, _ rafttypes.Index, retErr error) {
 	if s.currentTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
@@ -258,11 +261,24 @@ func (s *State) appendLog(
 		return 0, 0, errors.New("bug in protocol")
 	}
 
-	defer appendDefer(&retErr)
-
 	s.terms = s.terms[:lastLogTerm]
 	s.nextLogIndex = nextLogIndex
+
+	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+}
+
+func (s *State) appendLog(
+	data []byte,
+	allowTermMark bool,
+) (_ rafttypes.Term, _ rafttypes.Index, retErr error) {
+	if s.currentTerm == 0 {
+		return 0, 0, errors.New("bug in protocol")
+	}
+
+	defer appendDefer(&retErr)
+
 	if len(data) > 0 {
+		lastLogTerm := rafttypes.Term(len(s.terms))
 		d := data
 		var i uint64
 		for len(d) > 0 {
@@ -285,7 +301,7 @@ func (s *State) appendLog(
 					return 0, 0, errors.New("bug in protocol")
 				}
 				for range rafttypes.Term(term) - lastLogTerm {
-					s.terms = append(s.terms, nextLogIndex+rafttypes.Index(i))
+					s.terms = append(s.terms, s.nextLogIndex+rafttypes.Index(i))
 				}
 				lastLogTerm = rafttypes.Term(term)
 				s.highestTermSeen = lastLogTerm
@@ -295,7 +311,7 @@ func (s *State) appendLog(
 			i += n1 + size
 			d = data[i:]
 		}
-		s.nextLogIndex += rafttypes.Index(copy(s.log[nextLogIndex:], data))
+		s.nextLogIndex += rafttypes.Index(copy(s.log[s.nextLogIndex:], data))
 	}
 	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
 }

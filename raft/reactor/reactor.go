@@ -9,6 +9,7 @@ package reactor
 import (
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/raft/iterator"
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
@@ -42,8 +43,8 @@ type Result struct {
 }
 
 type syncProgress struct {
+	Iterator  *iterator.Iterator
 	NextIndex types.Index
-	End       types.Index
 }
 
 // New creates new reactor of raft consensus algorithm.
@@ -125,10 +126,16 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		return r.applyPeerConnected(peerID)
 	default:
 		switch c := cmd.(type) {
+		case []byte:
+			return r.applyAppendTx(peerID, c)
 		case *types.AppendEntriesRequest:
 			return r.applyAppendEntriesRequest(peerID, c)
 		case *types.AppendEntriesResponse:
 			return r.applyAppendEntriesResponse(peerID, c)
+		case *types.AppendEntriesACK:
+			return r.applyAppendEntriesACK(peerID, c)
+		case *types.Heartbeat:
+			return r.applyHeartbeat(peerID, c)
 		case *types.VoteRequest:
 			return r.applyVoteRequest(peerID, c)
 		case *types.VoteResponse:
@@ -137,6 +144,53 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 	}
 
 	return r.resultError(errors.Errorf("unexpected message type %T", cmd))
+}
+
+func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, error) {
+	if r.leaderID != peerID {
+		return r.resultEmpty()
+	}
+
+	r.ignoreElectionTick = r.electionTick + 1
+
+	var err error
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(tx, true)
+	if err != nil {
+		return r.resultError(err)
+	}
+
+	return r.resultEmpty()
+}
+
+func (r *Reactor) applyAppendEntriesACK(peerID magmatypes.ServerID, m *types.AppendEntriesACK) (Result, error) {
+	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
+		return r.resultError(err)
+	}
+
+	if r.role != types.RoleLeader || m.Term != r.state.CurrentTerm() {
+		return r.resultEmpty()
+	}
+
+	if m.NextLogIndex > r.nextLogIndex {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+	if m.SyncLogIndex > m.NextLogIndex {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+
+	pSync := r.sync[peerID]
+	if m.NextLogIndex >= pSync.NextIndex && m.SyncLogIndex > r.matchIndex[peerID] {
+		r.matchIndex[peerID] = m.SyncLogIndex
+		r.updateLeaderCommit(m.SyncLogIndex)
+	}
+
+	if m.NextLogIndex > pSync.NextIndex {
+		pSync.NextIndex = m.NextLogIndex
+	}
+
+	pSync.Iterator.Acknowledge(uint64(m.NextLogIndex))
+
+	return r.resultEmpty()
 }
 
 func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types.AppendEntriesRequest) (Result, error) {
@@ -177,76 +231,23 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	// FIXME (wojciech): Make a test failing if this condition is: m.SyncLogIndex > r.matchIndex[peerID]
-	if m.NextLogIndex > r.sync[peerID].NextIndex {
+	pSync := r.sync[peerID]
+	pSync.NextIndex = m.NextLogIndex
+
+	if m.NextLogIndex == r.sync[peerID].NextIndex {
+		var err error
+		pSync.Iterator, err = iterator.New(r.config.StateDir, 1024*1024*1024, uint64(m.NextLogIndex), uint64(r.nextLogIndex))
+		if err != nil {
+			return r.resultError(err)
+		}
+
 		r.matchIndex[peerID] = m.SyncLogIndex
 		r.updateLeaderCommit(m.SyncLogIndex)
-	}
 
-	if m.NextLogIndex == r.nextLogIndex {
-		pSync := r.sync[peerID]
-		pSync.NextIndex = m.NextLogIndex
-		pSync.End = m.NextLogIndex
-
-		return r.resultEmpty()
-	}
-
-	//nolint:nestif
-	if m.NextLogIndex >= r.sync[peerID].NextIndex {
-		lenToSend := r.config.MaxLogSizeOnWire
-		endIndex := m.NextLogIndex
-		if r.sync[peerID].End > 0 {
-			endIndex = r.sync[peerID].End
-			if lenOnWire := uint64(endIndex - m.NextLogIndex); lenOnWire < lenToSend {
-				lenToSend -= lenOnWire
-			} else {
-				lenToSend = 0
-			}
-		}
-
-		if remaining := uint64(r.nextLogIndex - endIndex); remaining < lenToSend {
-			lenToSend = remaining
-		}
-
-		var reqs []any
-		if lenToSend > 0 {
-			reqs = make([]any, 0, (lenToSend+r.config.MaxLogSizePerMessage-1)/r.config.MaxLogSizePerMessage)
-			for endIndex < r.nextLogIndex {
-				maxSize := r.config.MaxLogSizePerMessage
-				if maxSize > lenToSend {
-					maxSize = lenToSend
-				}
-
-				req, err := r.newAppendEntriesRequest(endIndex, maxSize)
-				if err != nil {
-					return Result{}, err
-				}
-
-				dataLen := uint64(len(req.Data))
-				if dataLen == 0 {
-					break
-				}
-
-				reqs = append(reqs, req)
-
-				endIndex += types.Index(dataLen)
-				lenToSend -= dataLen
-			}
-		}
-
-		pSync := r.sync[peerID]
-		pSync.NextIndex = m.NextLogIndex
-		pSync.End = endIndex
-
-		if len(reqs) == 0 {
-			return r.resultEmpty()
-		}
-
-		return r.resultMessagesAndRecipient(ChannelL2P, reqs, peerID)
+		return r.resultMessageAndRecipient(ChannelL2P, pSync.Iterator, peerID)
 	}
 
 	// We send no logs until a common point is found.
-	r.sync[peerID].NextIndex = m.NextLogIndex
 	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
 }
 
@@ -283,6 +284,20 @@ func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteRes
 	return r.transitionToLeader()
 }
 
+func (r *Reactor) applyHeartbeat(peerID magmatypes.ServerID, m *types.Heartbeat) (Result, error) {
+	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+
+	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
+		return r.resultError(err)
+	}
+
+	r.ignoreElectionTick = r.electionTick + 1
+
+	return r.resultEmpty()
+}
+
 func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if r.role != types.RoleLeader {
 		return r.resultEmpty()
@@ -291,9 +306,8 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	newLogIndex := r.nextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(r.nextLogIndex, r.lastLogTerm, m.Data, false)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(m.Data, false)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -305,26 +319,13 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(newLogIndex, r.config.MaxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
-	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	endIndex := req.NextLogIndex + types.Index(len(req.Data))
 	for _, p := range r.peers {
-		pSync := r.sync[p]
-		if pSync.NextIndex == req.NextLogIndex && pSync.End == req.NextLogIndex {
-			recipients = append(recipients, p)
-			pSync.End = endIndex
+		if pSync := r.sync[p]; pSync.Iterator != nil {
+			pSync.Iterator.Available(uint64(r.nextLogIndex))
 		}
 	}
 
-	if len(recipients) == 0 {
-		return r.resultEmpty()
-	}
-
-	return r.resultMessageAndRecipients(ChannelL2P, req, recipients)
+	return r.resultEmpty()
 }
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
@@ -376,7 +377,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultMessageAndRecipient(ChannelL2P, &types.AppendEntriesResponse{
+	return r.resultMessageAndRecipient(ChannelP2P, &types.AppendEntriesACK{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		SyncLogIndex: r.syncedCount,
@@ -392,7 +393,10 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	pSync := r.sync[peerID]
 	pSync.NextIndex = r.nextLogIndex
-	pSync.End = 0
+	if pSync.Iterator != nil {
+		pSync.Iterator.Close()
+		pSync.Iterator = nil
+	}
 
 	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestNext(), peerID)
 }
@@ -400,9 +404,9 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 func (r *Reactor) maybeTransitionToFollower(
 	peerID magmatypes.ServerID,
 	term types.Term,
-	onAppendEntryRequest bool,
+	setLeader bool,
 ) error {
-	if term < r.state.CurrentTerm() || (term == r.state.CurrentTerm() && !onAppendEntryRequest) {
+	if term < r.state.CurrentTerm() || (term == r.state.CurrentTerm() && !setLeader) {
 		return nil
 	}
 
@@ -416,7 +420,7 @@ func (r *Reactor) maybeTransitionToFollower(
 		r.transitionToFollower()
 	}
 
-	if onAppendEntryRequest {
+	if setLeader {
 		r.leaderID = peerID
 	}
 
@@ -487,9 +491,11 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	}
 
 	for _, p := range r.peers {
-		r.sync[p] = &syncProgress{
-			NextIndex: r.indexTermStarted,
-			End:       0,
+		pSync := r.sync[p]
+		pSync.NextIndex = r.indexTermStarted
+		if pSync.Iterator != nil {
+			pSync.Iterator.Close()
+			pSync.Iterator = nil
 		}
 	}
 
@@ -554,7 +560,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(req.NextLogIndex, req.LastLogTerm, req.Data, true)
+	r.lastLogTerm, r.nextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
 	if err != nil {
 		return nil, err
 	}
@@ -609,19 +615,10 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	recipients := make([]magmatypes.ServerID, 0, len(r.peers))
-	for _, p := range r.peers {
-		pSync := r.sync[p]
-		if pSync.NextIndex == r.nextLogIndex && pSync.End == r.nextLogIndex {
-			recipients = append(recipients, p)
-		}
-	}
-
-	if len(recipients) == 0 {
-		return r.resultEmpty()
-	}
-
-	return r.resultMessageAndRecipients(ChannelL2P, r.newAppendEntriesRequestNext(), recipients)
+	return r.resultBroadcastMessage(ChannelP2P, &types.Heartbeat{
+		Term:         r.state.CurrentTerm(),
+		LeaderCommit: r.commitInfo.CommittedCount,
+	})
 }
 
 func (r *Reactor) updateFollowerCommit() {

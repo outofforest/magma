@@ -18,6 +18,7 @@ import (
 	"github.com/outofforest/magma/gossip/wire/l2p"
 	"github.com/outofforest/magma/gossip/wire/p2p"
 	"github.com/outofforest/magma/raft"
+	"github.com/outofforest/magma/raft/iterator"
 	"github.com/outofforest/magma/raft/reactor"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/types"
@@ -511,9 +512,24 @@ func (g *gossip) l2pHandler(
 					return err
 				}
 
-				cmdCh <- rafttypes.Command{
-					PeerID: peerID,
-					Cmd:    m,
+				switch m.(type) {
+				case *iterator.Iterator:
+					for {
+						m, err := c.ReceiveRawBytes()
+						if err != nil {
+							return err
+						}
+
+						cmdCh <- rafttypes.Command{
+							PeerID: peerID,
+							Cmd:    m,
+						}
+					}
+				default:
+					cmdCh <- rafttypes.Command{
+						PeerID: peerID,
+						Cmd:    m,
+					}
 				}
 			}
 		})
@@ -524,10 +540,26 @@ func (g *gossip) l2pHandler(
 				}
 			}()
 
-			for ms := range sendCh {
-				for _, m := range ms {
-					if err := c.SendProton(m, g.l2pMarshaller); err != nil {
-						return err
+			for msgs := range sendCh {
+				for _, msg := range msgs {
+					switch m := msg.(type) {
+					case *iterator.Iterator:
+						if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
+							return err
+						}
+						for {
+							r, err := m.Reader()
+							if err != nil {
+								return err
+							}
+							if err := c.SendStream(r); err != nil {
+								return err
+							}
+						}
+					default:
+						if err := c.SendProton(m, g.l2pMarshaller); err != nil {
+							return err
+						}
 					}
 				}
 			}

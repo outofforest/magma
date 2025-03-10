@@ -67,6 +67,15 @@ type AppendEntriesResponse struct {
 	SyncLogIndex Index
 }
 
+type AppendEntriesACK struct {
+	// Term is the current term of the server receiving the request, for leader to update itself.
+	Term Term
+	// NextLogIndex is the index of the next log item to receive.
+	NextLogIndex Index
+	// SyncLogIndex is the index synced to persistent storage.
+	SyncLogIndex Index
+}
+
 // VoteRequest represents the structure of a request sent by a Raft candidate
 // to gather votes from other nodes in the cluster during an election process.
 type VoteRequest struct {
@@ -85,6 +94,13 @@ type VoteResponse struct {
 	Term Term
 	// VoteGranted indicates whether the candidate received the vote.
 	VoteGranted bool
+}
+
+type Heartbeat struct {
+	// Term is the leader's current term.
+	Term Term
+	// LeaderCommit is the leader's commit index.
+	LeaderCommit Index
 }
 
 // ClientRequest represents a client's request to append item to the log.
