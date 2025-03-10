@@ -93,8 +93,6 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 		case <-t.Election():
 			electionTick++
 			cmdCh <- types.Command{Cmd: electionTick}
-		case <-t.Sync():
-			cmdCh <- types.Command{Cmd: types.SyncTick{}}
 		}
 	}
 }
@@ -115,6 +113,7 @@ func runReactor(
 	for {
 		cmd, err := fetchCommand(ctx, cmdP2PCh, cmdC2PCh)
 		if err != nil {
+			_, _ = r.Apply(magmatypes.ZeroServerID, nil)
 			return err
 		}
 

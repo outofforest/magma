@@ -1,6 +1,7 @@
 package reactor
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +13,7 @@ import (
 
 func TestCandidateSetup(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, log := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 
@@ -23,7 +24,6 @@ func TestCandidateSetup(t *testing.T) {
 	r.ignoreElectionTick = 0
 	r.sync[peer1ID] = &syncProgress{
 		NextIndex: 100,
-		End:       100,
 	}
 	r.matchIndex[peer1ID] = 100
 
@@ -53,12 +53,10 @@ func TestCandidateSetup(t *testing.T) {
 			peer3ID,
 			peer4ID,
 		},
-		Messages: []any{
-			&types.VoteRequest{
-				Term:         2,
-				NextLogIndex: 10,
-				LastLogTerm:  3,
-			},
+		Message: &types.VoteRequest{
+			Term:         2,
+			NextLogIndex: 10,
+			LastLogTerm:  3,
 		},
 	}, result)
 
@@ -75,16 +73,14 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	_, _, entries, err := s.Entries(0, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.Empty(entries)
+	requireT.Equal(bytes.Repeat([]byte{0x00}, logSize), log)
 }
 
 func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, log := newState()
 	requireT.NoError(s.SetCurrentTerm(2))
-	_, _, err := s.Append(0, 0, []byte{
+	_, _, err := s.Append([]byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
 	}, true)
@@ -98,10 +94,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
 		Term:         4,
 		NextLogIndex: 11,
-		NextLogTerm:  3,
 		LastLogTerm:  2,
-		Data:         []byte{0x01, 0x04, 0x02, 0x01, 0x00},
-		LeaderCommit: 0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -111,23 +104,29 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		CommitInfo: types.CommitInfo{
 			CommittedCount: 0,
 		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &types.AppendEntriesResponse{
+			Term:         4,
+			NextLogIndex: 11,
+			SyncLogIndex: 0,
+		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
 	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
-	_, _, entries, err := s.Entries(0, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{
+	logEqual(requireT, []byte{
 		0x01, 0x01, 0x02, 0x01, 0x00,
 		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x04, 0x02, 0x01, 0x00,
-	}, entries)
+	}, log)
 }
 
 func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -151,11 +150,9 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Messages: []any{
-			&types.VoteResponse{
-				Term:        3,
-				VoteGranted: true,
-			},
+		Message: &types.VoteResponse{
+			Term:        3,
+			VoteGranted: true,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -174,7 +171,7 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 
 func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -205,7 +202,7 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 
 func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -238,7 +235,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 
 func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -267,7 +264,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -296,7 +293,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -346,7 +343,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 
 func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
@@ -391,33 +388,24 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			peer3ID,
 			peer4ID,
 		},
-		Messages: []any{
-			&types.AppendEntriesRequest{
-				Term:         2,
-				NextLogIndex: 0,
-				NextLogTerm:  2,
-				LastLogTerm:  0,
-				Data:         []byte{0x01, 0x02},
-				LeaderCommit: 0,
-			},
+		Message: &types.AppendEntriesRequest{
+			Term:         2,
+			NextLogIndex: 2,
+			LastLogTerm:  2,
 		},
 	}, result)
 	requireT.Equal(map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 0,
-			End:       0,
 		},
 		peer2ID: {
 			NextIndex: 0,
-			End:       0,
 		},
 		peer3ID: {
 			NextIndex: 0,
-			End:       0,
 		},
 		peer4ID: {
 			NextIndex: 0,
-			End:       0,
 		},
 	}, r.sync)
 	requireT.Empty(r.matchIndex)
@@ -430,7 +418,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 
 func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
 	requireT.NoError(err)
@@ -451,7 +439,7 @@ func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
 
 func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, _ := newState()
 	r := newReactor(s)
 	_, err := r.transitionToCandidate()
 	requireT.NoError(err)

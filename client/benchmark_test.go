@@ -124,12 +124,29 @@ func TestCluster(t *testing.T) {
 		},
 		P2P: resonance.Config{
 			MaxMessageSize: 1024 * 1024,
+			BufferedReads:  true,
+			BufferedWrites: true,
 		},
-		C2P: resonance.Config{
+		L2P: resonance.Config{
+			MaxMessageSize: 1024 * 1024,
+			BufferedReads:  true,
+			BufferedWrites: false,
+		},
+		Tx2P: resonance.Config{
 			MaxMessageSize: 128 * 1024,
+			BufferedReads:  true,
+			BufferedWrites: true,
 		},
-		MaxLogSizePerMessage: 512 * 1024,
-		MaxLogSizeOnWire:     10 * 1024 * 1024,
+		C2PServer: resonance.Config{
+			MaxMessageSize: 128 * 1024,
+			BufferedReads:  true,
+			BufferedWrites: false,
+		},
+		C2PClient: resonance.Config{
+			MaxMessageSize: 128 * 1024,
+			BufferedReads:  true,
+			BufferedWrites: true,
+		},
 	}
 
 	group := parallel.NewGroup(ctx)
@@ -157,7 +174,7 @@ func TestCluster(t *testing.T) {
 
 	client := New(Config{
 		PeerAddress:      c2p1.Addr().String(),
-		C2P:              config.C2P,
+		C2P:              config.C2PClient,
 		BroadcastTimeout: 3 * time.Second,
 	}, entities.NewMarshaller())
 	group.Spawn("client", parallel.Fail, client.Run)
@@ -201,11 +218,11 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, makeConfig(config, peer4), p2p4, l2p4, tx2p4, c2p4)
 	})
 
-	time.Sleep(time.Minute)
+	time.Sleep(30 * time.Second)
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) types.Config {
 	config.ServerID = peerID
-	config.StateDir = filepath.Join("test", uuid.UUID(peerID).String())
+	config.StateDir = filepath.Join("/tmp/test", uuid.UUID(peerID).String())
 	return config
 }

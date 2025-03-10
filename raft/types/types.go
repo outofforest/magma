@@ -36,9 +36,6 @@ type HeartbeatTick uint64
 // ElectionTick is sent to raft reactor when it's time to switch to election phase.
 type ElectionTick uint64
 
-// SyncTick is sent to raft reactor when it's time to sync changes to persistent storage.
-type SyncTick struct{}
-
 // AppendEntriesRequest represents the structure of a request sent by a Raft leader
 // to replicate log entries or as a heartbeat.
 type AppendEntriesRequest struct {
@@ -46,19 +43,22 @@ type AppendEntriesRequest struct {
 	Term Term
 	// NextLogIndex is the index of the next log entry.
 	NextLogIndex Index
-	// NextLogTerm is the term of appended log entries.
-	NextLogTerm Term
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
-	// Data are the bytes to store (empty for a heartbeat).
-	Data []byte
-	// LeaderCommit is the leader's commit index.
-	LeaderCommit Index
 }
 
 // AppendEntriesResponse represents the response sent by a Raft follower
 // to the leader after processing an AppendEntriesRequest.
 type AppendEntriesResponse struct {
+	// Term is the current term of the server receiving the request, for leader to update itself.
+	Term Term
+	// NextLogIndex is the index of the next log item to receive.
+	NextLogIndex Index
+	// SyncLogIndex is the index synced to persistent storage.
+	SyncLogIndex Index
+}
+
+type AppendEntriesACK struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item to receive.
@@ -85,6 +85,13 @@ type VoteResponse struct {
 	Term Term
 	// VoteGranted indicates whether the candidate received the vote.
 	VoteGranted bool
+}
+
+type Heartbeat struct {
+	// Term is the leader's current term.
+	Term Term
+	// LeaderCommit is the leader's commit index.
+	LeaderCommit Index
 }
 
 // ClientRequest represents a client's request to append item to the log.
