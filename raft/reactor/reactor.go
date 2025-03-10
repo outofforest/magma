@@ -115,6 +115,15 @@ type Reactor struct {
 func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 	switch {
 	case peerID == magmatypes.ZeroServerID:
+		if cmd == nil {
+			for _, pSync := range r.sync {
+				if pSync.Iterator != nil {
+					pSync.Iterator.Close()
+					pSync.Iterator = nil
+				}
+			}
+		}
+
 		switch c := cmd.(type) {
 		case *types.ClientRequest:
 			return r.applyClientRequest(c)
@@ -205,12 +214,11 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 		return r.resultError(err)
 	}
 
-	fmt.Printf("%#v\n", m)
-
 	resp, err := r.handleAppendEntriesRequest(m)
 	if err != nil {
 		return r.resultError(err)
 	}
+
 	if resp == nil {
 		return r.resultEmpty()
 	}
@@ -252,8 +260,16 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultMessageAndRecipient(ChannelL2P, pSync.Iterator, peerID)
 	}
 
+	req := &types.AppendEntriesRequest{
+		Term:         r.state.CurrentTerm(),
+		NextLogIndex: m.NextLogIndex,
+		LastLogTerm:  r.state.PreviousTerm(m.NextLogIndex),
+		NextLogTerm:  r.state.PreviousTerm(m.NextLogIndex + 1),
+		LeaderCommit: r.commitInfo.CommittedCount,
+	}
+
 	// We send no logs until a common point is found.
-	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestEmpty(m.NextLogIndex), peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, req, peerID)
 }
 
 func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
@@ -293,12 +309,17 @@ func (r *Reactor) applyHeartbeat(peerID magmatypes.ServerID, m *types.Heartbeat)
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
 		return r.resultError(errors.New("bug in protocol"))
 	}
+	// if m.LeaderCommit < r.commitInfo.CommittedCount {
+	// 	return r.resultError(errors.New("bug in protocol"))
+	// }
 
 	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
 		return r.resultError(err)
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
+	r.leaderCommittedCount = m.LeaderCommit
+	r.updateFollowerCommit()
 
 	return r.resultEmpty()
 }
@@ -316,8 +337,6 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if err != nil {
 		return r.resultError(err)
 	}
-
-	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
 		r.commitInfo.CommittedCount = r.nextLogIndex
@@ -382,7 +401,7 @@ func (r *Reactor) applySyncTick() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultMessageAndRecipient(ChannelP2P, &types.AppendEntriesACK{
+	return r.resultMessageAndRecipient(ChannelL2P, &types.AppendEntriesACK{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.nextLogIndex,
 		SyncLogIndex: r.syncedCount,
@@ -514,23 +533,13 @@ func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
 	}
 }
 
-func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.AppendEntriesRequest {
-	return &types.AppendEntriesRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: nextLogIndex,
-		LastLogTerm:  r.state.PreviousTerm(nextLogIndex),
-		NextLogTerm:  r.state.PreviousTerm(nextLogIndex + 1),
-		LeaderCommit: r.commitInfo.CommittedCount,
-	}
-}
-
 func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
-	if req.LeaderCommit < r.commitInfo.CommittedCount {
-		return nil, errors.New("bug in protocol")
-	}
+	// if req.LeaderCommit < r.commitInfo.CommittedCount {
+	// 	return nil, errors.Errorf("bug in protocol: %s", uuid.UUID(r.config.ServerID))
+	// }
 
 	resp := &types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),

@@ -11,5 +11,6 @@ func main() {
 	proton.Generate("../p2p.proton.go",
 		types.VoteRequest{},
 		types.VoteResponse{},
+		types.Heartbeat{},
 	)
 }

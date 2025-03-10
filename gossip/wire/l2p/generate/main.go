@@ -13,7 +13,6 @@ func main() {
 		types.AppendEntriesRequest{},
 		types.AppendEntriesResponse{},
 		types.AppendEntriesACK{},
-		types.Heartbeat{},
 		l2p.StartTransfer{},
 	)
 }

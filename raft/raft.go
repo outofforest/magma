@@ -115,6 +115,7 @@ func runReactor(
 	for {
 		cmd, err := fetchCommand(ctx, cmdP2PCh, cmdC2PCh)
 		if err != nil {
+			_, _ = r.Apply(magmatypes.ZeroServerID, nil)
 			return err
 		}
 

@@ -513,7 +513,7 @@ func (g *gossip) l2pHandler(
 				}
 
 				switch m.(type) {
-				case *iterator.Iterator:
+				case *l2p.StartTransfer:
 					for {
 						m, err := c.ReceiveRawBytes()
 						if err != nil {
@@ -547,6 +547,11 @@ func (g *gossip) l2pHandler(
 						if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
 							return err
 						}
+						spawn("iteratorCloser", parallel.Fail, func(ctx context.Context) error {
+							<-ctx.Done()
+							m.Close()
+							return errors.WithStack(ctx.Err())
+						})
 						for {
 							r, err := m.Reader()
 							if err != nil {
