@@ -733,6 +733,34 @@ func TestAppendErrorTermMarkNotAllowed3(t *testing.T) {
 	requireT.Zero(nextIndex)
 }
 
+func TestAppendErrorIfTermMarkExceedsTxSliceBoundary(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.NoError(s.SetCurrentTerm(100))
+
+	tx := []byte{0x01, 0x01}
+	lastTerm, nextIndex, err := s.Append(0, 0, tx[:1], true)
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+}
+
+func TestAppendErrorIfTxExceedsTxSliceBoundary(t *testing.T) {
+	requireT := require.New(t)
+
+	s := newState()
+
+	requireT.NoError(s.SetCurrentTerm(100))
+
+	tx := []byte{0x01, 0x01, 0x02, 0x01, 0x00}
+	lastTerm, nextIndex, err := s.Append(0, 0, tx[:3], true)
+	requireT.Error(err)
+	requireT.Zero(lastTerm)
+	requireT.Zero(nextIndex)
+}
+
 func TestAppendNothingHappensIfPreviousIndexDoesNotExist(t *testing.T) {
 	requireT := require.New(t)
 
