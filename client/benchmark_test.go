@@ -165,7 +165,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 1_000_000 {
+	for range 10_000_000 {
 		err := client.Broadcast([]any{
 			&entities.Account{
 				FirstName: "Test1",

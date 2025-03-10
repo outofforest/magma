@@ -61,7 +61,9 @@ type State struct {
 	terms        []rafttypes.Index
 	log          []byte
 	nextLogIndex rafttypes.Index
-	doMSync      bool
+
+	highestTermSeen rafttypes.Term
+	doMSync         bool
 }
 
 // CurrentTerm returns the current term of the state.
@@ -199,9 +201,6 @@ func (s *State) Append(
 	data []byte,
 ) (rafttypes.Term, rafttypes.Index, error) {
 	if nextLogIndex == 0 {
-		if lastLogTerm != 0 {
-			return 0, 0, errors.New("bug in protocol")
-		}
 		return s.appendLog(nextLogIndex, lastLogTerm, data)
 	}
 	if lastLogTerm == 0 {
@@ -241,21 +240,39 @@ func (s *State) appendLog(
 	if s.currentTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
+	if nextLogIndex > s.nextLogIndex {
+		return 0, 0, errors.New("bug in protocol")
+	}
+	if nextLogIndex == 0 && lastLogTerm != 0 {
+		return 0, 0, errors.New("bug in protocol")
+	}
+	if nextLogIndex != 0 && lastLogTerm == 0 {
+		return 0, 0, errors.New("bug in protocol")
+	}
+	if s.PreviousTerm(nextLogIndex) != lastLogTerm {
+		return 0, 0, errors.New("bug in protocol")
+	}
+	if nextLogIndex < s.nextLogIndex && s.PreviousTerm(nextLogIndex+1) == lastLogTerm {
+		return 0, 0, errors.New("bug in protocol")
+	}
 
 	defer appendDefer(&retErr)
 
 	s.terms = s.terms[:lastLogTerm]
 	s.nextLogIndex = nextLogIndex
-	//nolint:nestif
 	if len(data) > 0 {
 		d := data
 		var i uint64
 		for len(d) > 0 {
 			size, n1 := varuint64.Parse(d)
+			if size == 0 {
+				return 0, 0, errors.New("bug in protocol")
+			}
 			term, n2 := varuint64.Parse(d[n1:])
-			if n2 == size {
+			switch {
+			case n2 == size:
 				// This is a term mark.
-				if term <= uint64(len(s.terms)) {
+				if rafttypes.Term(term) <= s.highestTermSeen {
 					return 0, 0, errors.New("bug in protocol")
 				}
 				if rafttypes.Term(term) > s.currentTerm {
@@ -265,6 +282,9 @@ func (s *State) appendLog(
 					s.terms = append(s.terms, nextLogIndex+rafttypes.Index(i))
 				}
 				lastLogTerm = rafttypes.Term(term)
+				s.highestTermSeen = lastLogTerm
+			case s.highestTermSeen == 0:
+				return 0, 0, errors.New("bug in protocol")
 			}
 			i += n1 + size
 			d = data[i:]
