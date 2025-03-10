@@ -50,8 +50,6 @@ type AppendEntriesRequest struct {
 	NextLogTerm Term
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
-	// Data are the bytes to store (empty for a heartbeat).
-	Data []byte
 	// LeaderCommit is the leader's commit index.
 	LeaderCommit Index
 }

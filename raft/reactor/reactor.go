@@ -7,6 +7,9 @@ package reactor
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
 
 import (
+	"fmt"
+
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/iterator"
@@ -201,6 +204,8 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
 		return r.resultError(err)
 	}
+
+	fmt.Printf("%#v\n", m)
 
 	resp, err := r.handleAppendEntriesRequest(m)
 	if err != nil {
@@ -398,7 +403,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 		pSync.Iterator = nil
 	}
 
-	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequestNext(), peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequest(), peerID)
 }
 
 func (r *Reactor) maybeTransitionToFollower(
@@ -432,6 +437,11 @@ func (r *Reactor) transitionToFollower() {
 	r.leaderID = magmatypes.ZeroServerID
 	r.ignoreElectionTick = r.electionTick + 1
 	r.votedForMe = 0
+	for _, pSync := range r.sync {
+		if pSync.Iterator != nil {
+			pSync.Iterator.Close()
+		}
+	}
 	clear(r.sync)
 	clear(r.matchIndex)
 }
@@ -485,39 +495,23 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	req, err := r.newAppendEntriesRequest(r.indexTermStarted, r.config.MaxLogSizePerMessage)
-	if err != nil {
-		return r.resultError(err)
-	}
-
 	for _, p := range r.peers {
-		pSync := r.sync[p]
-		pSync.NextIndex = r.indexTermStarted
-		if pSync.Iterator != nil {
-			pSync.Iterator.Close()
-			pSync.Iterator = nil
+		r.sync[p] = &syncProgress{
+			NextIndex: r.indexTermStarted,
 		}
 	}
 
-	return r.resultBroadcastMessage(ChannelL2P, req)
+	return r.resultBroadcastMessage(ChannelL2P, r.newAppendEntriesRequest())
 }
 
-func (r *Reactor) newAppendEntriesRequest(
-	nextLogIndex types.Index,
-	maxLogSize uint64,
-) (*types.AppendEntriesRequest, error) {
-	lastLogTerm, nextLogTerm, data, err := r.state.Entries(nextLogIndex, maxLogSize)
-	if err != nil {
-		return nil, err
-	}
+func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
 	return &types.AppendEntriesRequest{
 		Term:         r.state.CurrentTerm(),
-		NextLogIndex: nextLogIndex,
-		LastLogTerm:  lastLogTerm,
-		NextLogTerm:  nextLogTerm,
-		Data:         data,
+		NextLogIndex: r.nextLogIndex,
+		LastLogTerm:  r.lastLogTerm,
+		NextLogTerm:  r.lastLogTerm,
 		LeaderCommit: r.commitInfo.CommittedCount,
-	}, nil
+	}
 }
 
 func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.AppendEntriesRequest {
@@ -526,18 +520,6 @@ func (r *Reactor) newAppendEntriesRequestEmpty(nextLogIndex types.Index) *types.
 		NextLogIndex: nextLogIndex,
 		LastLogTerm:  r.state.PreviousTerm(nextLogIndex),
 		NextLogTerm:  r.state.PreviousTerm(nextLogIndex + 1),
-		Data:         nil,
-		LeaderCommit: r.commitInfo.CommittedCount,
-	}
-}
-
-func (r *Reactor) newAppendEntriesRequestNext() *types.AppendEntriesRequest {
-	return &types.AppendEntriesRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.nextLogIndex,
-		LastLogTerm:  r.lastLogTerm,
-		NextLogTerm:  r.lastLogTerm,
-		Data:         nil,
 		LeaderCommit: r.commitInfo.CommittedCount,
 	}
 }
@@ -627,6 +609,7 @@ func (r *Reactor) updateFollowerCommit() {
 		if r.commitInfo.CommittedCount > r.syncedCount {
 			r.commitInfo.CommittedCount = r.syncedCount
 		}
+		fmt.Printf(" %s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
 	}
 }
 
@@ -648,6 +631,7 @@ func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
 		greater++
 		if greater == r.majority {
 			r.commitInfo.CommittedCount = nextCommittedCount
+			fmt.Printf("+%s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
 			return true
 		}
 	}
