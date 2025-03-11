@@ -136,34 +136,7 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 	return s.appendLog(termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], true)
 }
 
-// Append attempts to apply the given log entries starting at a specified index in the log.
-// It verifies that the provided `nextLogIndex` and `lastLogTerm` are consistent with the
-// existing log. If they are not consistent, it either truncates conflicting entries or
-// returns an error depending on the situation.
-//
-// Parameters:
-//   - nextLogIndex: The expected starting index for the given entries in the log.
-//   - lastLogTerm: The term of the log entry immediately preceding `nextLogIndex`.
-//     If this term does not match the corresponding term in the log, it indicates
-//     an inconsistency.
-//   - entries: A slice of log entries to append to the state log.
-//
-// Returns:
-// - types.Term: The term of the last log entry after appending (if successful).
-// - types.Index: The index of the last log entry after appending (if successful).
-// - bool: A flag indicating whether the log was successfully updated.
-// - error: An error indicating a protocol inconsistency or other issues during processing.
-//
-// Behavior:
-//   - If nextLogIndex is 0, the log is fully replaced with the new entries, with
-//     specific checks on term consistency.
-//   - If the term consistency is validated, the new entries are appended, potentially
-//     overwriting conflicting existing entries starting from `nextLogIndex`.
-//   - If term inconsistency is detected, conflicting entries are truncated,
-//     and the function exits without appending the new entries.
-//
-// The function will ensure that no log entry is appended out of order or violates
-// the consistency guarantees of the Raft protocol.
+// Validate validates the common point in log.
 func (s *State) Validate(
 	nextLogIndex rafttypes.Index,
 	lastLogTerm rafttypes.Term,
@@ -190,6 +163,7 @@ func (s *State) Validate(
 	return revertTerm, s.nextLogIndex, nil
 }
 
+// Append appends data to log.
 func (s *State) Append(
 	data []byte,
 	allowTermMark bool,

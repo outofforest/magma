@@ -354,6 +354,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		}
 	}
 
+	//nolint:nestif
 	if r.nextLogIndex > r.syncedCount && tick%5 == 0 {
 		var err error
 		r.syncedCount, err = r.state.Sync()
@@ -650,21 +651,6 @@ func (r *Reactor) resultMessageAndRecipient(
 		Channel:    channel,
 		Message:    message,
 		Recipients: []magmatypes.ServerID{recipient},
-	}, nil
-}
-
-func (r *Reactor) resultMessageAndRecipients(
-	channel Channel,
-	message any,
-	recipients []magmatypes.ServerID,
-) (Result, error) {
-	return Result{
-		Role:       r.role,
-		LeaderID:   r.leaderID,
-		CommitInfo: r.commitInfo,
-		Channel:    channel,
-		Message:    message,
-		Recipients: recipients,
 	}, nil
 }
 

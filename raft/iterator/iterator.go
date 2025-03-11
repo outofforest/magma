@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// New creates new iterator.
 func New(dir string, fileSize, acknowledged, available uint64) (*Iterator, error) {
 	f, err := os.Open(filepath.Join(dir, "log"))
 	if err != nil {
@@ -30,6 +31,7 @@ func New(dir string, fileSize, acknowledged, available uint64) (*Iterator, error
 	return i, nil
 }
 
+// Iterator iterates over log.
 type Iterator struct {
 	dir      string
 	fileSize uint64
@@ -41,6 +43,7 @@ type Iterator struct {
 	closed              bool
 }
 
+// Available sets the number of available bytes.
 func (i *Iterator) Available(count uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -52,6 +55,7 @@ func (i *Iterator) Available(count uint64) {
 	}
 }
 
+// Acknowledge acknowledges bytes received by the consumer.
 func (i *Iterator) Acknowledge(count uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -60,6 +64,7 @@ func (i *Iterator) Acknowledge(count uint64) {
 	// TODO (wojciech): Close not needed files.
 }
 
+// Reader returns next reader.
 func (i *Iterator) Reader() (io.Reader, error) {
 	size, err := i.waitForData()
 	if err != nil {
@@ -69,6 +74,7 @@ func (i *Iterator) Reader() (io.Reader, error) {
 	return io.LimitReader(i.f, int64(size)), nil
 }
 
+// Close closes the iterator.
 func (i *Iterator) Close() {
 	i.mu.Lock()
 	defer i.mu.Unlock()

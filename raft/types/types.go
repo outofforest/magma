@@ -36,8 +36,7 @@ type HeartbeatTick uint64
 // ElectionTick is sent to raft reactor when it's time to switch to election phase.
 type ElectionTick uint64
 
-// AppendEntriesRequest represents the structure of a request sent by a Raft leader
-// to replicate log entries or as a heartbeat.
+// AppendEntriesRequest is sent by the leader to find common point in log.
 type AppendEntriesRequest struct {
 	// Term is the leader's current term.
 	Term Term
@@ -47,7 +46,7 @@ type AppendEntriesRequest struct {
 	LastLogTerm Term
 }
 
-// AppendEntriesResponse represents the response sent by a Raft follower
+// AppendEntriesResponse is sent to leader pointing to current log tail.
 // to the leader after processing an AppendEntriesRequest.
 type AppendEntriesResponse struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
@@ -58,6 +57,7 @@ type AppendEntriesResponse struct {
 	SyncLogIndex Index
 }
 
+// AppendEntriesACK acknowledges log transfer.
 type AppendEntriesACK struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
@@ -87,6 +87,7 @@ type VoteResponse struct {
 	VoteGranted bool
 }
 
+// Heartbeat is sent by the leader to indicate its liveness.
 type Heartbeat struct {
 	// Term is the leader's current term.
 	Term Term

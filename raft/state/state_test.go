@@ -10,8 +10,6 @@ import (
 	"github.com/outofforest/magma/types"
 )
 
-const maxSize = 6
-
 func newState() *State {
 	s, _ := NewInMemory(1024 * 1024)
 	return s
