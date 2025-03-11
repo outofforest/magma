@@ -23,32 +23,26 @@ func TestMajorityWhenFollower(t *testing.T) {
 
 	tm.applyRole(types.RoleFollower)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
@@ -60,32 +54,26 @@ func TestPeersWhenCandidate(t *testing.T) {
 	tm.role = types.RoleCandidate
 	tm.applyRole(types.RoleCandidate)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
@@ -97,32 +85,26 @@ func TestPeersWhenLeader(t *testing.T) {
 	tm.role = types.RoleLeader
 	tm.applyRole(types.RoleLeader)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(true)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.applyMajority(false)
 
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
@@ -133,17 +115,14 @@ func TestApplyRoleFollower(t *testing.T) {
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleFollower)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = true
 	tm.applyRole(types.RoleFollower)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleFollower)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
@@ -154,17 +133,14 @@ func TestApplyRoleCandidate(t *testing.T) {
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleCandidate)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = true
 	tm.applyRole(types.RoleCandidate)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.True(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleCandidate)
-	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
@@ -175,16 +151,13 @@ func TestApplyRoleLeader(t *testing.T) {
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleLeader)
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = true
 	tm.applyRole(types.RoleLeader)
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleLeader)
-	requireT.True(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }

@@ -14,13 +14,14 @@ var ZeroServerID ServerID
 
 // Config is the config of magma.
 type Config struct {
-	ServerID             ServerID
-	Servers              []PeerConfig
-	StateDir             string
-	P2P                  resonance.Config
-	C2P                  resonance.Config
-	MaxLogSizePerMessage uint64
-	MaxLogSizeOnWire     uint64
+	ServerID  ServerID
+	Servers   []PeerConfig
+	StateDir  string
+	P2P       resonance.Config
+	L2P       resonance.Config
+	Tx2P      resonance.Config
+	C2PServer resonance.Config
+	C2PClient resonance.Config
 }
 
 // PeerConfig stores configuration of peer connection.
