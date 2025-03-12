@@ -1,7 +1,7 @@
 package main
 
 import (
-	rafttypes "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/proton"
 )
 
@@ -9,6 +9,6 @@ import (
 
 func main() {
 	proton.Generate("../c2p.proton.go",
-		rafttypes.CommitInfo{},
+		c2p.Init{},
 	)
 }

@@ -7,7 +7,9 @@ import (
 	"github.com/outofforest/magma/gossip"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/reactor"
-	"github.com/outofforest/magma/raft/state"
+	"github.com/outofforest/magma/state"
+	"github.com/outofforest/magma/state/events"
+	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
 )
 
@@ -15,17 +17,25 @@ import (
 func Run(
 	ctx context.Context,
 	config types.Config,
-	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener,
-) error {
-	s, closeState, err := state.Open(config.StateDir)
+	p2pListener, c2pListener net.Listener,
+	repo *repository.Repository,
+	em *events.Store,
+) (retErr error) {
+	s, sCloser, err := state.New(repo, em)
 	if err != nil {
 		return err
 	}
-	defer closeState()
+	defer defCloser(sCloser, &retErr)
 
 	return raft.Run(
 		ctx,
 		reactor.New(config, s),
-		gossip.New(config, p2pListener, l2pListener, tx2pListener, c2pListener),
+		gossip.New(config, p2pListener, c2pListener, repo),
 	)
+}
+
+func defCloser(sCloser state.Closer, retErr *error) {
+	if err := sCloser(); err != nil && *retErr == nil {
+		*retErr = err
+	}
 }

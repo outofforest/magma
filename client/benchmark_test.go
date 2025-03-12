@@ -15,13 +15,14 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client/entities"
+	"github.com/outofforest/magma/state/events"
+	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
-	"github.com/outofforest/resonance"
 )
 
 func TestCluster(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	requireT := require.New(t)
 	ctx, cancel := context.WithCancel(logger.WithLogger(context.Background(), logger.New(logger.DefaultConfig)))
 	t.Cleanup(cancel)
@@ -35,14 +36,6 @@ func TestCluster(t *testing.T) {
 	requireT.NoError(err)
 	defer p2p1.Close()
 
-	l2p1, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer l2p1.Close()
-
-	tx2p1, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer tx2p1.Close()
-
 	c2p1, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
 	defer c2p1.Close()
@@ -50,14 +43,6 @@ func TestCluster(t *testing.T) {
 	p2p2, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
 	defer p2p2.Close()
-
-	l2p2, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer l2p2.Close()
-
-	tx2p2, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer tx2p2.Close()
 
 	c2p2, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
@@ -67,14 +52,6 @@ func TestCluster(t *testing.T) {
 	requireT.NoError(err)
 	defer p2p3.Close()
 
-	l2p3, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer l2p3.Close()
-
-	tx2p3, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer tx2p3.Close()
-
 	c2p3, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
 	defer c2p3.Close()
@@ -83,14 +60,6 @@ func TestCluster(t *testing.T) {
 	requireT.NoError(err)
 	defer p2p4.Close()
 
-	l2p4, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer l2p4.Close()
-
-	tx2p4, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-	defer tx2p4.Close()
-
 	c2p4, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
 	defer c2p4.Close()
@@ -98,55 +67,23 @@ func TestCluster(t *testing.T) {
 	config := types.Config{
 		Servers: []types.PeerConfig{
 			{
-				ID:          peer1,
-				P2PAddress:  p2p1.Addr().String(),
-				L2PAddress:  l2p1.Addr().String(),
-				Tx2PAddress: tx2p1.Addr().String(),
+				ID:         peer1,
+				P2PAddress: p2p1.Addr().String(),
 			},
 			{
-				ID:          peer2,
-				P2PAddress:  p2p2.Addr().String(),
-				L2PAddress:  l2p2.Addr().String(),
-				Tx2PAddress: tx2p2.Addr().String(),
+				ID:         peer2,
+				P2PAddress: p2p2.Addr().String(),
 			},
 			{
-				ID:          peer3,
-				P2PAddress:  p2p3.Addr().String(),
-				L2PAddress:  l2p3.Addr().String(),
-				Tx2PAddress: tx2p3.Addr().String(),
+				ID:         peer3,
+				P2PAddress: p2p3.Addr().String(),
 			},
 			{
-				ID:          peer4,
-				P2PAddress:  p2p4.Addr().String(),
-				L2PAddress:  l2p4.Addr().String(),
-				Tx2PAddress: tx2p4.Addr().String(),
+				ID:         peer4,
+				P2PAddress: p2p4.Addr().String(),
 			},
 		},
-		P2P: resonance.Config{
-			MaxMessageSize: 1024 * 1024,
-			BufferedReads:  true,
-			BufferedWrites: true,
-		},
-		L2P: resonance.Config{
-			MaxMessageSize: 1024 * 1024,
-			BufferedReads:  true,
-			BufferedWrites: false,
-		},
-		Tx2P: resonance.Config{
-			MaxMessageSize: 128 * 1024,
-			BufferedReads:  true,
-			BufferedWrites: true,
-		},
-		C2PServer: resonance.Config{
-			MaxMessageSize: 128 * 1024,
-			BufferedReads:  true,
-			BufferedWrites: false,
-		},
-		C2PClient: resonance.Config{
-			MaxMessageSize: 128 * 1024,
-			BufferedReads:  true,
-			BufferedWrites: true,
-		},
+		MaxMessageSize: 128 * 1024,
 	}
 
 	group := parallel.NewGroup(ctx)
@@ -162,19 +99,23 @@ func TestCluster(t *testing.T) {
 	fmt.Printf("==== %s ====\n", uuid.UUID(peer3))
 	fmt.Printf("==== %s ====\n", uuid.UUID(peer4))
 
+	const pageSize = 128 * 1024 * 1024 // 1024 * 1024 * 1024
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer1), p2p1, l2p1, tx2p1, c2p1)
+		config, repo, em := makeConfig(config, peer1, pageSize)
+		return magma.Run(ctx, config, p2p1, c2p1, repo, em)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer2), p2p2, l2p2, tx2p2, c2p2)
+		config, repo, em := makeConfig(config, peer2, pageSize)
+		return magma.Run(ctx, config, p2p2, c2p2, repo, em)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer3), p2p3, l2p3, tx2p3, c2p3)
+		config, repo, em := makeConfig(config, peer3, pageSize)
+		return magma.Run(ctx, config, p2p3, c2p3, repo, em)
 	})
 
 	client := New(Config{
 		PeerAddress:      c2p1.Addr().String(),
-		C2P:              config.C2PClient,
+		MaxMessageSize:   config.MaxMessageSize,
 		BroadcastTimeout: 3 * time.Second,
 	}, entities.NewMarshaller())
 	group.Spawn("client", parallel.Fail, client.Run)
@@ -207,6 +148,7 @@ func TestCluster(t *testing.T) {
 		})
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 	}
 
@@ -215,14 +157,28 @@ func TestCluster(t *testing.T) {
 	fmt.Println("===================")
 
 	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer4), p2p4, l2p4, tx2p4, c2p4)
+		config, repo, em := makeConfig(config, peer4, pageSize)
+		return magma.Run(ctx, config, p2p4, c2p4, repo, em)
 	})
 
 	time.Sleep(30 * time.Second)
 }
 
-func makeConfig(config types.Config, peerID types.ServerID) types.Config {
+//nolint:unparam
+func makeConfig(
+	config types.Config,
+	peerID types.ServerID,
+	pageSize uint64,
+) (types.Config, *repository.Repository, *events.Store) {
 	config.ServerID = peerID
-	config.StateDir = filepath.Join("/tmp/test", uuid.UUID(peerID).String())
-	return config
+	repo, err := repository.Open(filepath.Join("test", uuid.UUID(peerID).String(), "repo"), pageSize)
+	if err != nil {
+		panic(err)
+	}
+	em, err := events.Open(filepath.Join("test", uuid.UUID(peerID).String(), "events"))
+	if err != nil {
+		panic(err)
+	}
+
+	return config, repo, em
 }

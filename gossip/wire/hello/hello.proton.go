@@ -20,7 +20,6 @@ func NewMarshaller() Marshaller {
 	return Marshaller{}
 }
 
-
 // Marshaller marshals and unmarshals messages.
 type Marshaller struct {
 }
@@ -71,7 +70,7 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 }
 
 func size0(m *wire.Hello) uint64 {
-	var n uint64 = 16
+	var n uint64 = 17
 	return n
 }
 
@@ -82,6 +81,12 @@ func marshal0(m *wire.Hello, b []byte) uint64 {
 
 		copy(b[o:o+16], unsafe.Slice(&m.ServerID[0], 16))
 		o += 16
+	}
+	{
+		// Channel
+
+		b[o] = byte(m.Channel)
+		o++
 	}
 
 	return o
@@ -94,6 +99,12 @@ func unmarshal0(m *wire.Hello, b []byte) uint64 {
 
 		copy(unsafe.Slice(&m.ServerID[0], 16), b[o:o+16])
 		o += 16
+	}
+	{
+		// Channel
+
+		m.Channel = wire.Channel(b[o])
+		o++
 	}
 
 	return o
