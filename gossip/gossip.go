@@ -3,10 +3,7 @@ package gossip
 import (
 	"bytes"
 	"context"
-	"io"
 	"net"
-	"os"
-	"path/filepath"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -18,12 +15,13 @@ import (
 	"github.com/outofforest/magma/gossip/wire/l2p"
 	"github.com/outofforest/magma/gossip/wire/p2p"
 	"github.com/outofforest/magma/raft"
-	"github.com/outofforest/magma/raft/iterator"
 	"github.com/outofforest/magma/raft/reactor"
+	"github.com/outofforest/magma/raft/state"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
+	"github.com/outofforest/varuint64"
 )
 
 const queueCapacity = 10
@@ -39,6 +37,7 @@ type peerL2P struct {
 	ID          types.ServerID
 	SendCh      chan any
 	InstalledCh chan struct{}
+	Iterator    *state.Iterator
 	Connected   bool
 }
 
@@ -50,12 +49,16 @@ type peerTx2P struct {
 }
 
 type client struct {
-	CommitCh chan rafttypes.CommitInfo
+	Iterator *state.Iterator
 	LeaderCh chan peerTx2P
 }
 
 // New returns gossiping function.
-func New(config types.Config, p2pListener, l2pListener, tx2pListener, c2pListener net.Listener) raft.GossipFunc {
+func New(
+	config types.Config,
+	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener,
+	repository *state.Repository,
+) raft.GossipFunc {
 	validPeers := map[types.ServerID]struct{}{}
 	for _, p := range config.Servers {
 		if p.ID != config.ServerID {
@@ -69,12 +72,15 @@ func New(config types.Config, p2pListener, l2pListener, tx2pListener, c2pListene
 		l2pListener:     l2pListener,
 		tx2pListener:    tx2pListener,
 		c2pListener:     c2pListener,
+		repo:            repository,
 		minority:        len(config.Servers) / 2,
 		validPeers:      validPeers,
 		helloMarshaller: hello.NewMarshaller(),
 		p2pMarshaller:   p2p.NewMarshaller(),
 		l2pMarshaller:   l2p.NewMarshaller(),
 		c2pMarshaller:   c2p.NewMarshaller(),
+		providerPeers:   state.NewTailProvider(),
+		providerClients: state.NewTailProvider(),
 	}
 	return g.Run
 }
@@ -82,6 +88,7 @@ func New(config types.Config, p2pListener, l2pListener, tx2pListener, c2pListene
 type gossip struct {
 	config                                              types.Config
 	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener
+	repo                                                *state.Repository
 	minority                                            int
 	validPeers                                          map[types.ServerID]struct{}
 
@@ -89,6 +96,9 @@ type gossip struct {
 	p2pMarshaller   p2p.Marshaller
 	l2pMarshaller   l2p.Marshaller
 	c2pMarshaller   c2p.Marshaller
+
+	providerPeers   *state.TailProvider
+	providerClients *state.TailProvider
 }
 
 func (g *gossip) Run(
@@ -213,7 +223,7 @@ func (g *gossip) runSupervisor(
 	peersP2P := map[types.ServerID]peerP2P{}
 	peersL2P := map[types.ServerID]peerL2P{}
 	peersTx2P := map[types.ServerID]peerTx2P{}
-	clients := map[chan rafttypes.CommitInfo]chan peerTx2P{}
+	clients := map[*state.Iterator]chan peerTx2P{}
 	var commitInfo rafttypes.CommitInfo
 
 	if g.minority == 0 {
@@ -230,6 +240,7 @@ func (g *gossip) runSupervisor(
 				resultCh = nil
 				continue
 			}
+
 			//nolint:nestif
 			if leaderID != res.LeaderID {
 				leaderID = res.LeaderID
@@ -271,25 +282,30 @@ func (g *gossip) runSupervisor(
 					}
 				}
 			case reactor.ChannelL2P:
-				for _, peerID := range res.Recipients {
-					if p := peersL2P[peerID]; p.SendCh != nil {
-						p.SendCh <- res.Message
-					}
-				}
-			}
-
-			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-				commitInfo = res.CommitInfo
-				for commitCh := range clients {
-					if len(commitCh) > 0 {
-						select {
-						case <-commitCh:
-						default:
+				switch m := res.Message.(type) {
+				case *reactor.StartTransfer:
+					for _, peerID := range res.Recipients {
+						if p := peersL2P[peerID]; p.SendCh != nil {
+							p.Iterator = state.NewIterator(g.providerPeers, g.repo.Iterator(m.NextLogIndex), m.NextLogIndex)
+							peersL2P[peerID] = p
+							p.SendCh <- p.Iterator
 						}
 					}
-					commitCh <- commitInfo
+				default:
+					for _, peerID := range res.Recipients {
+						if p := peersL2P[peerID]; p.SendCh != nil {
+							p.SendCh <- res.Message
+						}
+					}
 				}
 			}
+			if res.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+				g.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
+			}
+			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
+				g.providerClients.SetTail(res.CommitInfo.CommittedCount)
+			}
+			commitInfo = res.CommitInfo
 		case p, ok := <-peerP2PCh:
 			if !ok {
 				peerP2PCh = nil
@@ -329,12 +345,23 @@ func (g *gossip) runSupervisor(
 				pOld, exists := peersL2P[p.ID]
 				if exists {
 					close(pOld.SendCh)
+					if pOld.Iterator != nil {
+						if err := pOld.Iterator.Close(); err != nil {
+							return err
+						}
+					}
 				}
 				peersL2P[p.ID] = p
 				close(p.InstalledCh)
 			case peersL2P[p.ID].SendCh == p.SendCh:
+				it := peersL2P[p.ID].Iterator
 				delete(peersL2P, p.ID)
 				close(p.SendCh)
+				if it != nil {
+					if err := it.Close(); err != nil {
+						return err
+					}
+				}
 			}
 		case p, ok := <-peerTx2PCh:
 			if !ok {
@@ -388,18 +415,17 @@ func (g *gossip) runSupervisor(
 				}
 				continue
 			}
-			if _, exists := clients[c.CommitCh]; exists {
-				close(c.CommitCh)
+			if _, exists := clients[c.Iterator]; exists {
 				close(c.LeaderCh)
-				delete(clients, c.CommitCh)
-			} else {
-				if commitInfo.CommittedCount > 0 {
-					c.CommitCh <- commitInfo
+				delete(clients, c.Iterator)
+				if err := c.Iterator.Close(); err != nil {
+					return err
 				}
+			} else {
 				if pLeader.ID != types.ZeroServerID {
 					c.LeaderCh <- pLeader
 				}
-				clients[c.CommitCh] = c.LeaderCh
+				clients[c.Iterator] = c.LeaderCh
 			}
 		}
 	}
@@ -539,16 +565,29 @@ func (g *gossip) l2pHandler(
 
 			for msg := range sendCh {
 				switch m := msg.(type) {
-				case *iterator.Iterator:
-					if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
+				case *state.Iterator:
+					startMsg := &l2p.StartTransfer{}
+					id, err := g.l2pMarshaller.ID(startMsg)
+					if err != nil {
 						return err
 					}
-					spawn("iteratorCloser", parallel.Fail, func(ctx context.Context) error {
-						<-ctx.Done()
-						m.Close()
-						return errors.WithStack(ctx.Err())
-					})
+					msgSize, err := g.l2pMarshaller.Size(startMsg)
+					if err != nil {
+						return err
+					}
+					startMsgSize := varuint64.Size(id) + msgSize
+					startMsgSize += varuint64.Size(startMsgSize)
+
+					initSentBytes := c.BytesSent() + startMsgSize
+					if err := c.SendProton(startMsg, g.l2pMarshaller); err != nil {
+						return err
+					}
 					for {
+						if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
+							if err := m.Acknowledge(rafttypes.Index(sentBytes - initSentBytes)); err != nil {
+								return err
+							}
+						}
 						r, err := m.Reader()
 						if err != nil {
 							return err
@@ -629,23 +668,23 @@ func (g *gossip) c2pHandler(
 		return err
 	}
 
-	msgCommitInfo, ok := msg.(*rafttypes.CommitInfo)
+	msgInit, ok := msg.(*c2p.Init)
 	if !ok {
 		return errors.New("expected init")
 	}
 
-	ch := make(chan rafttypes.CommitInfo, 1)
-	var commitCh <-chan rafttypes.CommitInfo = ch
+	it := state.NewIterator(g.providerClients, g.repo.Iterator(msgInit.NextLogIndex), msgInit.NextLogIndex)
+
+	ch2 := make(chan peerTx2P, 1)
+	var leaderCh <-chan peerTx2P = ch2
+	cl := client{
+		Iterator: it,
+		LeaderCh: ch2,
+	}
+	clientCh <- cl
 
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
-			ch2 := make(chan peerTx2P, 1)
-			var leaderCh <-chan peerTx2P = ch2
-			cl := client{
-				CommitCh: ch,
-				LeaderCh: ch2,
-			}
-			clientCh <- cl
 			defer func() {
 				clientCh <- cl
 			}()
@@ -679,32 +718,22 @@ func (g *gossip) c2pHandler(
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
-			nextLogIndex := msgCommitInfo.CommittedCount
-			var logF *os.File
-			for newCommitInfo := range commitCh {
-				if logF == nil {
-					var err error
-					logF, err = os.Open(filepath.Join(g.config.StateDir, "log"))
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					if nextLogIndex > 0 {
-						if _, err := logF.Seek(int64(nextLogIndex), io.SeekStart); err != nil {
-							return errors.WithStack(err)
-						}
-					}
-				}
-
-				if newCommitInfo.CommittedCount > nextLogIndex {
-					toSend := uint64(newCommitInfo.CommittedCount - nextLogIndex)
-					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
+			initSentBytes := c.BytesSent()
+			for {
+				if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
+					if err := it.Acknowledge(rafttypes.Index(sentBytes - initSentBytes)); err != nil {
 						return err
 					}
-					nextLogIndex += rafttypes.Index(toSend)
+				}
+
+				r, err := it.Reader()
+				if err != nil {
+					return err
+				}
+				if err := c.SendStream(r); err != nil {
+					return err
 				}
 			}
-
-			return errors.WithStack(ctx.Err())
 		})
 
 		return nil

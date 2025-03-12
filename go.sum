@@ -1,4 +1,8 @@
+github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
+github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
+github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
+github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -22,8 +26,8 @@ github.com/outofforest/parallel v0.2.3 h1:DRIgHr7XTL4LLgsTqrj041kulv4ajtbCkRbkOG
 github.com/outofforest/parallel v0.2.3/go.mod h1:cu210xIjJtOMXR2ERzEcNA2kr0Z0xfZjSKw2jTxAQ2E=
 github.com/outofforest/proton v0.10.2 h1:b+eeahvKn4TmtgtervcFulAhV/GyNbUGtOyMDmr6gsU=
 github.com/outofforest/proton v0.10.2/go.mod h1:whP4rfB53NB31pm2VSkLDRcdJCjDu2B6cykaHcFT4yc=
-github.com/outofforest/resonance v0.15.0 h1:HOG7N87wUanO1QY4mxX2si5P20kT0A442dP6xjCiSmw=
-github.com/outofforest/resonance v0.15.0/go.mod h1:Mqtj0GmeI4A8C8vXhnVdSOofsk8XNxykrqwcpLqJtXc=
+github.com/outofforest/resonance v0.16.0 h1:GUcAPNJFQploVftwnz0OoaBMiV7/8yH107YDovwioV8=
+github.com/outofforest/resonance v0.16.0/go.mod h1:Mqtj0GmeI4A8C8vXhnVdSOofsk8XNxykrqwcpLqJtXc=
 github.com/outofforest/run v0.8.0 h1:p3tSksh6AWzxsZ+baZzeQhgsfugKz6d6RaE7xfQYt5M=
 github.com/outofforest/run v0.8.0/go.mod h1:4d6txrC3wfOSFy64bwxZweKUQsccDs9IvtIbAAFAk7E=
 github.com/outofforest/spin v0.3.1 h1:iF1t4zgbt7KaarrnBqmYWMfoSichqY4/KiKMC/dE524=
@@ -38,6 +42,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/ridge/must v0.6.0/go.mod h1:dm1IMngycGzvmpsFY1A5TU18Y5Yg6MgtkJ0iJbca0VA=
 github.com/samber/lo v1.49.1 h1:4BIFyVfuQSEpluc7Fua+j1NolZHiEHEpaSEKdsH0tew=
 github.com/samber/lo v1.49.1/go.mod h1:dO6KHFzUKXgP8LDhU0oI8d2hekjXnGOu0DB8Jecxd6o=
+github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72 h1:qLC7fQah7D6K1B0ujays3HV9gkFtllcxhzImRR7ArPQ=
+github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=
 github.com/spf13/pflag v1.0.6/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=

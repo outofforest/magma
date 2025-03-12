@@ -64,7 +64,7 @@ func TestFollowerSetup(t *testing.T) {
 	r.votedForMe = 2
 	r.electionTick = 1
 	r.ignoreElectionTick = 0
-	r.sync[peer1ID] = &syncProgress{
+	r.nextIndex[peer1ID] = &syncProgress{
 		NextIndex: 100,
 	}
 	r.matchIndex[peer1ID] = 100
@@ -80,7 +80,7 @@ func TestFollowerSetup(t *testing.T) {
 	requireT.Zero(r.votedForMe)
 	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(2, r.ignoreElectionTick)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 
 	requireT.EqualValues(3, r.lastLogTerm)

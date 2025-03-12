@@ -26,7 +26,7 @@ type Marshaller struct {
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
-	case *types.CommitInfo:
+	case *Init:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -36,7 +36,7 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
-	case *types.CommitInfo:
+	case *Init:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -48,7 +48,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
-	case *types.CommitInfo:
+	case *Init:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -61,20 +61,20 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 
 	switch id {
 	case id0:
-		msg := &types.CommitInfo{}
+		msg := &Init{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
 }
 
-func size0(m *types.CommitInfo) uint64 {
+func size0(m *Init) uint64 {
 	var n uint64 = 1
 	{
-		// CommittedCount
+		// NextLogIndex
 
 		{
-			vi := m.CommittedCount
+			vi := m.NextLogIndex
 			switch {
 			case vi <= 0x7F:
 			case vi <= 0x3FFF:
@@ -99,13 +99,13 @@ func size0(m *types.CommitInfo) uint64 {
 	return n
 }
 
-func marshal0(m *types.CommitInfo, b []byte) uint64 {
+func marshal0(m *Init, b []byte) uint64 {
 	var o uint64
 	{
-		// CommittedCount
+		// NextLogIndex
 
 		{
-			vi := m.CommittedCount
+			vi := m.NextLogIndex
 			switch {
 			case vi <= 0x7F:
 				b[o] = byte(vi)
@@ -249,10 +249,10 @@ func marshal0(m *types.CommitInfo, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(m *types.CommitInfo, b []byte) uint64 {
+func unmarshal0(m *Init, b []byte) uint64 {
 	var o uint64
 	{
-		// CommittedCount
+		// NextLogIndex
 
 		{
 			vi := types.Index(b[o] & 0x7F)
@@ -297,7 +297,7 @@ func unmarshal0(m *types.CommitInfo, b []byte) uint64 {
 					}
 				}
 			}
-			m.CommittedCount = vi
+			m.NextLogIndex = vi
 		}
 	}
 

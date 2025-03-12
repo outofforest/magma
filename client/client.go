@@ -9,6 +9,7 @@ import (
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire/c2p"
+	"github.com/outofforest/magma/raft/state/format"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
@@ -30,7 +31,7 @@ func New(config Config, m proton.Marshaller) *Client {
 		txCh:          make(chan []byte, 1),
 		m:             m,
 		timeoutTicker: time.NewTicker(time.Hour),
-		bufSize:       10 * (config.C2P.MaxMessageSize + varuint64.MaxSize),
+		bufSize:       10 * (config.C2P.MaxMessageSize + varuint64.MaxSize + format.ChecksumSize),
 	}
 	c.timeoutTicker.Stop()
 	return c
@@ -58,8 +59,8 @@ func (c *Client) Run(ctx context.Context) error {
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, c.config.C2P,
 			func(ctx context.Context, conn *resonance.Connection) error {
-				if err := conn.SendProton(&rafttypes.CommitInfo{
-					CommittedCount: c.nextLogIndex,
+				if err := conn.SendProton(&c2p.Init{
+					NextLogIndex: c.nextLogIndex,
 				}, c2p.NewMarshaller()); err != nil {
 					return errors.WithStack(err)
 				}
@@ -74,10 +75,14 @@ func (c *Client) Run(ctx context.Context) error {
 							}
 
 							msgLen := uint64(len(msg))
-							if msgLen == 0 {
-								c.nextLogIndex++
-								continue loop
+							if msgLen < format.ChecksumSize {
+								return errors.New("unexpected tx size")
 							}
+							if !format.VerifyChecksum(msg) {
+								return errors.New("tx checksum mismatch")
+							}
+							msgLen -= format.ChecksumSize
+							msg = msg[:msgLen]
 
 							var n uint64
 							buf := msg
@@ -170,10 +175,13 @@ func (c *Client) Broadcast(tx []any) (retErr error) {
 		}
 		i += msgSize
 
-		if i > c.config.C2P.MaxMessageSize {
+		if i+1 > c.config.C2P.MaxMessageSize {
 			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, c.config.C2P.MaxMessageSize)
 		}
 	}
+
+	i += format.ChecksumSize
+	format.PutChecksum(c.buf[varuint64.MaxSize:i])
 
 	n := varuint64.Size(i - varuint64.MaxSize)
 	varuint64.Put(c.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)

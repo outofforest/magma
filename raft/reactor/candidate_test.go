@@ -22,7 +22,7 @@ func TestCandidateSetup(t *testing.T) {
 	r.votedForMe = 10
 	r.electionTick = 1
 	r.ignoreElectionTick = 0
-	r.sync[peer1ID] = &syncProgress{
+	r.nextIndex[peer1ID] = &syncProgress{
 		NextIndex: 100,
 	}
 	r.matchIndex[peer1ID] = 100
@@ -38,7 +38,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.EqualValues(1, r.votedForMe)
 	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(2, r.ignoreElectionTick)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
@@ -407,7 +407,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		peer4ID: {
 			NextIndex: 0,
 		},
-	}, r.sync)
+	}, r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(2, r.lastLogTerm)

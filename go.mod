@@ -3,11 +3,12 @@ module github.com/outofforest/magma
 go 1.23.0
 
 require (
+	github.com/cespare/xxhash v1.1.0
 	github.com/google/uuid v1.6.0
 	github.com/outofforest/logger v0.6.0
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.10.2
-	github.com/outofforest/resonance v0.15.0
+	github.com/outofforest/resonance v0.16.0
 	github.com/outofforest/varuint64 v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0

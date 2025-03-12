@@ -1,68 +1,56 @@
 package state
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
-
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 
+	"github.com/outofforest/magma/raft/state/format"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/varuint64"
 )
 
-const logSize = 1024 * 1024 * 1024
-
-// CloseFunc defines function type used to close the state.
-type CloseFunc func()
+type Closer func() error
 
 // Open opens state existing in directory or creates a new one there.
-func Open(dir string) (*State, CloseFunc, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, nil, errors.WithStack(err)
-	}
-	logF, err := os.OpenFile(filepath.Join(dir, "log"), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0o600)
+func Open(repo *Repository) (*State, Closer, error) {
+	currentFile, txOffset, err := repo.OpenCurrent()
 	if err != nil {
-		return nil, nil, errors.WithStack(err)
-	}
-	if err := logF.Truncate(logSize); err != nil {
-		return nil, nil, errors.WithStack(err)
-	}
-	log, err := unix.Mmap(int(logF.Fd()), 0, logSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "memory allocation failed")
+		return nil, nil, err
 	}
 
-	return &State{
-			log:          log,
-			nextLogIndex: rafttypes.Index(0),
-			doMSync:      true,
-		}, func() {
-			_ = unix.Munmap(log)
-			_ = logF.Close()
-		}, nil
-}
+	var nextLogIndex rafttypes.Index
+	var log []byte
+	if currentFile != nil {
+		var err error
+		log, err = currentFile.Map()
+		if err != nil {
+			_ = currentFile.Close()
+			return nil, nil, err
+		}
+		nextLogIndex = findNextIndex(log, txOffset)
+	}
 
-// NewInMemory creates in-memory state useful for testing.
-func NewInMemory(logSize uint64) (*State, []byte) {
 	s := &State{
-		log: make([]byte, logSize),
+		repo:         repo,
+		nextLogIndex: nextLogIndex,
+		currentFile:  currentFile,
+		log:          log,
 	}
-	return s, s.log
+	return s, s.close, nil
 }
 
 // State represents the persistent state of the Raft consensus algorithm.
 type State struct {
-	currentTerm  rafttypes.Term
-	votedFor     types.ServerID
-	terms        []rafttypes.Index
-	log          []byte
+	repo         *Repository
 	nextLogIndex rafttypes.Index
 
+	currentTerm        rafttypes.Term
+	votedFor           types.ServerID
+	currentFile        *File
+	log                []byte
+	nextLogIndexInFile rafttypes.Index
+
 	highestTermSeen rafttypes.Term
-	doMSync         bool
 }
 
 // CurrentTerm returns the current term of the state.
@@ -106,7 +94,7 @@ func (s *State) VoteFor(candidate types.ServerID) (bool, error) {
 // LastLogTerm returns the term of the last log entry in the state.
 // If the log is empty, it returns 0.
 func (s *State) LastLogTerm() rafttypes.Term {
-	return rafttypes.Term(len(s.terms))
+	return s.repo.LastTerm()
 }
 
 // NextLogIndex returns the index of the next log entry.
@@ -118,22 +106,20 @@ func (s *State) NextLogIndex() rafttypes.Index {
 
 // PreviousTerm returns term of previous log item.
 func (s *State) PreviousTerm(index rafttypes.Index) rafttypes.Term {
-	for i := len(s.terms) - 1; i >= 0; i-- {
-		if s.terms[i] < index {
-			return rafttypes.Term(i + 1)
-		}
-	}
-	return 0
+	return s.repo.PreviousTerm(index)
 }
-
-var termEntry = bytes.Repeat([]byte{0x00}, 2*varuint64.MaxSize)
 
 // AppendTerm appends term to the log.
 func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
+	var termEntry [2*varuint64.MaxSize + format.ChecksumSize]byte
+
 	n := varuint64.Put(termEntry[varuint64.MaxSize:], uint64(s.currentTerm))
-	n2 := varuint64.Size(n)
-	varuint64.Put(termEntry[varuint64.MaxSize-n2:], n)
-	return s.appendLog(termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], true)
+	n2 := varuint64.Size(n + format.ChecksumSize)
+	varuint64.Put(termEntry[varuint64.MaxSize-n2:], n+format.ChecksumSize)
+
+	entry := termEntry[varuint64.MaxSize-n2 : varuint64.MaxSize+n+format.ChecksumSize]
+	format.PutChecksum(entry[n2:])
+	return s.appendLog(entry, true)
 }
 
 // Validate validates the common point in log.
@@ -156,11 +142,7 @@ func (s *State) Validate(
 		return s.validate(nextLogIndex, lastLogTerm)
 	}
 
-	revertTerm := s.PreviousTerm(nextLogIndex) - 1
-	s.nextLogIndex = s.terms[revertTerm]
-	s.terms = s.terms[:revertTerm]
-
-	return revertTerm, s.nextLogIndex, nil
+	return s.repo.Revert(s.PreviousTerm(nextLogIndex) - 1)
 }
 
 // Append appends data to log.
@@ -173,9 +155,9 @@ func (s *State) Append(
 
 // Sync syncs data to persistent storage.
 func (s *State) Sync() (rafttypes.Index, error) {
-	if s.doMSync {
-		if err := unix.Msync(s.log, unix.MS_SYNC); err != nil {
-			return 0, errors.WithStack(err)
+	if s.currentFile != nil {
+		if err := s.currentFile.Sync(); err != nil {
+			return 0, err
 		}
 	}
 	return s.nextLogIndex, nil
@@ -200,14 +182,18 @@ func (s *State) validate(
 	if s.PreviousTerm(nextLogIndex) != lastLogTerm {
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if nextLogIndex < s.nextLogIndex && s.PreviousTerm(nextLogIndex+1) == lastLogTerm {
-		return 0, 0, errors.New("bug in protocol")
+	if nextLogIndex < s.nextLogIndex {
+		if s.PreviousTerm(nextLogIndex+1) == lastLogTerm {
+			return 0, 0, errors.New("bug in protocol")
+		}
+		if _, _, err := s.repo.Revert(lastLogTerm); err != nil {
+			return 0, 0, err
+		}
 	}
 
-	s.terms = s.terms[:lastLogTerm]
 	s.nextLogIndex = nextLogIndex
 
-	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+	return lastLogTerm, s.nextLogIndex, nil
 }
 
 func (s *State) appendLog(
@@ -220,47 +206,126 @@ func (s *State) appendLog(
 
 	defer appendDefer(&retErr)
 
-	if len(data) > 0 {
-		lastLogTerm := rafttypes.Term(len(s.terms))
-		d := data
-		var i uint64
-		for len(d) > 0 {
-			size, n1 := varuint64.Parse(d)
-			if size == 0 {
-				return 0, 0, errors.New("bug in protocol")
-			}
-			term, n2 := varuint64.Parse(d[n1:])
-			switch {
-			case n2 == size:
-				if !allowTermMark {
-					return 0, 0, errors.New("term mark not allowed")
-				}
-
-				// This is a term mark.
-				if rafttypes.Term(term) <= s.highestTermSeen {
-					return 0, 0, errors.New("bug in protocol")
-				}
-				if rafttypes.Term(term) > s.currentTerm {
-					return 0, 0, errors.New("bug in protocol")
-				}
-				for range rafttypes.Term(term) - lastLogTerm {
-					s.terms = append(s.terms, s.nextLogIndex+rafttypes.Index(i))
-				}
-				lastLogTerm = rafttypes.Term(term)
-				s.highestTermSeen = lastLogTerm
-			case s.highestTermSeen == 0:
-				return 0, 0, errors.New("bug in protocol")
-			}
-			i += n1 + size
-			d = data[i:]
+	for len(data) > 0 {
+		size, n1 := varuint64.Parse(data)
+		if size == 0 {
+			return 0, 0, errors.New("bug in protocol")
 		}
-		s.nextLogIndex += rafttypes.Index(copy(s.log[s.nextLogIndex:], data))
+		if !format.VerifyChecksum(data[n1 : n1+size]) {
+			return 0, 0, errors.New("tx checksum mismatch")
+		}
+
+		term, n2 := varuint64.Parse(data[n1:])
+		switch {
+		case n2+format.ChecksumSize == size:
+			if !allowTermMark {
+				return 0, 0, errors.New("term mark not allowed")
+			}
+
+			// This is a term mark.
+			if rafttypes.Term(term) <= s.highestTermSeen {
+				return 0, 0, errors.New("bug in protocol")
+			}
+			if rafttypes.Term(term) > s.currentTerm {
+				return 0, 0, errors.New("bug in protocol")
+			}
+
+			var err error
+			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex, nil)
+			if err != nil {
+				return 0, 0, err
+			}
+			s.log, err = s.currentFile.Map()
+			if err != nil {
+				return 0, 0, err
+			}
+			s.nextLogIndexInFile = 0
+			s.highestTermSeen = rafttypes.Term(term)
+		case s.highestTermSeen == 0:
+			return 0, 0, errors.New("bug in protocol")
+		}
+		totalSize := rafttypes.Index(size + n1)
+		if s.nextLogIndexInFile == rafttypes.Index(len(s.log)) {
+			if s.currentFile != nil {
+				if err := s.currentFile.Close(); err != nil {
+					return 0, 0, err
+				}
+			}
+
+			var err error
+			s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, nil)
+			if err != nil {
+				return 0, 0, err
+			}
+			s.log, err = s.currentFile.Map()
+			if err != nil {
+				return 0, 0, err
+			}
+			s.nextLogIndexInFile = 0
+		}
+		n := rafttypes.Index(copy(s.log[s.nextLogIndexInFile:], data[:totalSize]))
+		s.nextLogIndexInFile += n
+		s.nextLogIndex += n
+		if s.nextLogIndexInFile < rafttypes.Index(len(s.log)) {
+			s.log[s.nextLogIndexInFile] = 0x00 // To clean potential garbage left due to power outage.
+		}
+		if n < totalSize {
+			if s.currentFile != nil {
+				if err := s.currentFile.Close(); err != nil {
+					return 0, 0, err
+				}
+			}
+
+			var err error
+			s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, data[n:totalSize])
+			if err != nil {
+				return 0, 0, err
+			}
+			s.log, err = s.currentFile.Map()
+			if err != nil {
+				return 0, 0, err
+			}
+			s.nextLogIndexInFile = totalSize - n
+			s.nextLogIndex += totalSize - n
+		}
+		data = data[totalSize:]
 	}
-	return rafttypes.Term(len(s.terms)), s.nextLogIndex, nil
+	return s.repo.LastTerm(), s.nextLogIndex, nil
+}
+
+func (s *State) close() error {
+	if s.currentFile != nil {
+		return s.currentFile.Close()
+	}
+	return nil
 }
 
 func appendDefer(err *error) {
 	if recover() != nil {
 		*err = errors.New("invalid transaction")
+	}
+}
+
+func findNextIndex(log []byte, txOffset rafttypes.Index) rafttypes.Index {
+	index := txOffset
+	for {
+		if !varuint64.Contains(log[index:]) {
+			return index
+		}
+		size, n := varuint64.Parse(log[index:])
+		if size == 0 {
+			return index
+		}
+		size += n
+		if index+rafttypes.Index(size) > rafttypes.Index(len(log)) {
+			return index
+		}
+		if !format.VerifyChecksum(log[index+rafttypes.Index(n) : index+rafttypes.Index(size)]) {
+			return index
+		}
+		index += rafttypes.Index(size)
+		if index == rafttypes.Index(len(log)) {
+			return index
+		}
 	}
 }

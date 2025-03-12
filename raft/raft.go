@@ -113,7 +113,6 @@ func runReactor(
 	for {
 		cmd, err := fetchCommand(ctx, cmdP2PCh, cmdC2PCh)
 		if err != nil {
-			_, _ = r.Apply(magmatypes.ZeroServerID, nil)
 			return err
 		}
 
@@ -133,13 +132,11 @@ func runReactor(
 			roleCh <- role
 		}
 
-		if res.Channel != reactor.ChannelNone || res.LeaderID != leaderID ||
-			res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
+		if res.Channel != reactor.ChannelNone || res.LeaderID != leaderID || res.CommitInfo.CommittedCount > commitInfo.CommittedCount || res.Force {
 			commitInfo = res.CommitInfo
 			leaderID = res.LeaderID
 			resultCh <- res
 		}
-		continue
 	}
 }
 

@@ -102,5 +102,6 @@ type ClientRequest struct {
 
 // CommitInfo reports the committed height.
 type CommitInfo struct {
+	NextLogIndex   Index
 	CommittedCount Index
 }

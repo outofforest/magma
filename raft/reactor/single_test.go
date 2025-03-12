@@ -35,7 +35,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 			CommittedCount: 2,
 		},
 	}, result)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.lastLogTerm)
 	requireT.EqualValues(2, r.nextLogIndex)
@@ -80,7 +80,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 			CommittedCount: 19,
 		},
 	}, result)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(22, r.nextLogIndex)

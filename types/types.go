@@ -16,7 +16,6 @@ var ZeroServerID ServerID
 type Config struct {
 	ServerID  ServerID
 	Servers   []PeerConfig
-	StateDir  string
 	P2P       resonance.Config
 	L2P       resonance.Config
 	Tx2P      resonance.Config

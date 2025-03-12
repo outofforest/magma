@@ -7,9 +7,11 @@ package reactor
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
 
 import (
+	"fmt"
+
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/outofforest/magma/raft/iterator"
 	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
@@ -26,6 +28,10 @@ const (
 	ChannelL2P
 )
 
+type StartTransfer struct {
+	NextLogIndex types.Index
+}
+
 // Result is the result of state transition.
 type Result struct {
 	// Role is the current role.
@@ -40,11 +46,7 @@ type Result struct {
 	Recipients []magmatypes.ServerID
 	// Messages is the list of messages to send.
 	Message any
-}
-
-type syncProgress struct {
-	Iterator  *iterator.Iterator
-	NextIndex types.Index
+	Force   bool
 }
 
 // New creates new reactor of raft consensus algorithm.
@@ -63,9 +65,11 @@ func New(config magmatypes.Config, s *state.State) *Reactor {
 		varuint64Buf: make([]byte, varuint64.MaxSize),
 		majority:     len(config.Servers)/2 + 1,
 		lastLogTerm:  s.LastLogTerm(),
-		nextLogIndex: s.NextLogIndex(),
-		sync:         map[magmatypes.ServerID]*syncProgress{},
-		matchIndex:   map[magmatypes.ServerID]types.Index{},
+		commitInfo: types.CommitInfo{
+			NextLogIndex: s.NextLogIndex(),
+		},
+		nextIndex:  map[magmatypes.ServerID]types.Index{},
+		matchIndex: map[magmatypes.ServerID]types.Index{},
 	}
 	r.transitionToFollower()
 	r.ignoreElectionTick = 0
@@ -84,7 +88,6 @@ type Reactor struct {
 	majority             int
 	role                 types.Role
 	lastLogTerm          types.Term
-	nextLogIndex         types.Index
 	syncedCount          types.Index
 	leaderCommittedCount types.Index
 	commitInfo           types.CommitInfo
@@ -99,7 +102,7 @@ type Reactor struct {
 
 	// Leader specific.
 	indexTermStarted types.Index
-	sync             map[magmatypes.ServerID]*syncProgress
+	nextIndex        map[magmatypes.ServerID]types.Index
 	matchIndex       map[magmatypes.ServerID]types.Index
 	heartbeatTick    types.HeartbeatTick
 }
@@ -108,20 +111,13 @@ type Reactor struct {
 func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 	switch {
 	case peerID == magmatypes.ZeroServerID:
-		if cmd == nil {
-			for _, pSync := range r.sync {
-				if pSync.Iterator != nil {
-					pSync.Iterator.Close()
-					pSync.Iterator = nil
-				}
-			}
-		}
-
 		switch c := cmd.(type) {
 		case *types.ClientRequest:
 			return r.applyClientRequest(c)
 		case types.HeartbeatTick:
-			return r.applyHeartbeatTick(c)
+			res, err := r.applyHeartbeatTick(c)
+			res.Force = true
+			return res, err
 		case types.ElectionTick:
 			return r.applyElectionTick(c)
 		}
@@ -157,7 +153,7 @@ func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, 
 	r.ignoreElectionTick = r.electionTick + 1
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(tx, true)
+	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Append(tx, true)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -174,26 +170,25 @@ func (r *Reactor) applyAppendEntriesACK(peerID magmatypes.ServerID, m *types.App
 		return r.resultEmpty()
 	}
 
-	pSync := r.sync[peerID]
-	if pSync.Iterator == nil {
-		return r.resultEmpty()
-	}
+	nextIndex := r.nextIndex[peerID]
 
-	if m.NextLogIndex > r.nextLogIndex {
+	if m.NextLogIndex > r.commitInfo.NextLogIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 	if m.SyncLogIndex > m.NextLogIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex >= pSync.NextIndex && m.SyncLogIndex > r.matchIndex[peerID] {
+	if m.NextLogIndex >= nextIndex && m.SyncLogIndex > r.matchIndex[peerID] {
 		r.matchIndex[peerID] = m.SyncLogIndex
 		r.updateLeaderCommit(m.SyncLogIndex)
 	}
 
-	if m.NextLogIndex > pSync.NextIndex {
-		pSync.NextIndex = m.NextLogIndex
-		pSync.Iterator.Acknowledge(uint64(m.NextLogIndex))
+	if m.NextLogIndex > nextIndex {
+		nextIndex = m.NextLogIndex
+		// if err := pSync.Iterator.Acknowledge(uint64(m.NextLogIndex)); err != nil {
+		// 	return r.resultError(err)
+		// }
 	}
 
 	return r.resultEmpty()
@@ -228,29 +223,23 @@ func (r *Reactor) applyAppendEntriesResponse(
 		return r.resultEmpty()
 	}
 
-	if m.NextLogIndex > r.nextLogIndex {
+	if m.NextLogIndex > r.commitInfo.NextLogIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 	if m.SyncLogIndex > m.NextLogIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	pSync := r.sync[peerID]
-	pSync.NextIndex = m.NextLogIndex
-
-	if m.NextLogIndex == r.sync[peerID].NextIndex {
-		var err error
-		pSync.Iterator, err = iterator.New(r.config.StateDir, 1024*1024*1024, uint64(m.NextLogIndex), uint64(r.nextLogIndex))
-		if err != nil {
-			return r.resultError(err)
-		}
-
+	if m.NextLogIndex == r.nextIndex[peerID] {
 		r.matchIndex[peerID] = m.SyncLogIndex
 		r.updateLeaderCommit(m.SyncLogIndex)
 
-		return r.resultMessageAndRecipient(ChannelL2P, pSync.Iterator, peerID)
+		return r.resultMessageAndRecipient(ChannelL2P, &StartTransfer{
+			NextLogIndex: m.NextLogIndex,
+		}, peerID)
 	}
 
+	r.nextIndex[peerID] = m.NextLogIndex
 	req := &types.AppendEntriesRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: m.NextLogIndex,
@@ -331,7 +320,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Append(m.Data, false)
+	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Append(m.Data, false)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -340,22 +329,14 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 }
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
-	if r.nextLogIndex < r.syncedCount {
+	if r.commitInfo.NextLogIndex < r.syncedCount {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
 	r.heartbeatTick = tick
 
-	if r.role == types.RoleLeader {
-		for _, p := range r.peers {
-			if pSync := r.sync[p]; pSync.Iterator != nil {
-				pSync.Iterator.Available(uint64(r.nextLogIndex))
-			}
-		}
-	}
-
 	//nolint:nestif
-	if r.nextLogIndex > r.syncedCount && tick%5 == 0 {
+	if r.commitInfo.NextLogIndex > r.syncedCount && tick%5 == 0 {
 		var err error
 		r.syncedCount, err = r.state.Sync()
 		if err != nil {
@@ -379,7 +360,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 
 			return r.resultMessageAndRecipient(ChannelP2P, &types.AppendEntriesACK{
 				Term:         r.state.CurrentTerm(),
-				NextLogIndex: r.nextLogIndex,
+				NextLogIndex: r.commitInfo.NextLogIndex,
 				SyncLogIndex: r.syncedCount,
 			}, r.leaderID)
 		}
@@ -408,12 +389,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	delete(r.matchIndex, peerID)
 
-	pSync := r.sync[peerID]
-	pSync.NextIndex = r.nextLogIndex
-	if pSync.Iterator != nil {
-		pSync.Iterator.Close()
-		pSync.Iterator = nil
-	}
+	r.nextIndex[peerID] = r.commitInfo.NextLogIndex
 
 	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequest(), peerID)
 }
@@ -449,12 +425,7 @@ func (r *Reactor) transitionToFollower() {
 	r.leaderID = magmatypes.ZeroServerID
 	r.ignoreElectionTick = r.electionTick + 1
 	r.votedForMe = 0
-	for _, pSync := range r.sync {
-		if pSync.Iterator != nil {
-			pSync.Iterator.Close()
-		}
-	}
-	clear(r.sync)
+	clear(r.nextIndex)
 	clear(r.matchIndex)
 }
 
@@ -474,7 +445,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
 	r.ignoreElectionTick = r.electionTick + 1
-	clear(r.sync)
+	clear(r.nextIndex)
 	clear(r.matchIndex)
 
 	if r.majority == 1 {
@@ -483,7 +454,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 
 	return r.resultBroadcastMessage(ChannelP2P, &types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.nextLogIndex,
+		NextLogIndex: r.commitInfo.NextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 	})
 }
@@ -493,9 +464,9 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	r.leaderID = r.config.ServerID
 	clear(r.matchIndex)
 
-	r.indexTermStarted = r.nextLogIndex
+	r.indexTermStarted = r.commitInfo.NextLogIndex
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.AppendTerm()
+	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.AppendTerm()
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -503,14 +474,12 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
-		r.commitInfo.CommittedCount = r.nextLogIndex
+		r.commitInfo.CommittedCount = r.commitInfo.NextLogIndex
 		return r.resultEmpty()
 	}
 
 	for _, p := range r.peers {
-		r.sync[p] = &syncProgress{
-			NextIndex: r.indexTermStarted,
-		}
+		r.nextIndex[p] = r.commitInfo.NextLogIndex
 	}
 
 	return r.resultBroadcastMessage(ChannelL2P, r.newAppendEntriesRequest())
@@ -519,7 +488,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
 	return &types.AppendEntriesRequest{
 		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.nextLogIndex,
+		NextLogIndex: r.commitInfo.NextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 	}
 }
@@ -531,7 +500,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 
 	resp := &types.AppendEntriesResponse{
 		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.nextLogIndex,
+		NextLogIndex: r.commitInfo.NextLogIndex,
 		SyncLogIndex: r.syncedCount,
 	}
 	if req.Term < r.state.CurrentTerm() {
@@ -539,13 +508,13 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 
 	var err error
-	r.lastLogTerm, r.nextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
+	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
 	if err != nil {
 		return nil, err
 	}
 
-	if r.nextLogIndex < r.syncedCount {
-		r.syncedCount = r.nextLogIndex
+	if r.commitInfo.NextLogIndex < r.syncedCount {
+		r.syncedCount = r.commitInfo.NextLogIndex
 	}
 	if req.NextLogIndex < r.syncedCount {
 		r.syncedCount = req.NextLogIndex
@@ -554,7 +523,7 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	r.ignoreElectionTick = r.electionTick + 1
 
 	resp.SyncLogIndex = r.syncedCount
-	resp.NextLogIndex = r.nextLogIndex
+	resp.NextLogIndex = r.commitInfo.NextLogIndex
 	return resp, nil
 }
 
@@ -563,7 +532,7 @@ func (r *Reactor) handleVoteRequest(
 	req *types.VoteRequest,
 ) (*types.VoteResponse, error) {
 	if req.Term < r.state.CurrentTerm() || r.lastLogTerm > req.LastLogTerm ||
-		(r.lastLogTerm == req.LastLogTerm && r.nextLogIndex > req.NextLogIndex) {
+		(r.lastLogTerm == req.LastLogTerm && r.commitInfo.NextLogIndex > req.NextLogIndex) {
 		return &types.VoteResponse{
 			Term: r.state.CurrentTerm(),
 		}, nil
@@ -595,11 +564,12 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 }
 
 func (r *Reactor) updateFollowerCommit() {
-	if r.nextLogIndex > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
-		r.commitInfo.CommittedCount = r.nextLogIndex
+	if r.commitInfo.NextLogIndex > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
+		r.commitInfo.CommittedCount = r.commitInfo.NextLogIndex
 		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
 			r.commitInfo.CommittedCount = r.leaderCommittedCount
 		}
+		fmt.Printf(" %s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
 	}
 }
 
@@ -621,6 +591,7 @@ func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
 		greater++
 		if greater == r.majority {
 			r.commitInfo.CommittedCount = nextCommittedCount
+			fmt.Printf("+%s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
 			return true
 		}
 	}

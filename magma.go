@@ -16,16 +16,23 @@ func Run(
 	ctx context.Context,
 	config types.Config,
 	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener,
-) error {
-	s, closeState, err := state.Open(config.StateDir)
+	repo *state.Repository,
+) (retErr error) {
+	s, sCloser, err := state.Open(repo)
 	if err != nil {
 		return err
 	}
-	defer closeState()
+	defer defCloser(sCloser, &retErr)
 
 	return raft.Run(
 		ctx,
 		reactor.New(config, s),
-		gossip.New(config, p2pListener, l2pListener, tx2pListener, c2pListener),
+		gossip.New(config, p2pListener, l2pListener, tx2pListener, c2pListener, repo),
 	)
+}
+
+func defCloser(sCloser state.Closer, retErr *error) {
+	if err := sCloser(); err != nil && *retErr == nil {
+		*retErr = err
+	}
 }

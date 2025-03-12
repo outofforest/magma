@@ -26,7 +26,7 @@ func TestLeaderSetup(t *testing.T) {
 	r.heartbeatTick = 1
 	r.ignoreHeartbeatTick = 0
 	r.indexTermStarted = 12
-	r.sync[peer1ID] = &syncProgress{
+	r.nextIndex[peer1ID] = &syncProgress{
 		NextIndex: 100,
 	}
 	r.matchIndex[peer1ID] = 100
@@ -76,7 +76,7 @@ func TestLeaderSetup(t *testing.T) {
 		peer4ID: {
 			NextIndex: 11,
 		},
-	}, r.sync)
+	}, r.nextIndex)
 	requireT.Empty(r.matchIndex)
 
 	requireT.EqualValues(3, r.lastLogTerm)
@@ -250,7 +250,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync[peer1ID] = &syncProgress{
+	r.nextIndex[peer1ID] = &syncProgress{
 		NextIndex: 0,
 	}
 
@@ -263,7 +263,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 	requireT.Equal(Result{}, result)
 	requireT.EqualValues(&syncProgress{
 		NextIndex: 0,
-	}, r.sync[peer1ID])
+	}, r.nextIndex[peer1ID])
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
 	requireT.Equal(serverID, r.leaderID)
 }
@@ -305,7 +305,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync[peer1ID] = &syncProgress{
+	r.nextIndex[peer1ID] = &syncProgress{
 		NextIndex: 0,
 	}
 
@@ -324,7 +324,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 	}, result)
 	requireT.EqualValues(&syncProgress{
 		NextIndex: 0,
-	}, r.sync[peer1ID])
+	}, r.nextIndex[peer1ID])
 	requireT.EqualValues(0, r.matchIndex[peer1ID])
 	requireT.Equal(serverID, r.leaderID)
 }
@@ -344,7 +344,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 22,
 		},
@@ -398,7 +398,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 22,
 		},
@@ -441,7 +441,7 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 19,
 		},
@@ -493,7 +493,7 @@ func TestLeaderApplyClientRequestNoTermMarkAllowed(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 19,
 		},
@@ -530,7 +530,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 19,
 		},
@@ -571,7 +571,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		peer4ID: {
 			NextIndex: 19,
 		},
-	}, r.sync)
+	}, r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(22, r.nextLogIndex)
@@ -598,7 +598,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 19,
 		},
@@ -639,7 +639,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		peer4ID: {
 			NextIndex: 19,
 		},
-	}, r.sync)
+	}, r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 	requireT.EqualValues(23, r.nextLogIndex)
@@ -667,7 +667,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.sync = map[magmatypes.ServerID]*syncProgress{
+	r.nextIndex = map[magmatypes.ServerID]*syncProgress{
 		peer1ID: {
 			NextIndex: 5,
 		},
@@ -704,7 +704,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		peer4ID: {
 			NextIndex: 20,
 		},
-	}, r.sync)
+	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]types.Index{
 		peer2ID: 10,
 		peer3ID: 15,

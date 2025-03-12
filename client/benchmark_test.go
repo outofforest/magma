@@ -15,13 +15,14 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client/entities"
+	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
 )
 
 func TestCluster(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	requireT := require.New(t)
 	ctx, cancel := context.WithCancel(logger.WithLogger(context.Background(), logger.New(logger.DefaultConfig)))
 	t.Cleanup(cancel)
@@ -162,14 +163,18 @@ func TestCluster(t *testing.T) {
 	fmt.Printf("==== %s ====\n", uuid.UUID(peer3))
 	fmt.Printf("==== %s ====\n", uuid.UUID(peer4))
 
+	const pageSize = 128 * 1024 * 1024 // 1024 * 1024 * 1024
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer1), p2p1, l2p1, tx2p1, c2p1)
+		config, repo := makeConfig(config, peer1, pageSize)
+		return magma.Run(ctx, config, p2p1, l2p1, tx2p1, c2p1, repo)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer2), p2p2, l2p2, tx2p2, c2p2)
+		config, repo := makeConfig(config, peer2, pageSize)
+		return magma.Run(ctx, config, p2p2, l2p2, tx2p2, c2p2, repo)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer3), p2p3, l2p3, tx2p3, c2p3)
+		config, repo := makeConfig(config, peer3, pageSize)
+		return magma.Run(ctx, config, p2p3, l2p3, tx2p3, c2p3, repo)
 	})
 
 	client := New(Config{
@@ -207,6 +212,7 @@ func TestCluster(t *testing.T) {
 		})
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 	}
 
@@ -215,14 +221,18 @@ func TestCluster(t *testing.T) {
 	fmt.Println("===================")
 
 	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, makeConfig(config, peer4), p2p4, l2p4, tx2p4, c2p4)
+		config, repo := makeConfig(config, peer4, pageSize)
+		return magma.Run(ctx, config, p2p4, l2p4, tx2p4, c2p4, repo)
 	})
 
 	time.Sleep(30 * time.Second)
 }
 
-func makeConfig(config types.Config, peerID types.ServerID) types.Config {
+func makeConfig(config types.Config, peerID types.ServerID, pageSize uint64) (types.Config, *state.Repository) {
 	config.ServerID = peerID
-	config.StateDir = filepath.Join("/tmp/test", uuid.UUID(peerID).String())
-	return config
+	repo, err := state.NewRepository(filepath.Join("test", uuid.UUID(peerID).String()), pageSize)
+	if err != nil {
+		panic(err)
+	}
+	return config, repo
 }
