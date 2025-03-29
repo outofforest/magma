@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/state"
 	"github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/state"
 	magmatypes "github.com/outofforest/magma/types"
 )
 
@@ -18,7 +18,7 @@ func newReactorSingleMode(s *state.State) *Reactor {
 
 func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
-	s, log := newState()
+	s, dir := newState(t, "")
 	r := newReactorSingleMode(s)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTick(1))
@@ -32,13 +32,13 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 2,
+			NextLogIndex:   10,
+			CommittedCount: 10,
 		},
 	}, result)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(1, r.lastLogTerm)
-	requireT.EqualValues(2, r.nextLogIndex)
 
 	granted, err := s.VoteFor(peer1ID)
 	requireT.NoError(err)
@@ -48,18 +48,21 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	logEqual(requireT, []byte{0x01, 0x01}, log)
+	txb := newTxBuilder()
+	logEqual(requireT, dir, txb(0x01))
 }
 
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT := require.New(t)
-	s, log := newState()
+	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
-	_, _, err := s.Append([]byte{
-		0x01, 0x01, 0x02, 0x01, 0x00,
-		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-	}, true)
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+		txb(0x03), txb(0x02, 0x00, 0x00),
+	), true, true)
 	requireT.NoError(err)
 	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
@@ -77,20 +80,21 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 19,
+			NextLogIndex:   86,
+			CommittedCount: 75,
 		},
 	}, result)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(22, r.nextLogIndex)
 
-	logEqual(requireT, []byte{
-		0x01, 0x01, 0x02, 0x01, 0x00,
-		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x04, 0x02, 0x01, 0x00,
-	}, log)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+		txb(0x03), txb(0x02, 0x00, 0x00),
+		txb(0x04), txb(0x01, 0x00),
+	))
 }
 
 /*

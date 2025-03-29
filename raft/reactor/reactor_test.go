@@ -11,7 +11,7 @@ import (
 func TestUnknownCommand(t *testing.T) {
 	requireT := require.New(t)
 
-	s, _ := newState()
+	s, _ := newState(t, "")
 	r := New(config, s)
 	result, err := r.Apply(magmatypes.ZeroServerID, "aaa")
 	requireT.Error(err)

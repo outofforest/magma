@@ -2,14 +2,17 @@ package client
 
 import (
 	"context"
+	"encoding/binary"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/zeebo/xxh3"
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	rafttypes "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
@@ -19,7 +22,7 @@ import (
 // Config is the configuration of magma client.
 type Config struct {
 	PeerAddress      string
-	C2P              resonance.Config
+	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
 }
 
@@ -30,7 +33,7 @@ func New(config Config, m proton.Marshaller) *Client {
 		txCh:          make(chan []byte, 1),
 		m:             m,
 		timeoutTicker: time.NewTicker(time.Hour),
-		bufSize:       10 * (config.C2P.MaxMessageSize + varuint64.MaxSize),
+		bufSize:       10 * (config.MaxMessageSize + varuint64.MaxSize),
 	}
 	c.timeoutTicker.Stop()
 	return c
@@ -54,12 +57,16 @@ func (c *Client) Run(ctx context.Context) error {
 	defer c.timeoutTicker.Stop()
 
 	log := logger.Get(ctx)
+	var previousChecksum uint64
 
 	for {
-		err := resonance.RunClient(ctx, c.config.PeerAddress, c.config.C2P,
+		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
 			func(ctx context.Context, conn *resonance.Connection) error {
-				if err := conn.SendProton(&rafttypes.CommitInfo{
-					CommittedCount: c.nextLogIndex,
+				conn.BufferReads()
+				conn.BufferWrites()
+
+				if err := conn.SendProton(&c2p.Init{
+					NextLogIndex: c.nextLogIndex,
 				}, c2p.NewMarshaller()); err != nil {
 					return errors.WithStack(err)
 				}
@@ -68,34 +75,44 @@ func (c *Client) Run(ctx context.Context) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 					loop:
 						for {
-							msg, err := conn.ReceiveBytes()
+							txRaw, err := conn.ReceiveRawBytes()
 							if err != nil {
 								return err
 							}
+							txTotalLen := rafttypes.Index(len(txRaw))
+							txLen, n := varuint64.Parse(txRaw)
 
-							msgLen := uint64(len(msg))
-							if msgLen == 0 {
-								c.nextLogIndex++
-								continue loop
+							if txLen < format.ChecksumSize {
+								return errors.New("unexpected tx size")
 							}
 
-							var n uint64
-							buf := msg
+							i := len(txRaw) - format.ChecksumSize
+							checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
+							if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
+								return errors.New("tx checksum mismatch")
+							}
+							previousChecksum = checksum
+
+							txLen -= format.ChecksumSize
+							txRaw = txRaw[n : n+txLen]
+
+							var count uint64
+							buf := txRaw
 							for len(buf) > 0 {
 								size, n2 := varuint64.Parse(buf)
-								if n2 == msgLen {
+								if n2 == txLen {
 									// This is a term mark. Ignore.
 									continue loop
 								}
-								n++
+								count++
 								buf = buf[n2+size:]
 							}
 
-							tx := make([]any, 0, n)
-							for len(msg) > 0 {
-								size, n1 := varuint64.Parse(msg)
-								id, n2 := varuint64.Parse(msg[n1:])
-								m, msgSize, err := c.m.Unmarshal(id, msg[n1+n2:n1+size])
+							tx := make([]any, 0, count)
+							for len(txRaw) > 0 {
+								size, n1 := varuint64.Parse(txRaw)
+								id, n2 := varuint64.Parse(txRaw[n1:])
+								m, msgSize, err := c.m.Unmarshal(id, txRaw[n1+n2:n1+size])
 								if err != nil {
 									return err
 								}
@@ -103,26 +120,23 @@ func (c *Client) Run(ctx context.Context) error {
 									return errors.Errorf("unexpected message size")
 								}
 								tx = append(tx, m) //nolint:staticcheck
-								msg = msg[n1+size:]
+								txRaw = txRaw[n1+size:]
 							}
 
-							c.nextLogIndex += rafttypes.Index(msgLen + varuint64.Size(msgLen))
+							c.nextLogIndex += txTotalLen
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {
-						for tx := range c.txCh {
-							if err := conn.SendRawBytes(tx); err != nil {
-								return errors.WithStack(err)
+						for {
+							select {
+							case <-ctx.Done():
+								return errors.WithStack(ctx.Err())
+							case tx := <-c.txCh:
+								if err := conn.SendRawBytes(tx); err != nil {
+									return errors.WithStack(err)
+								}
 							}
 						}
-
-						return errors.WithStack(ctx.Err())
-					})
-					spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
-						defer close(c.txCh)
-
-						<-ctx.Done()
-						return errors.WithStack(ctx.Err())
 					})
 					return nil
 				})
@@ -144,7 +158,7 @@ func (c *Client) Broadcast(tx []any) (retErr error) {
 		return nil
 	}
 
-	if uint64(len(c.buf)) < c.config.C2P.MaxMessageSize {
+	if uint64(len(c.buf)) < c.config.MaxMessageSize {
 		c.buf = make([]byte, c.bufSize)
 	}
 
@@ -170,8 +184,8 @@ func (c *Client) Broadcast(tx []any) (retErr error) {
 		}
 		i += msgSize
 
-		if i > c.config.C2P.MaxMessageSize {
-			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, c.config.C2P.MaxMessageSize)
+		if i+1 > c.config.MaxMessageSize {
+			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, c.config.MaxMessageSize)
 		}
 	}
 

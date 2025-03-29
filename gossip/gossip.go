@@ -3,10 +3,7 @@ package gossip
 import (
 	"bytes"
 	"context"
-	"io"
 	"net"
-	"os"
-	"path/filepath"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -18,12 +15,13 @@ import (
 	"github.com/outofforest/magma/gossip/wire/l2p"
 	"github.com/outofforest/magma/gossip/wire/p2p"
 	"github.com/outofforest/magma/raft"
-	"github.com/outofforest/magma/raft/iterator"
 	"github.com/outofforest/magma/raft/reactor"
 	rafttypes "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
+	"github.com/outofforest/varuint64"
 )
 
 const queueCapacity = 10
@@ -39,6 +37,7 @@ type peerL2P struct {
 	ID          types.ServerID
 	SendCh      chan any
 	InstalledCh chan struct{}
+	Iterator    *repository.Iterator
 	Connected   bool
 }
 
@@ -50,12 +49,16 @@ type peerTx2P struct {
 }
 
 type client struct {
-	CommitCh chan rafttypes.CommitInfo
+	Iterator *repository.Iterator
 	LeaderCh chan peerTx2P
 }
 
 // New returns gossiping function.
-func New(config types.Config, p2pListener, l2pListener, tx2pListener, c2pListener net.Listener) raft.GossipFunc {
+func New(
+	config types.Config,
+	p2pListener, c2pListener net.Listener,
+	repo *repository.Repository,
+) raft.GossipFunc {
 	validPeers := map[types.ServerID]struct{}{}
 	for _, p := range config.Servers {
 		if p.ID != config.ServerID {
@@ -66,29 +69,34 @@ func New(config types.Config, p2pListener, l2pListener, tx2pListener, c2pListene
 	g := &gossip{
 		config:          config,
 		p2pListener:     p2pListener,
-		l2pListener:     l2pListener,
-		tx2pListener:    tx2pListener,
 		c2pListener:     c2pListener,
+		repo:            repo,
 		minority:        len(config.Servers) / 2,
 		validPeers:      validPeers,
 		helloMarshaller: hello.NewMarshaller(),
 		p2pMarshaller:   p2p.NewMarshaller(),
 		l2pMarshaller:   l2p.NewMarshaller(),
 		c2pMarshaller:   c2p.NewMarshaller(),
+		providerPeers:   repository.NewTailProvider(),
+		providerClients: repository.NewTailProvider(),
 	}
 	return g.Run
 }
 
 type gossip struct {
-	config                                              types.Config
-	p2pListener, l2pListener, tx2pListener, c2pListener net.Listener
-	minority                                            int
-	validPeers                                          map[types.ServerID]struct{}
+	config                   types.Config
+	p2pListener, c2pListener net.Listener
+	repo                     *repository.Repository
+	minority                 int
+	validPeers               map[types.ServerID]struct{}
 
 	helloMarshaller hello.Marshaller
 	p2pMarshaller   p2p.Marshaller
 	l2pMarshaller   l2p.Marshaller
 	c2pMarshaller   c2p.Marshaller
+
+	providerPeers   *repository.TailProvider
+	providerClients *repository.TailProvider
 }
 
 func (g *gossip) Run(
@@ -109,30 +117,19 @@ func (g *gossip) Run(
 			defer close(peerTx2PCh)
 			defer close(clientCh)
 
+			resConfig := resonance.Config{MaxMessageSize: g.config.MaxMessageSize}
+
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.p2pListener, g.config.P2P,
+					return resonance.RunServer(ctx, g.p2pListener, resConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
-							return g.p2pHandler(ctx, types.ZeroServerID, peerP2PCh, cmdP2PCh, c)
-						},
-					)
-				})
-				spawn("l2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.l2pListener, g.config.L2P,
-						func(ctx context.Context, c *resonance.Connection) error {
-							return g.l2pHandler(ctx, types.ZeroServerID, peerL2PCh, cmdP2PCh, c)
-						},
-					)
-				})
-				spawn("tx2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.tx2pListener, g.config.Tx2P,
-						func(ctx context.Context, c *resonance.Connection) error {
-							return g.tx2pHandler(types.ZeroServerID, peerTx2PCh, cmdC2PCh, c)
+							return g.peerHandler(ctx, types.ZeroServerID, wire.ChannelNone, peerP2PCh, peerL2PCh,
+								peerTx2PCh, cmdP2PCh, c)
 						},
 					)
 				})
 				spawn("c2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.c2pListener, g.config.C2PServer,
+					return resonance.RunServer(ctx, g.c2pListener, resConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
 							return g.c2pHandler(ctx, clientCh, cmdC2PCh, c)
 						},
@@ -146,9 +143,10 @@ func (g *gossip) Run(
 					spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
 						log := logger.Get(ctx)
 						for {
-							err := resonance.RunClient(ctx, s.P2PAddress, g.config.P2P,
+							err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
 								func(ctx context.Context, c *resonance.Connection) error {
-									return g.p2pHandler(ctx, s.ID, peerP2PCh, cmdP2PCh, c)
+									return g.peerHandler(ctx, s.ID, wire.ChannelP2P, peerP2PCh, peerL2PCh, peerTx2PCh,
+										cmdP2PCh, c)
 								},
 							)
 							if ctx.Err() != nil {
@@ -161,9 +159,10 @@ func (g *gossip) Run(
 					spawn("l2pConnector", parallel.Fail, func(ctx context.Context) error {
 						log := logger.Get(ctx)
 						for {
-							err := resonance.RunClient(ctx, s.L2PAddress, g.config.L2P,
+							err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
 								func(ctx context.Context, c *resonance.Connection) error {
-									return g.l2pHandler(ctx, s.ID, peerL2PCh, cmdP2PCh, c)
+									return g.peerHandler(ctx, s.ID, wire.ChannelL2P, peerP2PCh, peerL2PCh, peerTx2PCh,
+										cmdP2PCh, c)
 								},
 							)
 							if ctx.Err() != nil {
@@ -177,9 +176,10 @@ func (g *gossip) Run(
 						log := logger.Get(ctx)
 
 						for {
-							err := resonance.RunClient(ctx, s.Tx2PAddress, g.config.Tx2P,
+							err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
 								func(ctx context.Context, c *resonance.Connection) error {
-									return g.tx2pHandler(s.ID, peerTx2PCh, cmdC2PCh, c)
+									return g.peerHandler(ctx, s.ID, wire.ChannelTx2P, peerP2PCh, peerL2PCh, peerTx2PCh,
+										cmdP2PCh, c)
 								},
 							)
 							if ctx.Err() != nil {
@@ -213,7 +213,7 @@ func (g *gossip) runSupervisor(
 	peersP2P := map[types.ServerID]peerP2P{}
 	peersL2P := map[types.ServerID]peerL2P{}
 	peersTx2P := map[types.ServerID]peerTx2P{}
-	clients := map[chan rafttypes.CommitInfo]chan peerTx2P{}
+	clients := map[*repository.Iterator]chan peerTx2P{}
 	var commitInfo rafttypes.CommitInfo
 
 	if g.minority == 0 {
@@ -230,6 +230,7 @@ func (g *gossip) runSupervisor(
 				resultCh = nil
 				continue
 			}
+
 			//nolint:nestif
 			if leaderID != res.LeaderID {
 				leaderID = res.LeaderID
@@ -271,25 +272,30 @@ func (g *gossip) runSupervisor(
 					}
 				}
 			case reactor.ChannelL2P:
-				for _, peerID := range res.Recipients {
-					if p := peersL2P[peerID]; p.SendCh != nil {
-						p.SendCh <- res.Message
-					}
-				}
-			}
-
-			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-				commitInfo = res.CommitInfo
-				for commitCh := range clients {
-					if len(commitCh) > 0 {
-						select {
-						case <-commitCh:
-						default:
+				switch m := res.Message.(type) {
+				case *reactor.StartTransfer:
+					for _, peerID := range res.Recipients {
+						if p := peersL2P[peerID]; p.SendCh != nil {
+							p.Iterator = repository.NewIterator(g.providerPeers, g.repo.Iterator(m.NextLogIndex), m.NextLogIndex)
+							peersL2P[peerID] = p
+							p.SendCh <- p.Iterator
 						}
 					}
-					commitCh <- commitInfo
+				default:
+					for _, peerID := range res.Recipients {
+						if p := peersL2P[peerID]; p.SendCh != nil {
+							p.SendCh <- res.Message
+						}
+					}
 				}
 			}
+			if res.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+				g.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
+			}
+			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
+				g.providerClients.SetTail(res.CommitInfo.CommittedCount)
+			}
+			commitInfo = res.CommitInfo
 		case p, ok := <-peerP2PCh:
 			if !ok {
 				peerP2PCh = nil
@@ -329,12 +335,23 @@ func (g *gossip) runSupervisor(
 				pOld, exists := peersL2P[p.ID]
 				if exists {
 					close(pOld.SendCh)
+					if pOld.Iterator != nil {
+						if err := pOld.Iterator.Close(); err != nil {
+							return err
+						}
+					}
 				}
 				peersL2P[p.ID] = p
 				close(p.InstalledCh)
 			case peersL2P[p.ID].SendCh == p.SendCh:
+				it := peersL2P[p.ID].Iterator
 				delete(peersL2P, p.ID)
 				close(p.SendCh)
+				if it != nil {
+					if err := it.Close(); err != nil {
+						return err
+					}
+				}
 			}
 		case p, ok := <-peerTx2PCh:
 			if !ok {
@@ -388,34 +405,58 @@ func (g *gossip) runSupervisor(
 				}
 				continue
 			}
-			if _, exists := clients[c.CommitCh]; exists {
-				close(c.CommitCh)
+			if _, exists := clients[c.Iterator]; exists {
 				close(c.LeaderCh)
-				delete(clients, c.CommitCh)
-			} else {
-				if commitInfo.CommittedCount > 0 {
-					c.CommitCh <- commitInfo
+				delete(clients, c.Iterator)
+				if err := c.Iterator.Close(); err != nil {
+					return err
 				}
+			} else {
 				if pLeader.ID != types.ZeroServerID {
 					c.LeaderCh <- pLeader
 				}
-				clients[c.CommitCh] = c.LeaderCh
+				clients[c.Iterator] = c.LeaderCh
 			}
 		}
 	}
 }
 
-func (g *gossip) p2pHandler(
+func (g *gossip) peerHandler(
 	ctx context.Context,
 	expectedPeerID types.ServerID,
+	channel wire.Channel,
+	p2pPeerCh chan<- peerP2P,
+	l2pPeerCh chan<- peerL2P,
+	tx2pPeerCh chan<- peerTx2P,
+	cmdCh chan<- rafttypes.Command,
+	c *resonance.Connection,
+) error {
+	peerID, channel, err := g.hello(c, expectedPeerID, channel)
+	if err != nil {
+		return err
+	}
+
+	switch channel {
+	case wire.ChannelP2P:
+		return g.p2pHandler(ctx, peerID, p2pPeerCh, cmdCh, c)
+	case wire.ChannelL2P:
+		return g.l2pHandler(ctx, peerID, l2pPeerCh, cmdCh, c)
+	case wire.ChannelTx2P:
+		return g.tx2pHandler(peerID, tx2pPeerCh, cmdCh, c)
+	default:
+		return errors.Errorf("unexpected channel %d", channel)
+	}
+}
+
+func (g *gossip) p2pHandler(
+	ctx context.Context,
+	peerID types.ServerID,
 	peerCh chan<- peerP2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	peerID, err := g.hello(c, expectedPeerID)
-	if err != nil {
-		return err
-	}
+	c.BufferReads()
+	c.BufferWrites()
 
 	ch := make(chan any, queueCapacity)
 	var sendCh <-chan any = ch
@@ -470,15 +511,12 @@ func (g *gossip) p2pHandler(
 
 func (g *gossip) l2pHandler(
 	ctx context.Context,
-	expectedPeerID types.ServerID,
+	peerID types.ServerID,
 	peerCh chan<- peerL2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	peerID, err := g.hello(c, expectedPeerID)
-	if err != nil {
-		return err
-	}
+	c.BufferReads()
 
 	ch := make(chan any, queueCapacity)
 	var sendCh <-chan any = ch
@@ -539,16 +577,29 @@ func (g *gossip) l2pHandler(
 
 			for msg := range sendCh {
 				switch m := msg.(type) {
-				case *iterator.Iterator:
-					if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
+				case *repository.Iterator:
+					startMsg := &l2p.StartTransfer{}
+					id, err := g.l2pMarshaller.ID(startMsg)
+					if err != nil {
 						return err
 					}
-					spawn("iteratorCloser", parallel.Fail, func(ctx context.Context) error {
-						<-ctx.Done()
-						m.Close()
-						return errors.WithStack(ctx.Err())
-					})
+					msgSize, err := g.l2pMarshaller.Size(startMsg)
+					if err != nil {
+						return err
+					}
+					startMsgSize := varuint64.Size(id) + msgSize
+					startMsgSize += varuint64.Size(startMsgSize)
+
+					initSentBytes := c.BytesSent() + startMsgSize
+					if err := c.SendProton(startMsg, g.l2pMarshaller); err != nil {
+						return err
+					}
 					for {
+						if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
+							if err := m.Acknowledge(rafttypes.Index(sentBytes - initSentBytes)); err != nil {
+								return err
+							}
+						}
 						r, err := m.Reader()
 						if err != nil {
 							return err
@@ -572,15 +623,13 @@ func (g *gossip) l2pHandler(
 }
 
 func (g *gossip) tx2pHandler(
-	expectedPeerID types.ServerID,
+	peerID types.ServerID,
 	peerCh chan<- peerTx2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
-	peerID, err := g.hello(c, expectedPeerID)
-	if err != nil {
-		return err
-	}
+	c.BufferReads()
+	c.BufferWrites()
 
 	ch := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch
@@ -624,28 +673,30 @@ func (g *gossip) c2pHandler(
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
 ) error {
+	c.BufferReads()
+
 	msg, err := c.ReceiveProton(g.c2pMarshaller)
 	if err != nil {
 		return err
 	}
 
-	msgCommitInfo, ok := msg.(*rafttypes.CommitInfo)
+	msgInit, ok := msg.(*c2p.Init)
 	if !ok {
 		return errors.New("expected init")
 	}
 
-	ch := make(chan rafttypes.CommitInfo, 1)
-	var commitCh <-chan rafttypes.CommitInfo = ch
+	it := repository.NewIterator(g.providerClients, g.repo.Iterator(msgInit.NextLogIndex), msgInit.NextLogIndex)
+
+	ch2 := make(chan peerTx2P, 1)
+	var leaderCh <-chan peerTx2P = ch2
+	cl := client{
+		Iterator: it,
+		LeaderCh: ch2,
+	}
+	clientCh <- cl
 
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 		spawn("receive", parallel.Fail, func(ctx context.Context) error {
-			ch2 := make(chan peerTx2P, 1)
-			var leaderCh <-chan peerTx2P = ch2
-			cl := client{
-				CommitCh: ch,
-				LeaderCh: ch2,
-			}
-			clientCh <- cl
 			defer func() {
 				clientCh <- cl
 			}()
@@ -679,69 +730,76 @@ func (g *gossip) c2pHandler(
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
-			nextLogIndex := msgCommitInfo.CommittedCount
-			var logF *os.File
-			for newCommitInfo := range commitCh {
-				if logF == nil {
-					var err error
-					logF, err = os.Open(filepath.Join(g.config.StateDir, "log"))
-					if err != nil {
-						return errors.WithStack(err)
-					}
-					if nextLogIndex > 0 {
-						if _, err := logF.Seek(int64(nextLogIndex), io.SeekStart); err != nil {
-							return errors.WithStack(err)
-						}
-					}
-				}
-
-				if newCommitInfo.CommittedCount > nextLogIndex {
-					toSend := uint64(newCommitInfo.CommittedCount - nextLogIndex)
-					if err := c.SendStream(io.LimitReader(logF, int64(toSend))); err != nil {
+			initSentBytes := c.BytesSent()
+			for {
+				if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
+					if err := it.Acknowledge(rafttypes.Index(sentBytes - initSentBytes)); err != nil {
 						return err
 					}
-					nextLogIndex += rafttypes.Index(toSend)
+				}
+
+				r, err := it.Reader()
+				if err != nil {
+					return err
+				}
+				if err := c.SendStream(r); err != nil {
+					return err
 				}
 			}
-
-			return errors.WithStack(ctx.Err())
 		})
 
 		return nil
 	})
 }
 
-func (g *gossip) hello(c *resonance.Connection, expectedPeerID types.ServerID) (types.ServerID, error) {
+func (g *gossip) hello(
+	c *resonance.Connection,
+	expectedPeerID types.ServerID,
+	channel wire.Channel,
+) (types.ServerID, wire.Channel, error) {
+	if expectedPeerID == types.ZeroServerID && channel != wire.ChannelNone {
+		return types.ZeroServerID, wire.ChannelNone, errors.New("channel must not be provided on incoming peer")
+	}
+
 	if err := c.SendProton(&wire.Hello{
 		ServerID: g.config.ServerID,
+		Channel:  channel,
 	}, g.helloMarshaller); err != nil {
-		return types.ZeroServerID, err
+		return types.ZeroServerID, wire.ChannelNone, err
 	}
 
 	m, err := c.ReceiveProton(g.helloMarshaller)
 	if err != nil {
-		return types.ZeroServerID, err
+		return types.ZeroServerID, wire.ChannelNone, err
 	}
 
 	h, ok := m.(*wire.Hello)
 	if !ok {
-		return types.ZeroServerID, errors.New("expected hello, got sth else")
+		return types.ZeroServerID, wire.ChannelNone, errors.New("expected hello, got sth else")
 	}
 
 	if _, exists := g.validPeers[h.ServerID]; !exists {
-		return types.ZeroServerID, errors.New("unknown peer")
+		return types.ZeroServerID, wire.ChannelNone, errors.New("unknown peer")
 	}
 
 	switch {
 	case expectedPeerID == types.ZeroServerID:
 		if initConnection(g.config.ServerID, h.ServerID) {
-			return types.ZeroServerID, errors.New("peer should wait for my connection")
+			return types.ZeroServerID, wire.ChannelNone, errors.New("peer should wait for my connection")
+		}
+		switch h.Channel {
+		case wire.ChannelP2P, wire.ChannelL2P, wire.ChannelTx2P:
+			channel = h.Channel
+		default:
+			return types.ZeroServerID, wire.ChannelNone, errors.Errorf("invalid channel %d", h.Channel)
 		}
 	case h.ServerID != expectedPeerID:
-		return types.ZeroServerID, errors.New("unexpected peer")
+		return types.ZeroServerID, wire.ChannelNone, errors.New("unexpected peer")
+	case h.Channel != wire.ChannelNone:
+		return types.ZeroServerID, wire.ChannelNone, errors.New("peer must not announce requested channel")
 	}
 
-	return h.ServerID, nil
+	return h.ServerID, channel, nil
 }
 
 func initConnection(serverID, peerID types.ServerID) bool {
