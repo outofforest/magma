@@ -223,6 +223,85 @@ func TestFollowerAppendTxAppendToNonEmptyLog(t *testing.T) {
 	))
 }
 
+func TestFollowerAppendTxDoesNothingIfNotFromLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(s)
+	r.leaderID = peer1ID
+
+	txb := newTxBuilder()
+	tx := txs(
+		txb(0x01),
+		txb(0x01, 0x00),
+	)
+	result, err := r.Apply(peer2ID, tx)
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   0,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.Zero(r.ignoreElectionTick)
+	requireT.Equal(peer1ID, r.leaderID)
+}
+
+func TestFollowerAppendTxFailsIfTxDoesNotContainChecksum(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(s)
+	r.leaderID = peer1ID
+
+	result, err := r.Apply(peer1ID, []byte{0x01, 0x01})
+	requireT.Error(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{}, result)
+	requireT.Zero(r.ignoreElectionTick)
+	requireT.Equal(peer1ID, r.leaderID)
+}
+
+func TestFollowerAppendEntriesACKDoesNothing(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.leaderID = peer1ID
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         1,
+		NextLogIndex: 21,
+		SyncLogIndex: 21,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   21,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.Zero(r.nextIndex[peer1ID])
+	requireT.Zero(r.matchIndex[peer1ID])
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+	))
+}
+
 func TestFollowerAppendEntriesRequestOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
@@ -1324,4 +1403,78 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	}, result)
 	requireT.Zero(r.ignoreHeartbeatTick)
 	requireT.Empty(r.matchIndex)
+}
+
+func TestFollowerApplyHeartbeatTimeoutCommit(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.leaderID = peer1ID
+	r.leaderCommittedCount = 94
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 94,
+		},
+		Channel: ChannelP2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &types.AppendEntriesACK{
+			Term:         5,
+			NextLogIndex: 94,
+			SyncLogIndex: 94,
+		},
+		Force: true,
+	}, result)
+	requireT.EqualValues(20, r.heartbeatTick)
+}
+
+func TestFollowerApplyHeartbeatTimeoutNoLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.leaderCommittedCount = 94
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 94,
+		},
+		Force: true,
+	}, result)
+	requireT.EqualValues(20, r.heartbeatTick)
 }

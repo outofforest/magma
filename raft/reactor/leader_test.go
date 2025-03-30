@@ -193,6 +193,424 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT.EqualValues(3, s.CurrentTerm())
 }
 
+func TestLeaderApplyAppendEntriesACKTransitionToFollowerOnFutureTerm(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   10,
+			CommittedCount: 0,
+		},
+	}, result)
+
+	txb := newTxBuilder()
+	logEqual(requireT, dir, txb(0x01))
+}
+
+func TestLeaderApplyAppendEntriesACKErrorIfReportedIndexIsGreater(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         1,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.Error(err)
+	requireT.Equal(Result{}, result)
+
+	txb := newTxBuilder()
+	logEqual(requireT, dir, txb(0x01))
+}
+
+func TestLeaderApplyAppendEntriesACKErrorIfSyncIndexIsGreater(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         1,
+		NextLogIndex: 9,
+		SyncLogIndex: 10,
+	})
+	requireT.Error(err)
+	requireT.Equal(Result{}, result)
+
+	txb := newTxBuilder()
+	logEqual(requireT, dir, txb(0x01))
+}
+
+func TestLeaderApplyAppendEntriesACKUpdateNextIndex(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 0,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.Zero(r.matchIndex[peer1ID])
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02),
+	))
+}
+
+func TestLeaderApplyAppendEntriesACKUpdateSyncIndex(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 10,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(10, r.matchIndex[peer1ID])
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02),
+	))
+}
+
+func TestLeaderApplyAppendEntriesACKDoNothingIfNextIndexIsLower(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex[peer1ID] = 21
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 10,
+		SyncLogIndex: 10,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(21, r.nextIndex[peer1ID])
+	requireT.Zero(r.matchIndex[peer1ID])
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02),
+	))
+}
+
+func TestLeaderApplyAppendEntriesACKDoNothingIfSyncIndexIsLower(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.matchIndex[peer1ID] = 21
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 10,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(21, r.matchIndex[peer1ID])
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02),
+	))
+}
+
+func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.matchIndex[serverID] = 31
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   31,
+		CommittedCount: 0,
+	}, r.commitInfo)
+
+	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 21,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   31,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.EqualValues(31, r.nextIndex[peer2ID])
+	requireT.EqualValues(21, r.matchIndex[peer2ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   31,
+		CommittedCount: 0,
+	}, r.commitInfo)
+}
+
+func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	_, err = r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
+		Data: []byte{0x02, 0x01, 0x00},
+	})
+	requireT.NoError(err)
+
+	r.matchIndex[serverID] = 42
+	r.commitInfo.CommittedCount = 42
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 42,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 42,
+	}, r.commitInfo)
+
+	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 21,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 42,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.EqualValues(31, r.nextIndex[peer2ID])
+	requireT.EqualValues(21, r.matchIndex[peer2ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 42,
+	}, r.commitInfo)
+}
+
+func TestLeaderApplyAppendEntriesACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	_, err = r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
+		Data: []byte{0x02, 0x01, 0x00},
+	})
+	requireT.NoError(err)
+
+	r.matchIndex[serverID] = 42
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 0,
+	}, r.commitInfo)
+
+	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+		Term:         2,
+		NextLogIndex: 42,
+		SyncLogIndex: 42,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 31,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.EqualValues(42, r.nextIndex[peer2ID])
+	requireT.EqualValues(42, r.matchIndex[peer2ID])
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 31,
+	}, r.commitInfo)
+}
+
 func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
@@ -425,6 +843,60 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+		},
+		Force: true,
+	}, result)
+	requireT.EqualValues(20, r.heartbeatTick)
+}
+
+func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex = map[magmatypes.ServerID]types.Index{
+		peer1ID: 94,
+		peer2ID: 94,
+		peer3ID: 94,
+		peer4ID: 94,
+	}
+	r.matchIndex = map[magmatypes.ServerID]types.Index{
+		peer1ID: 94,
+		peer2ID: 94,
+	}
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 94,
+		},
+		Channel: ChannelP2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+			peer2ID,
+			peer3ID,
+			peer4ID,
+		},
+		Message: &types.Heartbeat{
+			Term:         5,
+			LeaderCommit: 94,
 		},
 		Force: true,
 	}, result)
