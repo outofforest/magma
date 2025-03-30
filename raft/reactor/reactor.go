@@ -147,13 +147,13 @@ func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, 
 		return r.resultEmpty()
 	}
 
-	r.ignoreElectionTick = r.electionTick + 1
-
 	var err error
 	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Append(tx, true, true)
 	if err != nil {
 		return r.resultError(err)
 	}
+
+	r.ignoreElectionTick = r.electionTick + 1
 
 	return r.resultEmpty()
 }
