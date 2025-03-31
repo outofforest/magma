@@ -97,16 +97,17 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	))
 }
 
-/*
 func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT := require.New(t)
-	s := newState()
+	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
-	_, _, err := s.Append(0, 0, []byte{
-		0x01, 0x01, 0x02, 0x01, 0x00,
-		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-	}, true)
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+		txb(0x03), txb(0x02, 0x00, 0x00),
+	), true, true)
 	requireT.NoError(err)
 	r := newReactorSingleMode(s)
 	_, err = r.transitionToLeader()
@@ -122,22 +123,24 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			CommittedCount: 19,
+			NextLogIndex:   75,
+			CommittedCount: 75,
 		},
+		Force: true,
 	}, result)
-	requireT.Empty(r.sync)
+	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
-	requireT.Equal(types.CommitInfo{CommittedCount: 19}, r.commitInfo)
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   75,
+		CommittedCount: 75,
+	}, r.commitInfo)
 	requireT.EqualValues(4, r.lastLogTerm)
-	requireT.EqualValues(19, r.nextLogIndex)
 
-	_, _, entries, err := s.Entries(0, maxReadLogSize)
-	requireT.NoError(err)
-	requireT.EqualValues([]byte{
-		0x01, 0x01, 0x02, 0x01, 0x00,
-		0x01, 0x02, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x03, 0x03, 0x02, 0x00, 0x00,
-		0x01, 0x04,
-	}, entries)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+		txb(0x03), txb(0x02, 0x00, 0x00),
+		txb(0x04),
+	))
 }
-*/

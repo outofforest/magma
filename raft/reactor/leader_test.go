@@ -802,6 +802,8 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 		},
 		Message: &types.Heartbeat{
 			Term:         5,
+			NextLogIndex: 94,
+			LastLogTerm:  5,
 			LeaderCommit: 0,
 		},
 		Force: true,
@@ -896,6 +898,8 @@ func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
 		},
 		Message: &types.Heartbeat{
 			Term:         5,
+			NextLogIndex: 94,
+			LastLogTerm:  5,
 			LeaderCommit: 94,
 		},
 		Force: true,
@@ -1153,4 +1157,50 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		},
 	}, result)
 	requireT.Equal(serverID, r.leaderID)
+}
+
+func TestLeaderApplyHeartbeatErrorIfThereIsAnotherLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	r := newReactor(s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+
+	_, err = r.Apply(peer1ID, &types.Heartbeat{
+		Term:         5,
+		NextLogIndex: 10,
+		LastLogTerm:  5,
+		LeaderCommit: 10,
+	})
+	requireT.Error(err)
+}
+
+func TestLeaderApplyHeartbeatChangeToFollowerOnFutureTerm(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	r := newReactor(s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+
+	result, err := r.Apply(peer1ID, &types.Heartbeat{
+		Term:         6,
+		NextLogIndex: 20,
+		LastLogTerm:  6,
+		LeaderCommit: 20,
+	})
+	requireT.NoError(err)
+	requireT.EqualValues(6, r.state.CurrentTerm())
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   10,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
 }
