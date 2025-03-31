@@ -1405,7 +1405,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT.Empty(r.matchIndex)
 }
 
-func TestFollowerApplyHeartbeatTimeoutCommit(t *testing.T) {
+func TestFollowerApplyHeartbeatTimeoutCommitToLeaderCommit(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1421,7 +1421,7 @@ func TestFollowerApplyHeartbeatTimeoutCommit(t *testing.T) {
 	requireT.NoError(err)
 	r := newReactor(s)
 	r.leaderID = peer1ID
-	r.leaderCommittedCount = 94
+	r.leaderCommittedCount = 84
 
 	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
 	requireT.NoError(err)
@@ -1431,7 +1431,7 @@ func TestFollowerApplyHeartbeatTimeoutCommit(t *testing.T) {
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
-			CommittedCount: 94,
+			CommittedCount: 84,
 		},
 		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
@@ -1441,6 +1441,47 @@ func TestFollowerApplyHeartbeatTimeoutCommit(t *testing.T) {
 			Term:         5,
 			NextLogIndex: 94,
 			SyncLogIndex: 94,
+		},
+		Force: true,
+	}, result)
+	requireT.EqualValues(20, r.heartbeatTick)
+}
+
+func TestFollowerApplyHeartbeatTimeoutCommitToNextLog(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	r.leaderID = peer1ID
+	r.leaderCommittedCount = 94
+
+	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   84,
+			CommittedCount: 84,
+		},
+		Channel: ChannelP2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &types.AppendEntriesACK{
+			Term:         5,
+			NextLogIndex: 84,
+			SyncLogIndex: 84,
 		},
 		Force: true,
 	}, result)
@@ -1477,4 +1518,112 @@ func TestFollowerApplyHeartbeatTimeoutNoLeader(t *testing.T) {
 		Force: true,
 	}, result)
 	requireT.EqualValues(20, r.heartbeatTick)
+}
+
+func TestFollowerApplyHeartbeat(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txb(0x05), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+
+	result, err := r.Apply(peer1ID, &types.Heartbeat{
+		Term:         5,
+		NextLogIndex: 10,
+		LastLogTerm:  5,
+		LeaderCommit: 10,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   10,
+			CommittedCount: 10,
+		},
+	}, result)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+}
+
+func TestFollowerApplyHeartbeatIgnoreLowerTerm(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+
+	result, err := r.Apply(peer1ID, &types.Heartbeat{
+		Term:         4,
+		NextLogIndex: 10,
+		LastLogTerm:  4,
+		LeaderCommit: 10,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   20,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.Zero(r.ignoreElectionTick)
+}
+
+func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.commitInfo = types.CommitInfo{
+		NextLogIndex:   20,
+		CommittedCount: 20,
+	}
+
+	_, err = r.Apply(peer1ID, &types.Heartbeat{
+		Term:         5,
+		NextLogIndex: 10,
+		LastLogTerm:  4,
+		LeaderCommit: 10,
+	})
+	requireT.Error(err)
+}
+
+func TestFollowerApplyHeartbeatErrorIfLeaderCommitAboveNextLogIndex(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txb(0x05), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+
+	_, err = r.Apply(peer1ID, &types.Heartbeat{
+		Term:         5,
+		NextLogIndex: 10,
+		LastLogTerm:  5,
+		LeaderCommit: 20,
+	})
+	requireT.Error(err)
 }

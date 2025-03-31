@@ -287,17 +287,23 @@ func (r *Reactor) applyHeartbeat(peerID magmatypes.ServerID, m *types.Heartbeat)
 		return r.resultError(err)
 	}
 
-	if r.role == types.RoleLeader || m.Term != r.state.CurrentTerm() {
+	if m.Term < r.state.CurrentTerm() {
 		return r.resultEmpty()
 	}
 
 	if m.LeaderCommit < r.commitInfo.CommittedCount {
 		return r.resultError(errors.New("bug in protocol"))
 	}
+	if m.LeaderCommit > m.NextLogIndex {
+		return r.resultError(errors.New("bug in protocol"))
+	}
+
+	if r.state.PreviousTerm(m.NextLogIndex) == m.LastLogTerm {
+		r.leaderCommittedCount = m.LeaderCommit
+		r.updateFollowerCommit()
+	}
 
 	r.ignoreElectionTick = r.electionTick + 1
-	r.leaderCommittedCount = m.LeaderCommit
-	r.updateFollowerCommit()
 
 	return r.resultEmpty()
 }
@@ -550,6 +556,8 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 
 	return r.resultBroadcastMessage(ChannelP2P, &types.Heartbeat{
 		Term:         r.state.CurrentTerm(),
+		NextLogIndex: r.commitInfo.NextLogIndex,
+		LastLogTerm:  r.lastLogTerm,
 		LeaderCommit: r.commitInfo.CommittedCount,
 	})
 }
