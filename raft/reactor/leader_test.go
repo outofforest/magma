@@ -759,6 +759,116 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 	))
 }
 
+func TestLeaderApplyAppendEntriesResponseCommonPointFound(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex[peer1ID] = 42
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+		Term:         5,
+		NextLogIndex: 42,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 0,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &StartTransfer{
+			NextLogIndex: 42,
+		},
+	}, result)
+	requireT.EqualValues(42, r.nextIndex[peer1ID])
+	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(serverID, r.leaderID)
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+		txb(0x05),
+	))
+}
+
+func TestLeaderApplyAppendEntriesResponseCommonPointNotFound(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex[peer1ID] = 94
+
+	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+		Term:         5,
+		NextLogIndex: 42,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 0,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &types.AppendEntriesRequest{
+			Term:         5,
+			NextLogIndex: 42,
+			LastLogTerm:  2,
+		},
+	}, result)
+	requireT.EqualValues(42, r.nextIndex[peer1ID])
+	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(serverID, r.leaderID)
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+		txb(0x05),
+	))
+}
+
 func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
