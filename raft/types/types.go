@@ -91,10 +91,6 @@ type VoteResponse struct {
 type Heartbeat struct {
 	// Term is the leader's current term.
 	Term Term
-	// NextLogIndex is the index of the next log entry.
-	NextLogIndex Index
-	// LastLogTerm is the term of the last log entry.
-	LastLogTerm Term
 	// LeaderCommit is the leader's commit index.
 	LeaderCommit Index
 }
