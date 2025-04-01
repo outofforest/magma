@@ -480,7 +480,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatch(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
+		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   21,
 			CommittedCount: 0,
@@ -532,7 +532,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
+		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   43,
 			CommittedCount: 0,
@@ -567,7 +567,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
+		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   21,
 			CommittedCount: 0,
@@ -614,7 +614,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
+		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   43,
 			CommittedCount: 0,
@@ -629,7 +629,6 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 
@@ -711,7 +710,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: peer1ID,
+		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   43,
 			CommittedCount: 0,
@@ -727,7 +726,6 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.Equal(peer1ID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 
@@ -775,7 +773,6 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		},
 	}, result)
 	requireT.Zero(r.ignoreElectionTick)
-	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 
 	requireT.EqualValues(4, s.CurrentTerm())
 
@@ -1530,11 +1527,10 @@ func TestFollowerApplyHeartbeat(t *testing.T) {
 	requireT.NoError(err)
 
 	r := newReactor(s)
+	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.Heartbeat{
 		Term:         5,
-		NextLogIndex: 10,
-		LastLogTerm:  5,
 		LeaderCommit: 10,
 	})
 	requireT.NoError(err)
@@ -1547,6 +1543,36 @@ func TestFollowerApplyHeartbeat(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
+}
+
+func TestFollowerApplyHeartbeatIgnoreIfNotLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+
+	result, err := r.Apply(peer1ID, &types.Heartbeat{
+		Term:         5,
+		LeaderCommit: 20,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   20,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.Zero(r.ignoreElectionTick)
 }
 
 func TestFollowerApplyHeartbeatIgnoreLowerTerm(t *testing.T) {
@@ -1562,17 +1588,16 @@ func TestFollowerApplyHeartbeatIgnoreLowerTerm(t *testing.T) {
 	requireT.NoError(err)
 
 	r := newReactor(s)
+	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.Heartbeat{
 		Term:         4,
-		NextLogIndex: 10,
-		LastLogTerm:  4,
 		LeaderCommit: 10,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleFollower,
-		LeaderID: magmatypes.ZeroServerID,
+		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   20,
 			CommittedCount: 0,
@@ -1594,6 +1619,7 @@ func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
 	requireT.NoError(err)
 
 	r := newReactor(s)
+	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
 		NextLogIndex:   20,
 		CommittedCount: 20,
@@ -1601,29 +1627,7 @@ func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
 
 	_, err = r.Apply(peer1ID, &types.Heartbeat{
 		Term:         5,
-		NextLogIndex: 10,
-		LastLogTerm:  4,
 		LeaderCommit: 10,
-	})
-	requireT.Error(err)
-}
-
-func TestFollowerApplyHeartbeatErrorIfLeaderCommitAboveNextLogIndex(t *testing.T) {
-	requireT := require.New(t)
-	s, _ := newState(t, "")
-	requireT.NoError(s.SetCurrentTerm(5))
-
-	txb := newTxBuilder()
-	_, _, err := s.Append(txb(0x05), true, true)
-	requireT.NoError(err)
-
-	r := newReactor(s)
-
-	_, err = r.Apply(peer1ID, &types.Heartbeat{
-		Term:         5,
-		NextLogIndex: 10,
-		LastLogTerm:  5,
-		LeaderCommit: 20,
 	})
 	requireT.Error(err)
 }

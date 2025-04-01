@@ -159,7 +159,7 @@ func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, 
 }
 
 func (r *Reactor) applyAppendEntriesACK(peerID magmatypes.ServerID, m *types.AppendEntriesACK) (Result, error) {
-	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
@@ -190,11 +190,11 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
-	resp, err := r.handleAppendEntriesRequest(m)
+	resp, err := r.handleAppendEntriesRequest(peerID, m)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -206,7 +206,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 	peerID magmatypes.ServerID,
 	m *types.AppendEntriesResponse,
 ) (Result, error) {
-	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
@@ -246,7 +246,7 @@ func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequ
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
@@ -258,7 +258,7 @@ func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequ
 }
 
 func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteResponse) (Result, error) {
-	if err := r.maybeTransitionToFollower(peerID, m.Term, false); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
@@ -283,25 +283,20 @@ func (r *Reactor) applyHeartbeat(peerID magmatypes.ServerID, m *types.Heartbeat)
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if err := r.maybeTransitionToFollower(peerID, m.Term, true); err != nil {
+	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
 
-	if m.Term < r.state.CurrentTerm() {
+	if peerID != r.leaderID || m.Term < r.state.CurrentTerm() {
 		return r.resultEmpty()
 	}
 
 	if m.LeaderCommit < r.commitInfo.CommittedCount {
 		return r.resultError(errors.New("bug in protocol"))
 	}
-	if m.LeaderCommit > m.NextLogIndex {
-		return r.resultError(errors.New("bug in protocol"))
-	}
 
-	if r.state.PreviousTerm(m.NextLogIndex) == m.LastLogTerm {
-		r.leaderCommittedCount = m.LeaderCommit
-		r.updateFollowerCommit()
-	}
+	r.leaderCommittedCount = m.LeaderCommit
+	r.updateFollowerCommit()
 
 	r.ignoreElectionTick = r.electionTick + 1
 
@@ -391,12 +386,8 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequest(), peerID)
 }
 
-func (r *Reactor) maybeTransitionToFollower(
-	peerID magmatypes.ServerID,
-	term types.Term,
-	setLeader bool,
-) error {
-	if term < r.state.CurrentTerm() || (term == r.state.CurrentTerm() && !setLeader) {
+func (r *Reactor) maybeTransitionToFollower(term types.Term) error {
+	if term <= r.state.CurrentTerm() {
 		return nil
 	}
 
@@ -408,10 +399,6 @@ func (r *Reactor) maybeTransitionToFollower(
 
 	if r.role != types.RoleFollower {
 		r.transitionToFollower()
-	}
-
-	if setLeader {
-		r.leaderID = peerID
 	}
 
 	return nil
@@ -490,7 +477,7 @@ func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
 	}
 }
 
-func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
+func (r *Reactor) handleAppendEntriesRequest(peerID magmatypes.ServerID, req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
@@ -515,6 +502,9 @@ func (r *Reactor) handleAppendEntriesRequest(req *types.AppendEntriesRequest) (*
 	}
 	if req.NextLogIndex < r.syncedCount {
 		r.syncedCount = req.NextLogIndex
+	}
+	if req.NextLogIndex == r.commitInfo.NextLogIndex {
+		r.leaderID = peerID
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
@@ -556,8 +546,6 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 
 	return r.resultBroadcastMessage(ChannelP2P, &types.Heartbeat{
 		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.commitInfo.NextLogIndex,
-		LastLogTerm:  r.lastLogTerm,
 		LeaderCommit: r.commitInfo.CommittedCount,
 	})
 }
