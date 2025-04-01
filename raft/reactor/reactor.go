@@ -135,7 +135,7 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		case *types.VoteRequest:
 			return r.applyVoteRequest(peerID, c)
 		case *types.VoteResponse:
-			return r.applyVoteResponse(peerID, c)
+			return r.applyVoteResponse(c)
 		}
 	}
 
@@ -257,7 +257,7 @@ func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequ
 	return r.resultMessageAndRecipient(ChannelP2P, resp, peerID)
 }
 
-func (r *Reactor) applyVoteResponse(peerID magmatypes.ServerID, m *types.VoteResponse) (Result, error) {
+func (r *Reactor) applyVoteResponse(m *types.VoteResponse) (Result, error) {
 	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
@@ -477,7 +477,10 @@ func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
 	}
 }
 
-func (r *Reactor) handleAppendEntriesRequest(peerID magmatypes.ServerID, req *types.AppendEntriesRequest) (*types.AppendEntriesResponse, error) {
+func (r *Reactor) handleAppendEntriesRequest(
+	peerID magmatypes.ServerID,
+	req *types.AppendEntriesRequest,
+) (*types.AppendEntriesResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
