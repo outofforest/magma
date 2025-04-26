@@ -28,7 +28,7 @@ type Marshaller struct {
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
-	case *types.AppendEntriesACK:
+	case *types.LogACK:
 		return id3, nil
 	case *types.VoteRequest:
 		return id2, nil
@@ -44,7 +44,7 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
-	case *types.AppendEntriesACK:
+	case *types.LogACK:
 		return size3(msg2), nil
 	case *types.VoteRequest:
 		return size2(msg2), nil
@@ -62,7 +62,7 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
-	case *types.AppendEntriesACK:
+	case *types.LogACK:
 		return id3, marshal3(msg2, buf), nil
 	case *types.VoteRequest:
 		return id2, marshal2(msg2, buf), nil
@@ -81,7 +81,7 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 
 	switch id {
 	case id3:
-		msg := &types.AppendEntriesACK{}
+		msg := &types.LogACK{}
 		return msg, unmarshal3(msg, buf), nil
 	case id2:
 		msg := &types.VoteRequest{}
@@ -1476,7 +1476,7 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 	return o
 }
 
-func size3(m *types.AppendEntriesACK) uint64 {
+func size3(m *types.LogACK) uint64 {
 	var n uint64 = 3
 	{
 		// Term
@@ -1559,7 +1559,7 @@ func size3(m *types.AppendEntriesACK) uint64 {
 	return n
 }
 
-func marshal3(m *types.AppendEntriesACK, b []byte) uint64 {
+func marshal3(m *types.LogACK, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -1997,7 +1997,7 @@ func marshal3(m *types.AppendEntriesACK, b []byte) uint64 {
 	return o
 }
 
-func unmarshal3(m *types.AppendEntriesACK, b []byte) uint64 {
+func unmarshal3(m *types.LogACK, b []byte) uint64 {
 	var o uint64
 	{
 		// Term

@@ -27,7 +27,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 	requireT.EqualValues(2, r.ignoreElectionTick)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(1, s.CurrentTerm())
-	requireT.EqualValues(1, r.votedForMe)
+	requireT.Equal(1, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,

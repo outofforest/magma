@@ -34,7 +34,7 @@ func TestCandidateSetup(t *testing.T) {
 
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
-	requireT.EqualValues(1, r.votedForMe)
+	requireT.Equal(1, r.votedForMe)
 	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(2, r.ignoreElectionTick)
 	requireT.Empty(r.nextIndex)
@@ -77,7 +77,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+func TestCandidateApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -94,7 +94,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 43,
 		LastLogTerm:  2,
@@ -112,7 +112,7 @@ func TestCandidateApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *t
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 43,
 			SyncLogIndex: 0,
@@ -223,7 +223,7 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(1, r.votedForMe)
+	requireT.Equal(1, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -257,7 +257,7 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(1, r.votedForMe)
+	requireT.Equal(1, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -287,7 +287,7 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(2, r.votedForMe)
+	requireT.Equal(2, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -317,7 +317,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(2, r.votedForMe)
+	requireT.Equal(2, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -339,7 +339,7 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(2, r.votedForMe)
+	requireT.Equal(2, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -368,7 +368,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(2, r.votedForMe)
+	requireT.Equal(2, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -387,7 +387,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.EqualValues(3, r.votedForMe)
+	requireT.Equal(3, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
@@ -402,7 +402,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			peer3ID,
 			peer4ID,
 		},
-		Message: &types.AppendEntriesRequest{
+		Message: &types.LogSyncRequest{
 			Term:         2,
 			NextLogIndex: 10,
 			LastLogTerm:  2,

@@ -27,9 +27,9 @@ type Marshaller struct {
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
-	case *types.AppendEntriesRequest:
+	case *types.LogSyncRequest:
 		return id2, nil
-	case *types.AppendEntriesResponse:
+	case *types.LogSyncResponse:
 		return id1, nil
 	case *StartTransfer:
 		return id0, nil
@@ -41,9 +41,9 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
-	case *types.AppendEntriesRequest:
+	case *types.LogSyncRequest:
 		return size2(msg2), nil
-	case *types.AppendEntriesResponse:
+	case *types.LogSyncResponse:
 		return size1(msg2), nil
 	case *StartTransfer:
 		return size0(msg2), nil
@@ -57,9 +57,9 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
-	case *types.AppendEntriesRequest:
+	case *types.LogSyncRequest:
 		return id2, marshal2(msg2, buf), nil
-	case *types.AppendEntriesResponse:
+	case *types.LogSyncResponse:
 		return id1, marshal1(msg2, buf), nil
 	case *StartTransfer:
 		return id0, marshal0(msg2, buf), nil
@@ -74,10 +74,10 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 
 	switch id {
 	case id2:
-		msg := &types.AppendEntriesRequest{}
+		msg := &types.LogSyncRequest{}
 		return msg, unmarshal2(msg, buf), nil
 	case id1:
-		msg := &types.AppendEntriesResponse{}
+		msg := &types.LogSyncResponse{}
 		return msg, unmarshal1(msg, buf), nil
 	case id0:
 		msg := &StartTransfer{}
@@ -104,7 +104,7 @@ func unmarshal0(m *StartTransfer, b []byte) uint64 {
 	return o
 }
 
-func size1(m *types.AppendEntriesResponse) uint64 {
+func size1(m *types.LogSyncResponse) uint64 {
 	var n uint64 = 3
 	{
 		// Term
@@ -187,7 +187,7 @@ func size1(m *types.AppendEntriesResponse) uint64 {
 	return n
 }
 
-func marshal1(m *types.AppendEntriesResponse, b []byte) uint64 {
+func marshal1(m *types.LogSyncResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -625,7 +625,7 @@ func marshal1(m *types.AppendEntriesResponse, b []byte) uint64 {
 	return o
 }
 
-func unmarshal1(m *types.AppendEntriesResponse, b []byte) uint64 {
+func unmarshal1(m *types.LogSyncResponse, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -778,7 +778,7 @@ func unmarshal1(m *types.AppendEntriesResponse, b []byte) uint64 {
 	return o
 }
 
-func size2(m *types.AppendEntriesRequest) uint64 {
+func size2(m *types.LogSyncRequest) uint64 {
 	var n uint64 = 3
 	{
 		// Term
@@ -861,7 +861,7 @@ func size2(m *types.AppendEntriesRequest) uint64 {
 	return n
 }
 
-func marshal2(m *types.AppendEntriesRequest, b []byte) uint64 {
+func marshal2(m *types.LogSyncRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term
@@ -1299,7 +1299,7 @@ func marshal2(m *types.AppendEntriesRequest, b []byte) uint64 {
 	return o
 }
 
-func unmarshal2(m *types.AppendEntriesRequest, b []byte) uint64 {
+func unmarshal2(m *types.LogSyncRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// Term

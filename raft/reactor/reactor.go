@@ -124,12 +124,12 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		switch c := cmd.(type) {
 		case []byte:
 			return r.applyAppendTx(peerID, c)
-		case *types.AppendEntriesRequest:
-			return r.applyAppendEntriesRequest(peerID, c)
-		case *types.AppendEntriesResponse:
-			return r.applyAppendEntriesResponse(peerID, c)
-		case *types.AppendEntriesACK:
-			return r.applyAppendEntriesACK(peerID, c)
+		case *types.LogSyncRequest:
+			return r.applyLogSyncRequest(peerID, c)
+		case *types.LogSyncResponse:
+			return r.applyLogSyncResponse(peerID, c)
+		case *types.LogACK:
+			return r.applyLogACK(peerID, c)
 		case *types.Heartbeat:
 			return r.applyHeartbeat(peerID, c)
 		case *types.VoteRequest:
@@ -158,7 +158,7 @@ func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, 
 	return r.resultEmpty()
 }
 
-func (r *Reactor) applyAppendEntriesACK(peerID magmatypes.ServerID, m *types.AppendEntriesACK) (Result, error) {
+func (r *Reactor) applyLogACK(peerID magmatypes.ServerID, m *types.LogACK) (Result, error) {
 	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
@@ -185,7 +185,7 @@ func (r *Reactor) applyAppendEntriesACK(peerID magmatypes.ServerID, m *types.App
 	return r.resultEmpty()
 }
 
-func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types.AppendEntriesRequest) (Result, error) {
+func (r *Reactor) applyLogSyncRequest(peerID magmatypes.ServerID, m *types.LogSyncRequest) (Result, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
 		return r.resultError(errors.New("bug in protocol"))
 	}
@@ -194,7 +194,7 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 		return r.resultError(err)
 	}
 
-	resp, err := r.handleAppendEntriesRequest(peerID, m)
+	resp, err := r.handleLogSyncRequest(peerID, m)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -202,9 +202,9 @@ func (r *Reactor) applyAppendEntriesRequest(peerID magmatypes.ServerID, m *types
 	return r.resultMessageAndRecipient(ChannelL2P, resp, peerID)
 }
 
-func (r *Reactor) applyAppendEntriesResponse(
+func (r *Reactor) applyLogSyncResponse(
 	peerID magmatypes.ServerID,
-	m *types.AppendEntriesResponse,
+	m *types.LogSyncResponse,
 ) (Result, error) {
 	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
@@ -231,7 +231,7 @@ func (r *Reactor) applyAppendEntriesResponse(
 	}
 
 	r.nextIndex[peerID] = m.NextLogIndex
-	req := &types.AppendEntriesRequest{
+	req := &types.LogSyncRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: m.NextLogIndex,
 		LastLogTerm:  r.state.PreviousTerm(m.NextLogIndex),
@@ -350,7 +350,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 				return r.resultEmpty()
 			}
 
-			return r.resultMessageAndRecipient(ChannelP2P, &types.AppendEntriesACK{
+			return r.resultMessageAndRecipient(ChannelP2P, &types.LogACK{
 				Term:         r.state.CurrentTerm(),
 				NextLogIndex: r.commitInfo.NextLogIndex,
 				SyncLogIndex: r.syncedCount,
@@ -383,7 +383,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 
 	r.nextIndex[peerID] = r.commitInfo.NextLogIndex
 
-	return r.resultMessageAndRecipient(ChannelL2P, r.newAppendEntriesRequest(), peerID)
+	return r.resultMessageAndRecipient(ChannelL2P, r.newLogSyncRequest(), peerID)
 }
 
 func (r *Reactor) maybeTransitionToFollower(term types.Term) error {
@@ -466,26 +466,26 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		r.nextIndex[p] = r.commitInfo.NextLogIndex
 	}
 
-	return r.resultBroadcastMessage(ChannelL2P, r.newAppendEntriesRequest())
+	return r.resultBroadcastMessage(ChannelL2P, r.newLogSyncRequest())
 }
 
-func (r *Reactor) newAppendEntriesRequest() *types.AppendEntriesRequest {
-	return &types.AppendEntriesRequest{
+func (r *Reactor) newLogSyncRequest() *types.LogSyncRequest {
+	return &types.LogSyncRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.commitInfo.NextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
 	}
 }
 
-func (r *Reactor) handleAppendEntriesRequest(
+func (r *Reactor) handleLogSyncRequest(
 	peerID magmatypes.ServerID,
-	req *types.AppendEntriesRequest,
-) (*types.AppendEntriesResponse, error) {
+	req *types.LogSyncRequest,
+) (*types.LogSyncResponse, error) {
 	if req.NextLogIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
 
-	resp := &types.AppendEntriesResponse{
+	resp := &types.LogSyncResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.commitInfo.NextLogIndex,
 		SyncLogIndex: r.syncedCount,

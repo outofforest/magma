@@ -42,7 +42,7 @@ func TestLeaderSetup(t *testing.T) {
 
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(serverID, r.leaderID)
-	requireT.EqualValues(10, r.votedForMe)
+	requireT.Equal(10, r.votedForMe)
 	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.EqualValues(2, r.ignoreHeartbeatTick)
 	requireT.Equal(Result{
@@ -59,7 +59,7 @@ func TestLeaderSetup(t *testing.T) {
 			peer3ID,
 			peer4ID,
 		},
-		Message: &types.AppendEntriesRequest{
+		Message: &types.LogSyncRequest{
 			Term:         3,
 			NextLogIndex: 53,
 			LastLogTerm:  3,
@@ -86,7 +86,7 @@ func TestLeaderSetup(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -103,7 +103,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 42,
 		LastLogTerm:  2,
@@ -121,7 +121,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 42,
 			SyncLogIndex: 0,
@@ -139,7 +139,7 @@ func TestLeaderApplyAppendEntriesRequestTransitionToFollowerOnFutureTerm(t *test
 	))
 }
 
-func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T) {
+func TestLeaderApplyLogSyncRequestErrorIfThereIsAnotherLeader(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -156,7 +156,7 @@ func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         3,
 		NextLogIndex: 52,
 		LastLogTerm:  3,
@@ -166,7 +166,7 @@ func TestLeaderApplyAppendEntriesRequestErrorIfThereIsAnotherLeader(t *testing.T
 	requireT.Equal(Result{}, result)
 }
 
-func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
+func TestLeaderApplyLogSyncResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -174,7 +174,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         3,
 		NextLogIndex: 10,
 	})
@@ -193,7 +193,7 @@ func TestLeaderApplyAppendEntriesResponseTransitionToFollowerOnFutureTerm(t *tes
 	requireT.EqualValues(3, s.CurrentTerm())
 }
 
-func TestLeaderApplyAppendEntriesACKTransitionToFollowerOnFutureTerm(t *testing.T) {
+func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -201,7 +201,7 @@ func TestLeaderApplyAppendEntriesACKTransitionToFollowerOnFutureTerm(t *testing.
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 31,
@@ -221,7 +221,7 @@ func TestLeaderApplyAppendEntriesACKTransitionToFollowerOnFutureTerm(t *testing.
 	logEqual(requireT, dir, txb(0x01))
 }
 
-func TestLeaderApplyAppendEntriesACKErrorIfReportedIndexIsGreater(t *testing.T) {
+func TestLeaderApplyLogACKErrorIfReportedIndexIsGreater(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -229,7 +229,7 @@ func TestLeaderApplyAppendEntriesACKErrorIfReportedIndexIsGreater(t *testing.T) 
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         1,
 		NextLogIndex: 31,
 		SyncLogIndex: 31,
@@ -241,7 +241,7 @@ func TestLeaderApplyAppendEntriesACKErrorIfReportedIndexIsGreater(t *testing.T) 
 	logEqual(requireT, dir, txb(0x01))
 }
 
-func TestLeaderApplyAppendEntriesACKErrorIfSyncIndexIsGreater(t *testing.T) {
+func TestLeaderApplyLogACKErrorIfSyncIndexIsGreater(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -249,7 +249,7 @@ func TestLeaderApplyAppendEntriesACKErrorIfSyncIndexIsGreater(t *testing.T) {
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         1,
 		NextLogIndex: 9,
 		SyncLogIndex: 10,
@@ -261,7 +261,7 @@ func TestLeaderApplyAppendEntriesACKErrorIfSyncIndexIsGreater(t *testing.T) {
 	logEqual(requireT, dir, txb(0x01))
 }
 
-func TestLeaderApplyAppendEntriesACKUpdateNextIndex(t *testing.T) {
+func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -275,7 +275,7 @@ func TestLeaderApplyAppendEntriesACKUpdateNextIndex(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 0,
@@ -299,7 +299,7 @@ func TestLeaderApplyAppendEntriesACKUpdateNextIndex(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesACKUpdateSyncIndex(t *testing.T) {
+func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -313,7 +313,7 @@ func TestLeaderApplyAppendEntriesACKUpdateSyncIndex(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 10,
@@ -337,7 +337,7 @@ func TestLeaderApplyAppendEntriesACKUpdateSyncIndex(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesACKDoNothingIfNextIndexIsLower(t *testing.T) {
+func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -353,7 +353,7 @@ func TestLeaderApplyAppendEntriesACKDoNothingIfNextIndexIsLower(t *testing.T) {
 
 	r.nextIndex[peer1ID] = 21
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 10,
 		SyncLogIndex: 10,
@@ -377,7 +377,7 @@ func TestLeaderApplyAppendEntriesACKDoNothingIfNextIndexIsLower(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesACKDoNothingIfSyncIndexIsLower(t *testing.T) {
+func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -393,7 +393,7 @@ func TestLeaderApplyAppendEntriesACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 
 	r.matchIndex[peer1ID] = 21
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 10,
@@ -417,7 +417,7 @@ func TestLeaderApplyAppendEntriesACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
+func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -433,7 +433,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentTerm(t *testin
 
 	r.matchIndex[serverID] = 31
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 31,
@@ -454,7 +454,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentTerm(t *testin
 		CommittedCount: 0,
 	}, r.commitInfo)
 
-	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+	result, err = r.Apply(peer2ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 21,
@@ -478,7 +478,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentTerm(t *testin
 	}, r.commitInfo)
 }
 
-func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
+func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -500,7 +500,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentCommit(t *test
 	r.matchIndex[serverID] = 42
 	r.commitInfo.CommittedCount = 42
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 31,
@@ -521,7 +521,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentCommit(t *test
 		CommittedCount: 42,
 	}, r.commitInfo)
 
-	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+	result, err = r.Apply(peer2ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 21,
@@ -545,7 +545,7 @@ func TestLeaderApplyAppendEntriesACKCommitNotUpdatedIfBelowCurrentCommit(t *test
 	}, r.commitInfo)
 }
 
-func TestLeaderApplyAppendEntriesACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
+func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -566,7 +566,7 @@ func TestLeaderApplyAppendEntriesACKUpdateLeaderCommitToCommonPoint(t *testing.T
 
 	r.matchIndex[serverID] = 42
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 31,
 		SyncLogIndex: 31,
@@ -587,7 +587,7 @@ func TestLeaderApplyAppendEntriesACKUpdateLeaderCommitToCommonPoint(t *testing.T
 		CommittedCount: 0,
 	}, r.commitInfo)
 
-	result, err = r.Apply(peer2ID, &types.AppendEntriesACK{
+	result, err = r.Apply(peer2ID, &types.LogACK{
 		Term:         2,
 		NextLogIndex: 42,
 		SyncLogIndex: 42,
@@ -657,7 +657,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
+func TestLeaderApplyLogSyncResponseErrorIfReplicatedMore(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -676,7 +676,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 
 	r.nextIndex[peer1ID] = 0
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         5,
 		NextLogIndex: 95,
 	})
@@ -688,7 +688,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfReplicatedMore(t *testing.T) {
 	requireT.Equal(serverID, r.leaderID)
 }
 
-func TestLeaderApplyAppendEntriesResponseErrorIfSyncIsAheadLog(t *testing.T) {
+func TestLeaderApplyLogSyncResponseErrorIfSyncIsAheadLog(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -702,7 +702,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfSyncIsAheadLog(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         2,
 		NextLogIndex: 23,
 		SyncLogIndex: 24,
@@ -712,7 +712,7 @@ func TestLeaderApplyAppendEntriesResponseErrorIfSyncIsAheadLog(t *testing.T) {
 	requireT.Equal(Result{}, result)
 }
 
-func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
+func TestLeaderApplyLogSyncResponseIgnorePastTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -731,7 +731,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 
 	r.nextIndex[peer1ID] = 0
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         4,
 		NextLogIndex: 84,
 	})
@@ -759,7 +759,7 @@ func TestLeaderApplyAppendEntriesResponseIgnorePastTerm(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesResponseCommonPointFound(t *testing.T) {
+func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -778,7 +778,7 @@ func TestLeaderApplyAppendEntriesResponseCommonPointFound(t *testing.T) {
 
 	r.nextIndex[peer1ID] = 42
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         5,
 		NextLogIndex: 42,
 	})
@@ -813,7 +813,7 @@ func TestLeaderApplyAppendEntriesResponseCommonPointFound(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyAppendEntriesResponseCommonPointNotFound(t *testing.T) {
+func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -832,7 +832,7 @@ func TestLeaderApplyAppendEntriesResponseCommonPointNotFound(t *testing.T) {
 
 	r.nextIndex[peer1ID] = 94
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesResponse{
+	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         5,
 		NextLogIndex: 42,
 	})
@@ -849,7 +849,7 @@ func TestLeaderApplyAppendEntriesResponseCommonPointNotFound(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesRequest{
+		Message: &types.LogSyncRequest{
 			Term:         5,
 			NextLogIndex: 42,
 			LastLogTerm:  2,
@@ -1256,7 +1256,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesRequest{
+		Message: &types.LogSyncRequest{
 			Term:         5,
 			NextLogIndex: 94,
 			LastLogTerm:  5,
