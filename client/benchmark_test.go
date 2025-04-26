@@ -24,8 +24,7 @@ import (
 func TestCluster(t *testing.T) {
 	t.Skip()
 	requireT := require.New(t)
-	ctx, cancel := context.WithCancel(logger.WithLogger(context.Background(), logger.New(logger.DefaultConfig)))
-	t.Cleanup(cancel)
+	ctx := logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig))
 
 	peer1 := types.ServerID(uuid.New())
 	peer2 := types.ServerID(uuid.New())

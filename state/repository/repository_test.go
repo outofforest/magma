@@ -51,7 +51,7 @@ func TestPageCapacity(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	requireT.EqualValues(pageSize-maxHeaderSize, r.PageCapacity())
+	requireT.Equal(pageSize-maxHeaderSize, r.PageCapacity())
 }
 
 func TestCreateFailsIfTermIsZero(t *testing.T) {

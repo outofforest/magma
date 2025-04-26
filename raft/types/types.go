@@ -36,8 +36,8 @@ type HeartbeatTick uint64
 // ElectionTick is sent to raft reactor when it's time to switch to election phase.
 type ElectionTick uint64
 
-// AppendEntriesRequest is sent by the leader to find common point in log.
-type AppendEntriesRequest struct {
+// LogSyncRequest is sent by the leader to find common point in log.
+type LogSyncRequest struct {
 	// Term is the leader's current term.
 	Term Term
 	// NextLogIndex is the index of the next log entry.
@@ -46,9 +46,8 @@ type AppendEntriesRequest struct {
 	LastLogTerm Term
 }
 
-// AppendEntriesResponse is sent to leader pointing to current log tail.
-// to the leader after processing an AppendEntriesRequest.
-type AppendEntriesResponse struct {
+// LogSyncResponse is sent to leader pointing to current log tail.
+type LogSyncResponse struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item to receive.
@@ -57,8 +56,8 @@ type AppendEntriesResponse struct {
 	SyncLogIndex Index
 }
 
-// AppendEntriesACK acknowledges log transfer.
-type AppendEntriesACK struct {
+// LogACK acknowledges log transfer.
+type LogACK struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item to receive.

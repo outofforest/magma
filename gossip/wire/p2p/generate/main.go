@@ -9,7 +9,7 @@ import (
 
 func main() {
 	proton.Generate("../p2p.proton.go",
-		types.AppendEntriesACK{},
+		types.LogACK{},
 		types.VoteRequest{},
 		types.VoteResponse{},
 		types.Heartbeat{},

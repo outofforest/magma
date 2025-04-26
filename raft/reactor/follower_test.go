@@ -265,7 +265,7 @@ func TestFollowerAppendTxFailsIfTxDoesNotContainChecksum(t *testing.T) {
 	requireT.Equal(peer1ID, r.leaderID)
 }
 
-func TestFollowerAppendEntriesACKDoesNothing(t *testing.T) {
+func TestFollowerLogACKDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -278,7 +278,7 @@ func TestFollowerAppendEntriesACKDoesNothing(t *testing.T) {
 	r := newReactor(s)
 	r.leaderID = peer1ID
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesACK{
+	result, err := r.Apply(peer1ID, &types.LogACK{
 		Term:         1,
 		NextLogIndex: 21,
 		SyncLogIndex: 21,
@@ -302,7 +302,7 @@ func TestFollowerAppendEntriesACKDoesNothing(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestOnFutureTerm(t *testing.T) {
+func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -316,7 +316,7 @@ func TestFollowerAppendEntriesRequestOnFutureTerm(t *testing.T) {
 
 	r := newReactor(s)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         3,
 		NextLogIndex: 43,
 		LastLogTerm:  2,
@@ -334,7 +334,7 @@ func TestFollowerAppendEntriesRequestOnFutureTerm(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         3,
 			NextLogIndex: 43,
 			SyncLogIndex: 0,
@@ -352,7 +352,7 @@ func TestFollowerAppendEntriesRequestOnFutureTerm(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestDiscardEntries(t *testing.T) {
+func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -368,7 +368,7 @@ func TestFollowerAppendEntriesRequestDiscardEntries(t *testing.T) {
 	r := newReactor(s)
 	r.syncedCount = 21
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 42,
 		LastLogTerm:  2,
@@ -386,7 +386,7 @@ func TestFollowerAppendEntriesRequestDiscardEntries(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 42,
 			SyncLogIndex: 21,
@@ -404,7 +404,7 @@ func TestFollowerAppendEntriesRequestDiscardEntries(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestDiscardAtSynced(t *testing.T) {
+func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -420,7 +420,7 @@ func TestFollowerAppendEntriesRequestDiscardAtSynced(t *testing.T) {
 	r := newReactor(s)
 	r.syncedCount = 42
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 42,
 		LastLogTerm:  2,
@@ -438,7 +438,7 @@ func TestFollowerAppendEntriesRequestDiscardAtSynced(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 42,
 			SyncLogIndex: 42,
@@ -456,7 +456,7 @@ func TestFollowerAppendEntriesRequestDiscardAtSynced(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestDiscardOnTermMismatch(t *testing.T) {
+func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -471,7 +471,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatch(t *testing.T) {
 	r := newReactor(s)
 	r.syncedCount = 43
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 43,
 		LastLogTerm:  3,
@@ -489,7 +489,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatch(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 21,
 			SyncLogIndex: 21,
@@ -506,7 +506,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatch(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
+func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -523,7 +523,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 
 	// First time.
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         5,
 		NextLogIndex: 62,
 		LastLogTerm:  4,
@@ -541,7 +541,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         5,
 			NextLogIndex: 43,
 		},
@@ -558,7 +558,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 
 	// Second time.
 
-	result, err = r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err = r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         6,
 		NextLogIndex: 22,
 		LastLogTerm:  3,
@@ -576,7 +576,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         6,
 			NextLogIndex: 21,
 		},
@@ -591,7 +591,7 @@ func TestFollowerAppendEntriesRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
+func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -605,7 +605,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 
 	r := newReactor(s)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 1000,
 		LastLogTerm:  3,
@@ -623,7 +623,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 43,
 		},
@@ -639,7 +639,7 @@ func TestFollowerAppendEntriesRequestRejectIfNoPreviousEntry(t *testing.T) {
 	))
 }
 
-func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
+func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -652,7 +652,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 	requireT.NoError(err)
 	r := newReactor(s)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 43,
 		LastLogTerm:  2,
@@ -670,7 +670,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 43,
 			SyncLogIndex: 0,
@@ -688,7 +688,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfLastLogTermIsLower(t *testing
 	))
 }
 
-func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
+func TestFollowerLogSyncRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -701,7 +701,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 	requireT.NoError(err)
 	r := newReactor(s)
 
-	result, err := r.Apply(peer1ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:         4,
 		NextLogIndex: 44,
 		LastLogTerm:  2,
@@ -719,7 +719,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 43,
 			SyncLogIndex: 0,
@@ -736,7 +736,7 @@ func TestFollowerAppendEntriesRequestSendResponseIfNextLogIndexIsLower(t *testin
 	))
 }
 
-func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
+func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
@@ -749,7 +749,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 	requireT.NoError(err)
 	r := newReactor(s)
 
-	result, err := r.Apply(peer2ID, &types.AppendEntriesRequest{
+	result, err := r.Apply(peer2ID, &types.LogSyncRequest{
 		Term:         3,
 		NextLogIndex: 43,
 		LastLogTerm:  2,
@@ -767,7 +767,7 @@ func TestFollowerAppendEntriesRequestDoNothingOnLowerTerm(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer2ID,
 		},
-		Message: &types.AppendEntriesResponse{
+		Message: &types.LogSyncResponse{
 			Term:         4,
 			NextLogIndex: 43,
 		},
@@ -1312,7 +1312,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT.EqualValues(2, r.ignoreElectionTick)
 	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(1, s.CurrentTerm())
-	requireT.EqualValues(1, r.votedForMe)
+	requireT.Equal(1, r.votedForMe)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
@@ -1356,7 +1356,7 @@ func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
 	requireT.EqualValues(2, r.ignoreElectionTick)
 	requireT.EqualValues(1, r.electionTick)
 	requireT.EqualValues(0, s.CurrentTerm())
-	requireT.EqualValues(0, r.votedForMe)
+	requireT.Equal(0, r.votedForMe)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   0,
@@ -1434,7 +1434,7 @@ func TestFollowerApplyHeartbeatTimeoutCommitToLeaderCommit(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesACK{
+		Message: &types.LogACK{
 			Term:         5,
 			NextLogIndex: 94,
 			SyncLogIndex: 94,
@@ -1475,7 +1475,7 @@ func TestFollowerApplyHeartbeatTimeoutCommitToNextLog(t *testing.T) {
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
 		},
-		Message: &types.AppendEntriesACK{
+		Message: &types.LogACK{
 			Term:         5,
 			NextLogIndex: 84,
 			SyncLogIndex: 84,
