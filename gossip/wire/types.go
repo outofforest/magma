@@ -17,6 +17,7 @@ const (
 
 // Hello is th message exchanged between peers when connected.
 type Hello struct {
-	ServerID types.ServerID
-	Channel  Channel
+	ServerID    types.ServerID
+	PartitionID types.PartitionID
+	Channel     Channel
 }

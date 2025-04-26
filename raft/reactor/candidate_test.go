@@ -3,7 +3,6 @@ package reactor
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/raft/types"
@@ -408,7 +407,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			LastLogTerm:  2,
 		},
 	}, result)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 10,
 		peer2ID: 10,
 		peer3ID: 10,
@@ -460,7 +459,7 @@ func TestCandidateApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT.Equal(magmatypes.ZeroServerID, r.leaderID)
 	requireT.EqualValues(1, s.CurrentTerm())
 
-	result, err := r.Apply(magmatypes.ServerID(uuid.New()), nil)
+	result, err := r.Apply("PeerID", nil)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
 	requireT.Equal(Result{

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/raft/types"
@@ -149,8 +148,8 @@ func TestTermFailsIfSame(t *testing.T) {
 }
 
 func TestVoteSet(t *testing.T) {
-	candidate1 := magmatypes.ServerID(uuid.New())
-	candidate2 := magmatypes.ServerID(uuid.New())
+	candidate1 := magmatypes.ServerID("C1")
+	candidate2 := magmatypes.ServerID("C2")
 
 	requireT := require.New(t)
 	m, dir := newManager(t, "")
@@ -204,7 +203,7 @@ func TestVoteSet(t *testing.T) {
 }
 
 func TestVoteIsZeroedOnNewTerm(t *testing.T) {
-	candidate := magmatypes.ServerID(uuid.New())
+	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
@@ -224,7 +223,7 @@ func TestVoteIsZeroedOnNewTerm(t *testing.T) {
 }
 
 func TestVoteFailsIfNoTerm(t *testing.T) {
-	candidate := magmatypes.ServerID(uuid.New())
+	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
@@ -245,8 +244,8 @@ func TestVoteFailsIfCandidateIsInvalid(t *testing.T) {
 }
 
 func TestVoteFailsIfVotedTwiceOnDifferentCandidates(t *testing.T) {
-	candidate1 := magmatypes.ServerID(uuid.New())
-	candidate2 := magmatypes.ServerID(uuid.New())
+	candidate1 := magmatypes.ServerID("C1")
+	candidate2 := magmatypes.ServerID("C2")
 
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
@@ -262,7 +261,7 @@ func TestVoteFailsIfVotedTwiceOnDifferentCandidates(t *testing.T) {
 }
 
 func TestVoteFailsIfVotedTwiceOnSameCandidate(t *testing.T) {
-	candidate := magmatypes.ServerID(uuid.New())
+	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
@@ -294,8 +293,8 @@ func TestOpenWithTerm(t *testing.T) {
 }
 
 func TestOpenWithTermAndVote(t *testing.T) {
-	candidate1 := magmatypes.ServerID(uuid.New())
-	candidate2 := magmatypes.ServerID(uuid.New())
+	candidate1 := magmatypes.ServerID("C1")
+	candidate2 := magmatypes.ServerID("C2")
 
 	requireT := require.New(t)
 	m1, dir := newManager(t, "")
@@ -320,7 +319,7 @@ func TestOpenWithTermAndVote(t *testing.T) {
 }
 
 func TestOpenWithTermAndZeroedVote(t *testing.T) {
-	candidate := magmatypes.ServerID(uuid.New())
+	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
 	m1, dir := newManager(t, "")
@@ -341,7 +340,7 @@ func TestOpenWithTermAndZeroedVote(t *testing.T) {
 }
 
 func TestOpenWithManyFiles(t *testing.T) {
-	candidate := magmatypes.ServerID(uuid.New())
+	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
 	m1, dir := newManager(t, "")

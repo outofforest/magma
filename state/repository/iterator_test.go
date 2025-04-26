@@ -8,7 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/raft/types"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 func TestIterator(t *testing.T) {
@@ -52,7 +52,7 @@ func TestIterator(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 	requireT.NoError(it.Close())
 }
 
@@ -97,7 +97,7 @@ func TestIteratorWithOffset2(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 	requireT.NoError(it.Close())
 }
 
@@ -136,7 +136,7 @@ func TestIteratorWithOffset3(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 	requireT.NoError(it.Close())
 }
 
@@ -169,7 +169,7 @@ func TestIteratorWithOffset5(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 	requireT.NoError(it.Close())
 }
 
@@ -208,7 +208,7 @@ func TestIteratorWithTail(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{3, 5}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5}, offsets)
 
 	tp.SetTail(7)
 
@@ -230,7 +230,7 @@ func TestIteratorWithTail(t *testing.T) {
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Close())
 }
@@ -276,47 +276,47 @@ func TestAcknowledge(t *testing.T) {
 	offsets := lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
 
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(0))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(1))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(2))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{3, 5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{3, 5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(3))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(4))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{5, 5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5, 5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(5))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
 	requireT.NoError(it.Acknowledge(6))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{5 + types.Index(pageSize) - maxHeaderSize}, offsets)
+	requireT.Equal([]magmatypes.Index{5 + magmatypes.Index(pageSize) - maxHeaderSize}, offsets)
 
-	requireT.NoError(it.Acknowledge(5 + types.Index(pageSize) - maxHeaderSize))
+	requireT.NoError(it.Acknowledge(5 + magmatypes.Index(pageSize) - maxHeaderSize))
 	offsets = lo.Keys(it.files)
 	sort.Slice(offsets, func(i, j int) bool { return offsets[i] < offsets[j] })
-	requireT.Equal([]types.Index{}, offsets)
+	requireT.Equal([]magmatypes.Index{}, offsets)
 
 	requireT.NoError(it.Close())
 }

@@ -11,8 +11,8 @@ import (
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire/c2p"
-	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository/format"
+	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
@@ -22,6 +22,7 @@ import (
 // Config is the configuration of magma client.
 type Config struct {
 	PeerAddress      string
+	PartitionID      types.PartitionID
 	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
 }
@@ -44,7 +45,7 @@ type Client struct {
 	config        Config
 	txCh          chan []byte
 	m             proton.Marshaller
-	nextLogIndex  rafttypes.Index
+	nextLogIndex  types.Index
 	timeoutTicker *time.Ticker
 
 	buf     []byte
@@ -66,6 +67,7 @@ func (c *Client) Run(ctx context.Context) error {
 				conn.BufferWrites()
 
 				if err := conn.SendProton(&c2p.Init{
+					PartitionID:  c.config.PartitionID,
 					NextLogIndex: c.nextLogIndex,
 				}, c2p.NewMarshaller()); err != nil {
 					return errors.WithStack(err)
@@ -79,7 +81,7 @@ func (c *Client) Run(ctx context.Context) error {
 							if err != nil {
 								return err
 							}
-							txTotalLen := rafttypes.Index(len(txRaw))
+							txTotalLen := types.Index(len(txRaw))
 							txLen, n := varuint64.Parse(txRaw)
 
 							if txLen < format.ChecksumSize {

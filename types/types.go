@@ -1,24 +1,27 @@
 package types
 
-import (
-	"github.com/google/uuid"
-)
+// Index represents the index of a log entry.
+type Index uint64
 
 // ServerID represents the unique identifier of a server.
-type ServerID uuid.UUID
+type ServerID string
 
 // ZeroServerID represents an uninitialized ServerID with a zero value.
 var ZeroServerID ServerID
 
+// PartitionID represents the partition ID.
+type PartitionID string
+
 // Config is the config of magma.
 type Config struct {
 	ServerID       ServerID
-	Servers        []PeerConfig
+	Servers        []ServerConfig
+	Partitions     []PartitionID
 	MaxMessageSize uint64
 }
 
-// PeerConfig stores configuration of peer connection.
-type PeerConfig struct {
+// ServerConfig stores configuration of server.
+type ServerConfig struct {
 	ID         ServerID
 	P2PAddress string
 }

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
@@ -44,7 +43,7 @@ func appendLog(requireT *require.Assertions, s *State, data ...byte) {
 
 func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 	it := s.repo.Iterator(0)
-	var index rafttypes.Index
+	var index types.Index
 	buf := bytes.NewBuffer(nil)
 	for index < s.nextLogIndex {
 		file, err := it.Next()
@@ -56,7 +55,7 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 		}
 		n, err := io.Copy(buf, io.LimitReader(file.Reader(), int64(limit)))
 		requireT.NoError(err)
-		index += rafttypes.Index(n)
+		index += types.Index(n)
 		requireT.NoError(file.Close())
 	}
 	requireT.Equal(expectedLog, buf.Bytes())
@@ -90,7 +89,7 @@ func TestVoteFor(t *testing.T) {
 
 	s, _ := newState(t, "")
 
-	candidateID1 := types.ServerID(uuid.New())
+	candidateID1 := types.ServerID("C1")
 	granted, err := s.VoteFor(candidateID1)
 	requireT.Error(err)
 	requireT.False(granted)
@@ -109,7 +108,7 @@ func TestVoteFor(t *testing.T) {
 	requireT.NoError(err)
 	requireT.True(granted)
 
-	candidateID2 := types.ServerID(uuid.New())
+	candidateID2 := types.ServerID("C2")
 	granted, err = s.VoteFor(candidateID2)
 	requireT.NoError(err)
 	requireT.False(granted)
@@ -1440,7 +1439,7 @@ func TestAppendManyFiles(t *testing.T) {
 			PreviousTerm:     previousTerm,
 			PreviousChecksum: h.PreviousChecksum,
 			Term:             1,
-			NextLogIndex:     rafttypes.Index(i * s.repo.PageCapacity()),
+			NextLogIndex:     types.Index(i * s.repo.PageCapacity()),
 			NextTxOffset:     h.NextTxOffset,
 			HeaderChecksum:   h.HeaderChecksum,
 		}, h)
@@ -1521,7 +1520,7 @@ func TestAppendManyTerms(t *testing.T) {
 			PreviousTerm:     rafttypes.Term(i),
 			PreviousChecksum: h.PreviousChecksum,
 			Term:             rafttypes.Term(i + 1),
-			NextLogIndex:     rafttypes.Index(i * 10),
+			NextLogIndex:     types.Index(i * 10),
 			NextTxOffset:     0,
 			HeaderChecksum:   h.HeaderChecksum,
 		}, h)
@@ -1544,7 +1543,7 @@ func TestNew(t *testing.T) {
 	requireT := require.New(t)
 
 	s1, dir := newState(t, "")
-	candidate := types.ServerID(uuid.New())
+	candidate := types.ServerID("C")
 
 	requireT.NoError(s1.SetCurrentTerm(121))
 	granted, err := s1.VoteFor(candidate)

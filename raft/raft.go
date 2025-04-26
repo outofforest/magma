@@ -5,6 +5,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/gossip"
+	"github.com/outofforest/magma/raft/partition"
 	"github.com/outofforest/magma/raft/reactor"
 	"github.com/outofforest/magma/raft/timeouts"
 	"github.com/outofforest/magma/raft/types"
@@ -12,68 +14,67 @@ import (
 	"github.com/outofforest/parallel"
 )
 
-const queueCapacity = 10
-
-// GossipFunc is the declaration of the function responsible for gossiping messages between peers.
-type GossipFunc func(
-	ctx context.Context,
-	cmdP2PCh, cmdC2PCh chan<- types.Command,
-	resultCh <-chan reactor.Result,
-	majorityCh chan<- bool,
-) error
-
 // Run runs Raft processor.
-func Run(ctx context.Context, r *reactor.Reactor, gossipFunc GossipFunc) error {
+func Run(
+	ctx context.Context,
+	partitions map[magmatypes.PartitionID]partition.State,
+	g *gossip.Gossip,
+) error {
 	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-		cmdP2PCh := make(chan types.Command, queueCapacity)
-		cmdC2PCh := make(chan types.Command, queueCapacity)
-		resultCh := make(chan reactor.Result, 1)
-		roleCh := make(chan types.Role, 1)
-		majorityCh := make(chan bool, 1)
-
-		t := timeouts.New(roleCh, majorityCh)
-
 		spawn("producers", parallel.Fail, func(ctx context.Context) error {
-			defer close(cmdP2PCh)
-			defer close(cmdC2PCh)
+			defer func() {
+				for _, pState := range partitions {
+					close(pState.CmdP2PCh)
+					close(pState.CmdC2PCh)
+				}
+			}()
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-				spawn("timeoutProducer", parallel.Fail, t.Run)
-				spawn("timeoutConsumer", parallel.Fail, func(ctx context.Context) error {
-					return runTimeoutConsumer(ctx, t, cmdP2PCh)
-				})
+				for _, pState := range partitions {
+					t := timeouts.New(pState.RoleCh, pState.MajorityCh)
+					spawn("timeoutProducer", parallel.Fail, t.Run)
+					spawn("timeoutConsumer", parallel.Fail, func(ctx context.Context) error {
+						return runTimeoutConsumer(ctx, t, pState.CmdP2PCh)
+					})
+				}
+
 				spawn("gossip", parallel.Fail, func(ctx context.Context) error {
 					defer func() {
-						spawn("resultChCleaner", parallel.Fail, func(ctx context.Context) error {
-							for range resultCh {
-							}
-							return errors.WithStack(ctx.Err())
-						})
+						for _, pState := range partitions {
+							close(pState.MajorityCh)
+							spawn("resultChCleaner", parallel.Fail, func(ctx context.Context) error {
+								for range pState.ResultCh {
+								}
+								return errors.WithStack(ctx.Err())
+							})
+						}
 					}()
-					defer close(majorityCh)
 
-					return gossipFunc(ctx, cmdP2PCh, cmdC2PCh, resultCh, majorityCh)
+					return g.Run(ctx)
 				})
 				return nil
 			})
 		})
-		spawn("reactor", parallel.Fail, func(ctx context.Context) error {
-			defer func() {
-				spawn("cmdP2PChCleaner", parallel.Fail, func(ctx context.Context) error {
-					for range cmdP2PCh {
-					}
-					return errors.WithStack(ctx.Err())
-				})
-				spawn("cmdC2PChCleaner", parallel.Fail, func(ctx context.Context) error {
-					for range cmdC2PCh {
-					}
-					return errors.WithStack(ctx.Err())
-				})
-			}()
-			defer close(resultCh)
 
-			return runReactor(ctx, r, cmdP2PCh, cmdC2PCh, resultCh, roleCh)
-		})
+		for _, pState := range partitions {
+			spawn("reactor", parallel.Fail, func(ctx context.Context) error {
+				defer func() {
+					spawn("cmdP2PChCleaner", parallel.Fail, func(ctx context.Context) error {
+						for range pState.CmdP2PCh {
+						}
+						return errors.WithStack(ctx.Err())
+					})
+					spawn("cmdC2PChCleaner", parallel.Fail, func(ctx context.Context) error {
+						for range pState.CmdC2PCh {
+						}
+						return errors.WithStack(ctx.Err())
+					})
+				}()
+				defer close(pState.ResultCh)
+
+				return runReactor(ctx, pState.Reactor, pState.CmdP2PCh, pState.CmdC2PCh, pState.ResultCh, pState.RoleCh)
+			})
+		}
 
 		return nil
 	})

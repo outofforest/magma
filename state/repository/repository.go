@@ -15,6 +15,7 @@ import (
 
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository/format"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 const maxHeaderSize = 1024
@@ -23,7 +24,7 @@ const maxHeaderSize = 1024
 type File struct {
 	pageSize   uint64
 	header     *format.Header
-	validUntil types.Index
+	validUntil magmatypes.Index
 	file       *os.File
 	data       []byte
 }
@@ -34,7 +35,7 @@ func (f *File) Header() format.Header {
 }
 
 // ValidUntil returns index which requires opening of the next file.
-func (f *File) ValidUntil() types.Index {
+func (f *File) ValidUntil() magmatypes.Index {
 	return f.validUntil
 }
 
@@ -117,7 +118,7 @@ func (r *Repository) PageCapacity() uint64 {
 // Create creates new file.
 func (r *Repository) Create(
 	term types.Term,
-	nextLogIndex types.Index,
+	nextLogIndex magmatypes.Index,
 	previousChecksum uint64,
 	remainingData []byte,
 ) (_ *File, retErr error) {
@@ -135,7 +136,7 @@ func (r *Repository) Create(
 		PreviousChecksum: previousChecksum,
 		Term:             term,
 		NextLogIndex:     nextLogIndex,
-		NextTxOffset:     types.Index(len(remainingData)),
+		NextTxOffset:     magmatypes.Index(len(remainingData)),
 	}
 
 	if len(r.files) > 0 {
@@ -204,7 +205,7 @@ func (r *Repository) Create(
 
 	file := &File{
 		header:     header,
-		validUntil: header.NextLogIndex + types.Index(r.PageCapacity()),
+		validUntil: header.NextLogIndex + magmatypes.Index(r.PageCapacity()),
 		pageSize:   r.pageSize,
 		file:       f,
 	}
@@ -227,7 +228,7 @@ func (r *Repository) OpenCurrent() (*File, error) {
 }
 
 // Iterator returns file iterator.
-func (r *Repository) Iterator(offset types.Index) *FileIterator {
+func (r *Repository) Iterator(offset magmatypes.Index) *FileIterator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -249,7 +250,7 @@ func (r *Repository) Iterator(offset types.Index) *FileIterator {
 }
 
 // Revert reverts repository to previous term.
-func (r *Repository) Revert(term types.Term) (types.Term, types.Index, error) {
+func (r *Repository) Revert(term types.Term) (types.Term, magmatypes.Index, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -285,7 +286,7 @@ func (r *Repository) LastTerm() types.Term {
 }
 
 // PreviousTerm returns term of the previous index.
-func (r *Repository) PreviousTerm(index types.Index) types.Term {
+func (r *Repository) PreviousTerm(index magmatypes.Index) types.Term {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -337,7 +338,7 @@ func (r *Repository) open(fileIndex, offset uint64) (*File, error) {
 	}
 
 	if fileIndex == uint64(len(r.files)-1) {
-		file.validUntil = r.files[fileIndex].Header.NextLogIndex + types.Index(r.PageCapacity())
+		file.validUntil = r.files[fileIndex].Header.NextLogIndex + magmatypes.Index(r.PageCapacity())
 	} else {
 		file.validUntil = r.files[fileIndex+1].Header.NextLogIndex
 	}

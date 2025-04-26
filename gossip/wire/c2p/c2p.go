@@ -1,8 +1,11 @@
 package c2p
 
-import "github.com/outofforest/magma/raft/types"
+import (
+	magmatypes "github.com/outofforest/magma/types"
+)
 
 // Init initializes tx stream.
 type Init struct {
-	NextLogIndex types.Index
+	PartitionID  magmatypes.PartitionID
+	NextLogIndex magmatypes.Index
 }
