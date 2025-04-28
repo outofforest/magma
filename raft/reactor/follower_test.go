@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
@@ -21,15 +20,15 @@ import (
 )
 
 var (
-	serverID = magmatypes.ServerID(uuid.New())
-	peer1ID  = magmatypes.ServerID(uuid.New())
-	peer2ID  = magmatypes.ServerID(uuid.New())
-	peer3ID  = magmatypes.ServerID(uuid.New())
-	peer4ID  = magmatypes.ServerID(uuid.New())
+	serverID = magmatypes.ServerID("S")
+	peer1ID  = magmatypes.ServerID("P1")
+	peer2ID  = magmatypes.ServerID("P2")
+	peer3ID  = magmatypes.ServerID("P3")
+	peer4ID  = magmatypes.ServerID("P4")
 
 	config = magmatypes.Config{
 		ServerID: serverID,
-		Servers: []magmatypes.PeerConfig{
+		Servers: []magmatypes.ServerConfig{
 			{ID: serverID},
 			{ID: peer1ID},
 			{ID: peer2ID},
@@ -57,26 +56,31 @@ func newState(t *testing.T, dir string) (*state.State, string) {
 }
 
 func newReactor(s *state.State) *Reactor {
-	return New(config, s)
+	servers := make([]magmatypes.ServerID, 0, len(config.Servers))
+	for _, s := range config.Servers {
+		servers = append(servers, s.ID)
+	}
+
+	return New(config.ServerID, servers, s)
 }
 
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
 	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()))
 	requireT.NoError(err)
 	it := repo.Iterator(0)
-	var index types.Index
+	var index magmatypes.Index
 	buf := bytes.NewBuffer(nil)
-	for index < types.Index(len(expectedLog)) {
+	for index < magmatypes.Index(len(expectedLog)) {
 		file, err := it.Next()
 		requireT.NoError(err)
 		requireT.NotNil(file)
 		limit := file.ValidUntil() - index
-		if limit > types.Index(len(expectedLog))-index {
-			limit = types.Index(len(expectedLog)) - index
+		if limit > magmatypes.Index(len(expectedLog))-index {
+			limit = magmatypes.Index(len(expectedLog)) - index
 		}
 		n, err := io.Copy(buf, io.LimitReader(file.Reader(), int64(limit)))
 		requireT.NoError(err)
-		index += types.Index(n)
+		index += magmatypes.Index(n)
 		requireT.NoError(file.Close())
 	}
 	requireT.Equal(expectedLog, buf.Bytes())
@@ -174,7 +178,7 @@ func TestFollowerAppendTxAppendToEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   types.Index(len(tx)),
+			NextLogIndex:   magmatypes.Index(len(tx)),
 			CommittedCount: 0,
 		},
 	}, result)
@@ -1375,7 +1379,7 @@ func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	s, _ := newState(t, "")
 	r := newReactor(s)
 
-	result, err := r.Apply(magmatypes.ServerID(uuid.New()), nil)
+	result, err := r.Apply(magmatypes.ServerID("PeerID"), nil)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{}, result)

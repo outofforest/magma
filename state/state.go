@@ -24,7 +24,7 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 		return nil, nil, err
 	}
 
-	var nextLogIndex, nextLogIndexInFile rafttypes.Index
+	var nextLogIndex, nextLogIndexInFile types.Index
 	var previousChecksum uint64
 	var highestTermSeen rafttypes.Term
 
@@ -62,12 +62,12 @@ type State struct {
 	repo             *repository.Repository
 	em               *events.Store
 	evState          events.State
-	nextLogIndex     rafttypes.Index
+	nextLogIndex     types.Index
 	previousChecksum uint64
 
 	currentFile        *repository.File
 	log                []byte
-	nextLogIndexInFile rafttypes.Index
+	nextLogIndexInFile types.Index
 
 	highestTermSeen rafttypes.Term
 }
@@ -120,17 +120,17 @@ func (s *State) LastLogTerm() rafttypes.Term {
 // NextLogIndex returns the index of the next log entry.
 // This is calculated based on the current length of the log.
 // It effectively points to the position where a new log entry would be appended.
-func (s *State) NextLogIndex() rafttypes.Index {
+func (s *State) NextLogIndex() types.Index {
 	return s.nextLogIndex
 }
 
 // PreviousTerm returns term of previous log item.
-func (s *State) PreviousTerm(index rafttypes.Index) rafttypes.Term {
+func (s *State) PreviousTerm(index types.Index) rafttypes.Term {
 	return s.repo.PreviousTerm(index)
 }
 
 // AppendTerm appends term to the log.
-func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
+func (s *State) AppendTerm() (rafttypes.Term, types.Index, error) {
 	var termEntry [2 * varuint64.MaxSize]byte
 
 	n := varuint64.Put(termEntry[varuint64.MaxSize:], uint64(s.evState.Term))
@@ -143,9 +143,9 @@ func (s *State) AppendTerm() (rafttypes.Term, rafttypes.Index, error) {
 
 // Validate validates the common point in log.
 func (s *State) Validate(
-	nextLogIndex rafttypes.Index,
+	nextLogIndex types.Index,
 	lastLogTerm rafttypes.Term,
-) (rafttypes.Term, rafttypes.Index, error) {
+) (rafttypes.Term, types.Index, error) {
 	if nextLogIndex == 0 {
 		return s.validate(nextLogIndex, lastLogTerm)
 	}
@@ -174,12 +174,12 @@ func (s *State) Append(
 	tx []byte,
 	containsChecksum bool,
 	allowTermMark bool,
-) (rafttypes.Term, rafttypes.Index, error) {
+) (rafttypes.Term, types.Index, error) {
 	return s.appendTx(tx, containsChecksum, allowTermMark)
 }
 
 // Sync syncs data to persistent storage.
-func (s *State) Sync() (rafttypes.Index, error) {
+func (s *State) Sync() (types.Index, error) {
 	if s.currentFile != nil {
 		if err := s.currentFile.Sync(); err != nil {
 			return 0, err
@@ -189,9 +189,9 @@ func (s *State) Sync() (rafttypes.Index, error) {
 }
 
 func (s *State) validate(
-	nextLogIndex rafttypes.Index,
+	nextLogIndex types.Index,
 	lastLogTerm rafttypes.Term,
-) (_ rafttypes.Term, _ rafttypes.Index, retErr error) {
+) (_ rafttypes.Term, _ types.Index, retErr error) {
 	if s.evState.Term == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
@@ -225,7 +225,7 @@ func (s *State) appendTx(
 	data []byte,
 	containsChecksum bool,
 	allowTermMark bool,
-) (_ rafttypes.Term, _ rafttypes.Index, retErr error) {
+) (_ rafttypes.Term, _ types.Index, retErr error) {
 	if s.evState.Term == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
@@ -317,7 +317,7 @@ func (s *State) appendTx(
 		copy(buf[len(buf)-8:], hashBuf[:])
 
 		//nolint:nestif
-		if s.nextLogIndexInFile == rafttypes.Index(len(s.log)) {
+		if s.nextLogIndexInFile == types.Index(len(s.log)) {
 			if s.currentFile != nil {
 				if err := s.currentFile.Close(); err != nil {
 					return 0, 0, err
@@ -347,12 +347,12 @@ func (s *State) appendTx(
 }
 
 func (s *State) append(data []byte, previousChecksum uint64) error {
-	n := rafttypes.Index(copy(s.log[s.nextLogIndexInFile:], data))
+	n := types.Index(copy(s.log[s.nextLogIndexInFile:], data))
 	s.nextLogIndexInFile += n
 	s.nextLogIndex += n
 
 	//nolint:nestif
-	if totalLen := rafttypes.Index(len(data)); n < totalLen {
+	if totalLen := types.Index(len(data)); n < totalLen {
 		if s.currentFile != nil {
 			if err := s.currentFile.Close(); err != nil {
 				return err
@@ -388,7 +388,7 @@ func appendDefer(err *error) {
 	}
 }
 
-func initialize(log []byte, txOffset rafttypes.Index, previousChecksum uint64) (rafttypes.Index, uint64) {
+func initialize(log []byte, txOffset types.Index, previousChecksum uint64) (types.Index, uint64) {
 	index := txOffset
 	for {
 		if !varuint64.Contains(log[index:]) {
@@ -399,19 +399,19 @@ func initialize(log []byte, txOffset rafttypes.Index, previousChecksum uint64) (
 			return index, previousChecksum
 		}
 		size += n
-		if index+rafttypes.Index(size) > rafttypes.Index(len(log)) {
+		if index+types.Index(size) > types.Index(len(log)) {
 			return index, previousChecksum
 		}
 
-		txRaw := log[index : index+rafttypes.Index(size)]
+		txRaw := log[index : index+types.Index(size)]
 		i := len(txRaw) - format.ChecksumSize
 		checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
 		if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
 			return index, previousChecksum
 		}
-		index += rafttypes.Index(size)
+		index += types.Index(size)
 		previousChecksum = checksum
-		if index == rafttypes.Index(len(log)) {
+		if index == types.Index(len(log)) {
 			return index, previousChecksum
 		}
 	}

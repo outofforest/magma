@@ -2,6 +2,7 @@ package format
 
 import (
 	"github.com/outofforest/magma/raft/types"
+	types4 "github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
@@ -1251,39 +1252,39 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		// NextLogIndex
 
 		{
-			vi := types.Index(b[o] & 0x7F)
+			vi := types4.Index(b[o] & 0x7F)
 			if b[o]&0x80 == 0 {
 				o++
 			} else {
-				vi |= types.Index(b[o+1]&0x7F) << 7
+				vi |= types4.Index(b[o+1]&0x7F) << 7
 				if b[o+1]&0x80 == 0 {
 					o += 2
 				} else {
-					vi |= types.Index(b[o+2]&0x7F) << 14
+					vi |= types4.Index(b[o+2]&0x7F) << 14
 					if b[o+2]&0x80 == 0 {
 						o += 3
 					} else {
-						vi |= types.Index(b[o+3]&0x7F) << 21
+						vi |= types4.Index(b[o+3]&0x7F) << 21
 						if b[o+3]&0x80 == 0 {
 							o += 4
 						} else {
-							vi |= types.Index(b[o+4]&0x7F) << 28
+							vi |= types4.Index(b[o+4]&0x7F) << 28
 							if b[o+4]&0x80 == 0 {
 								o += 5
 							} else {
-								vi |= types.Index(b[o+5]&0x7F) << 35
+								vi |= types4.Index(b[o+5]&0x7F) << 35
 								if b[o+5]&0x80 == 0 {
 									o += 6
 								} else {
-									vi |= types.Index(b[o+6]&0x7F) << 42
+									vi |= types4.Index(b[o+6]&0x7F) << 42
 									if b[o+6]&0x80 == 0 {
 										o += 7
 									} else {
-										vi |= types.Index(b[o+7]&0x7F) << 49
+										vi |= types4.Index(b[o+7]&0x7F) << 49
 										if b[o+7]&0x80 == 0 {
 											o += 8
 										} else {
-											vi |= types.Index(b[o+8]) << 56
+											vi |= types4.Index(b[o+8]) << 56
 											o += 9
 										}
 									}
@@ -1300,39 +1301,39 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		// NextTxOffset
 
 		{
-			vi := types.Index(b[o] & 0x7F)
+			vi := types4.Index(b[o] & 0x7F)
 			if b[o]&0x80 == 0 {
 				o++
 			} else {
-				vi |= types.Index(b[o+1]&0x7F) << 7
+				vi |= types4.Index(b[o+1]&0x7F) << 7
 				if b[o+1]&0x80 == 0 {
 					o += 2
 				} else {
-					vi |= types.Index(b[o+2]&0x7F) << 14
+					vi |= types4.Index(b[o+2]&0x7F) << 14
 					if b[o+2]&0x80 == 0 {
 						o += 3
 					} else {
-						vi |= types.Index(b[o+3]&0x7F) << 21
+						vi |= types4.Index(b[o+3]&0x7F) << 21
 						if b[o+3]&0x80 == 0 {
 							o += 4
 						} else {
-							vi |= types.Index(b[o+4]&0x7F) << 28
+							vi |= types4.Index(b[o+4]&0x7F) << 28
 							if b[o+4]&0x80 == 0 {
 								o += 5
 							} else {
-								vi |= types.Index(b[o+5]&0x7F) << 35
+								vi |= types4.Index(b[o+5]&0x7F) << 35
 								if b[o+5]&0x80 == 0 {
 									o += 6
 								} else {
-									vi |= types.Index(b[o+6]&0x7F) << 42
+									vi |= types4.Index(b[o+6]&0x7F) << 42
 									if b[o+6]&0x80 == 0 {
 										o += 7
 									} else {
-										vi |= types.Index(b[o+7]&0x7F) << 49
+										vi |= types4.Index(b[o+7]&0x7F) << 49
 										if b[o+7]&0x80 == 0 {
 											o += 8
 										} else {
-											vi |= types.Index(b[o+8]) << 56
+											vi |= types4.Index(b[o+8]) << 56
 											o += 9
 										}
 									}

@@ -1,9 +1,8 @@
 package format
 
 import (
-	"unsafe"
-
-	"github.com/outofforest/magma/raft/types"
+	types4 "github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
@@ -80,7 +79,37 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 }
 
 func size0(m *Vote) uint64 {
-	var n uint64 = 16
+	var n uint64 = 1
+	{
+		// Candidate
+
+		{
+			l := uint64(len(m.Candidate))
+			n += l
+			{
+				vi := l
+				switch {
+				case vi <= 0x7F:
+				case vi <= 0x3FFF:
+					n++
+				case vi <= 0x1FFFFF:
+					n += 2
+				case vi <= 0xFFFFFFF:
+					n += 3
+				case vi <= 0x7FFFFFFFF:
+					n += 4
+				case vi <= 0x3FFFFFFFFFF:
+					n += 5
+				case vi <= 0x1FFFFFFFFFFFF:
+					n += 6
+				case vi <= 0xFFFFFFFFFFFFFF:
+					n += 7
+				default:
+					n += 8
+				}
+			}
+		}
+	}
 	return n
 }
 
@@ -89,8 +118,151 @@ func marshal0(m *Vote, b []byte) uint64 {
 	{
 		// Candidate
 
-		copy(b[o:o+16], unsafe.Slice(&m.Candidate[0], 16))
-		o += 16
+		{
+			l := uint64(len(m.Candidate))
+			{
+				vi := l
+				switch {
+				case vi <= 0x7F:
+					b[o] = byte(vi)
+					o++
+				case vi <= 0x3FFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0x1FFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0xFFFFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0x7FFFFFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0x3FFFFFFFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0x1FFFFFFFFFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				case vi <= 0xFFFFFFFFFFFFFF:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				default:
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi) | 0x80
+					o++
+					vi >>= 7
+					b[o] = byte(vi)
+					o++
+				}
+			}
+			copy(b[o:o+l], m.Candidate)
+			o += l
+		}
 	}
 
 	return o
@@ -101,8 +273,58 @@ func unmarshal0(m *Vote, b []byte) uint64 {
 	{
 		// Candidate
 
-		copy(unsafe.Slice(&m.Candidate[0], 16), b[o:o+16])
-		o += 16
+		{
+			var l uint64
+			{
+				vi := uint64(b[o] & 0x7F)
+				if b[o]&0x80 == 0 {
+					o++
+				} else {
+					vi |= uint64(b[o+1]&0x7F) << 7
+					if b[o+1]&0x80 == 0 {
+						o += 2
+					} else {
+						vi |= uint64(b[o+2]&0x7F) << 14
+						if b[o+2]&0x80 == 0 {
+							o += 3
+						} else {
+							vi |= uint64(b[o+3]&0x7F) << 21
+							if b[o+3]&0x80 == 0 {
+								o += 4
+							} else {
+								vi |= uint64(b[o+4]&0x7F) << 28
+								if b[o+4]&0x80 == 0 {
+									o += 5
+								} else {
+									vi |= uint64(b[o+5]&0x7F) << 35
+									if b[o+5]&0x80 == 0 {
+										o += 6
+									} else {
+										vi |= uint64(b[o+6]&0x7F) << 42
+										if b[o+6]&0x80 == 0 {
+											o += 7
+										} else {
+											vi |= uint64(b[o+7]&0x7F) << 49
+											if b[o+7]&0x80 == 0 {
+												o += 8
+											} else {
+												vi |= uint64(b[o+8]) << 56
+												o += 9
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				l = vi
+			}
+			if l > 0 {
+				m.Candidate = types.ServerID(b[o:o+l])
+				o += l
+			}
+		}
 	}
 
 	return o
@@ -295,39 +517,39 @@ func unmarshal1(m *Term, b []byte) uint64 {
 		// Term
 
 		{
-			vi := types.Term(b[o] & 0x7F)
+			vi := types4.Term(b[o] & 0x7F)
 			if b[o]&0x80 == 0 {
 				o++
 			} else {
-				vi |= types.Term(b[o+1]&0x7F) << 7
+				vi |= types4.Term(b[o+1]&0x7F) << 7
 				if b[o+1]&0x80 == 0 {
 					o += 2
 				} else {
-					vi |= types.Term(b[o+2]&0x7F) << 14
+					vi |= types4.Term(b[o+2]&0x7F) << 14
 					if b[o+2]&0x80 == 0 {
 						o += 3
 					} else {
-						vi |= types.Term(b[o+3]&0x7F) << 21
+						vi |= types4.Term(b[o+3]&0x7F) << 21
 						if b[o+3]&0x80 == 0 {
 							o += 4
 						} else {
-							vi |= types.Term(b[o+4]&0x7F) << 28
+							vi |= types4.Term(b[o+4]&0x7F) << 28
 							if b[o+4]&0x80 == 0 {
 								o += 5
 							} else {
-								vi |= types.Term(b[o+5]&0x7F) << 35
+								vi |= types4.Term(b[o+5]&0x7F) << 35
 								if b[o+5]&0x80 == 0 {
 									o += 6
 								} else {
-									vi |= types.Term(b[o+6]&0x7F) << 42
+									vi |= types4.Term(b[o+6]&0x7F) << 42
 									if b[o+6]&0x80 == 0 {
 										o += 7
 									} else {
-										vi |= types.Term(b[o+7]&0x7F) << 49
+										vi |= types4.Term(b[o+7]&0x7F) << 49
 										if b[o+7]&0x80 == 0 {
 											o += 8
 										} else {
-											vi |= types.Term(b[o+8]) << 56
+											vi |= types4.Term(b[o+8]) << 56
 											o += 9
 										}
 									}

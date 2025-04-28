@@ -4,19 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client/entities"
-	"github.com/outofforest/magma/state/events"
-	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 )
@@ -26,10 +24,10 @@ func TestCluster(t *testing.T) {
 	requireT := require.New(t)
 	ctx := logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig))
 
-	peer1 := types.ServerID(uuid.New())
-	peer2 := types.ServerID(uuid.New())
-	peer3 := types.ServerID(uuid.New())
-	peer4 := types.ServerID(uuid.New())
+	peer1 := types.ServerID("P1")
+	peer2 := types.ServerID("P2")
+	peer3 := types.ServerID("P3")
+	peer4 := types.ServerID("P4")
 
 	p2p1, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
@@ -64,7 +62,7 @@ func TestCluster(t *testing.T) {
 	defer c2p4.Close()
 
 	config := types.Config{
-		Servers: []types.PeerConfig{
+		Servers: []types.ServerConfig{
 			{
 				ID:         peer1,
 				P2PAddress: p2p1.Addr().String(),
@@ -82,6 +80,7 @@ func TestCluster(t *testing.T) {
 				P2PAddress: p2p4.Addr().String(),
 			},
 		},
+		Partitions:     []types.PartitionID{"default"},
 		MaxMessageSize: 128 * 1024,
 	}
 
@@ -93,27 +92,32 @@ func TestCluster(t *testing.T) {
 		}
 	}()
 
-	fmt.Printf("==== %s ====\n", uuid.UUID(peer1))
-	fmt.Printf("==== %s ====\n", uuid.UUID(peer2))
-	fmt.Printf("==== %s ====\n", uuid.UUID(peer3))
-	fmt.Printf("==== %s ====\n", uuid.UUID(peer4))
+	fmt.Printf("==== %s ====\n", peer1)
+	fmt.Printf("==== %s ====\n", peer2)
+	fmt.Printf("==== %s ====\n", peer3)
+	fmt.Printf("==== %s ====\n", peer4)
+
+	if err := os.RemoveAll("test"); err != nil {
+		panic(err)
+	}
 
 	const pageSize = 128 * 1024 * 1024 // 1024 * 1024 * 1024
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
-		config, repo, em := makeConfig(config, peer1, pageSize)
-		return magma.Run(ctx, config, p2p1, c2p1, repo, em)
+		config, dir := makeConfig(config, peer1)
+		return magma.Run(ctx, config, p2p1, c2p1, dir, pageSize)
 	})
 	group.Spawn("peer2", parallel.Fail, func(ctx context.Context) error {
-		config, repo, em := makeConfig(config, peer2, pageSize)
-		return magma.Run(ctx, config, p2p2, c2p2, repo, em)
+		config, dir := makeConfig(config, peer2)
+		return magma.Run(ctx, config, p2p2, c2p2, dir, pageSize)
 	})
 	group.Spawn("peer3", parallel.Fail, func(ctx context.Context) error {
-		config, repo, em := makeConfig(config, peer3, pageSize)
-		return magma.Run(ctx, config, p2p3, c2p3, repo, em)
+		config, dir := makeConfig(config, peer3)
+		return magma.Run(ctx, config, p2p3, c2p3, dir, pageSize)
 	})
 
 	client := New(Config{
 		PeerAddress:      c2p1.Addr().String(),
+		PartitionID:      "default",
 		MaxMessageSize:   config.MaxMessageSize,
 		BroadcastTimeout: 3 * time.Second,
 	}, entities.NewMarshaller())
@@ -156,28 +160,14 @@ func TestCluster(t *testing.T) {
 	fmt.Println("===================")
 
 	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		config, repo, em := makeConfig(config, peer4, pageSize)
-		return magma.Run(ctx, config, p2p4, c2p4, repo, em)
+		config, dir := makeConfig(config, peer4)
+		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
 	})
 
 	time.Sleep(30 * time.Second)
 }
 
-//nolint:unparam
-func makeConfig(
-	config types.Config,
-	peerID types.ServerID,
-	pageSize uint64,
-) (types.Config, *repository.Repository, *events.Store) {
+func makeConfig(config types.Config, peerID types.ServerID) (types.Config, string) {
 	config.ServerID = peerID
-	repo, err := repository.Open(filepath.Join("test", uuid.UUID(peerID).String(), "repo"), pageSize)
-	if err != nil {
-		panic(err)
-	}
-	em, err := events.Open(filepath.Join("test", uuid.UUID(peerID).String(), "events"))
-	if err != nil {
-		panic(err)
-	}
-
-	return config, repo, em
+	return config, filepath.Join("test", string(peerID))
 }

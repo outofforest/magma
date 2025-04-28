@@ -8,7 +8,6 @@ package reactor
 import (
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/types"
@@ -28,7 +27,7 @@ const (
 
 // StartTransfer initializes log transfer.
 type StartTransfer struct {
-	NextLogIndex types.Index
+	NextLogIndex magmatypes.Index
 }
 
 // Result is the result of state transition.
@@ -49,25 +48,26 @@ type Result struct {
 }
 
 // New creates new reactor of raft consensus algorithm.
-func New(config magmatypes.Config, s *state.State) *Reactor {
-	peers := make([]magmatypes.ServerID, 0, len(config.Servers))
-	for _, s := range config.Servers {
-		if s.ID != config.ServerID {
-			peers = append(peers, s.ID)
+func New(serverID magmatypes.ServerID, servers []magmatypes.ServerID, s *state.State) *Reactor {
+	peers := make([]magmatypes.ServerID, 0, len(servers))
+	for _, s := range servers {
+		if s != serverID {
+			peers = append(peers, s)
 		}
 	}
 
 	r := &Reactor{
-		config:      config,
+		serverID:    serverID,
+		servers:     servers,
 		peers:       peers,
 		state:       s,
-		majority:    len(config.Servers)/2 + 1,
+		majority:    (len(peers)+1)/2 + 1,
 		lastLogTerm: s.LastLogTerm(),
 		commitInfo: types.CommitInfo{
 			NextLogIndex: s.NextLogIndex(),
 		},
-		nextIndex:  map[magmatypes.ServerID]types.Index{},
-		matchIndex: map[magmatypes.ServerID]types.Index{},
+		nextIndex:  map[magmatypes.ServerID]magmatypes.Index{},
+		matchIndex: map[magmatypes.ServerID]magmatypes.Index{},
 	}
 	r.transitionToFollower()
 	r.ignoreElectionTick = 0
@@ -77,7 +77,8 @@ func New(config magmatypes.Config, s *state.State) *Reactor {
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
-	config   magmatypes.Config
+	serverID magmatypes.ServerID
+	servers  []magmatypes.ServerID
 	peers    []magmatypes.ServerID
 	leaderID magmatypes.ServerID
 	state    *state.State
@@ -85,8 +86,8 @@ type Reactor struct {
 	majority             int
 	role                 types.Role
 	lastLogTerm          types.Term
-	syncedCount          types.Index
-	leaderCommittedCount types.Index
+	syncedCount          magmatypes.Index
+	leaderCommittedCount magmatypes.Index
 	commitInfo           types.CommitInfo
 	ignoreElectionTick   types.ElectionTick
 	ignoreHeartbeatTick  types.HeartbeatTick
@@ -98,9 +99,9 @@ type Reactor struct {
 	votedForMe int
 
 	// Leader specific.
-	indexTermStarted types.Index
-	nextIndex        map[magmatypes.ServerID]types.Index
-	matchIndex       map[magmatypes.ServerID]types.Index
+	indexTermStarted magmatypes.Index
+	nextIndex        map[magmatypes.ServerID]magmatypes.Index
+	matchIndex       map[magmatypes.ServerID]magmatypes.Index
 	heartbeatTick    types.HeartbeatTick
 }
 
@@ -339,7 +340,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		}
 
 		if r.role == types.RoleLeader {
-			r.matchIndex[r.config.ServerID] = r.syncedCount
+			r.matchIndex[r.serverID] = r.syncedCount
 			if r.updateLeaderCommit(r.syncedCount) {
 				return r.newHeartbeatRequest()
 			}
@@ -417,7 +418,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	if err := r.state.SetCurrentTerm(r.state.CurrentTerm() + 1); err != nil {
 		return r.resultError(err)
 	}
-	granted, err := r.state.VoteFor(r.config.ServerID)
+	granted, err := r.state.VoteFor(r.serverID)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -445,7 +446,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 
 func (r *Reactor) transitionToLeader() (Result, error) {
 	r.role = types.RoleLeader
-	r.leaderID = r.config.ServerID
+	r.leaderID = r.serverID
 	clear(r.matchIndex)
 
 	r.indexTermStarted = r.commitInfo.NextLogIndex
@@ -559,19 +560,19 @@ func (r *Reactor) updateFollowerCommit() {
 		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
 			r.commitInfo.CommittedCount = r.leaderCommittedCount
 		}
-		fmt.Printf(" %s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
+		fmt.Printf(" %s: %d\n", r.serverID, r.commitInfo.CommittedCount)
 	}
 }
 
-func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
+func (r *Reactor) updateLeaderCommit(candidate magmatypes.Index) bool {
 	if candidate <= r.commitInfo.CommittedCount || candidate <= r.indexTermStarted {
 		return false
 	}
 
 	var greater int
 	nextCommittedCount := candidate
-	for _, s := range r.config.Servers {
-		index := r.matchIndex[s.ID]
+	for _, s := range r.servers {
+		index := r.matchIndex[s]
 		if index <= r.commitInfo.CommittedCount || index <= r.indexTermStarted {
 			continue
 		}
@@ -581,7 +582,7 @@ func (r *Reactor) updateLeaderCommit(candidate types.Index) bool {
 		greater++
 		if greater == r.majority {
 			r.commitInfo.CommittedCount = nextCommittedCount
-			fmt.Printf("+%s: %d\n", uuid.UUID(r.config.ServerID), r.commitInfo.CommittedCount)
+			fmt.Printf("+%s: %d\n", r.serverID, r.commitInfo.CommittedCount)
 			return true
 		}
 	}

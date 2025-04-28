@@ -66,7 +66,7 @@ func TestLeaderSetup(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(43, r.indexTermStarted)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 53,
 		peer2ID: 53,
 		peer3ID: 53,
@@ -886,7 +886,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 94,
 		peer2ID: 94,
 		peer3ID: 94,
@@ -936,7 +936,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 94,
 		peer2ID: 94,
 		peer3ID: 94,
@@ -976,13 +976,13 @@ func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 94,
 		peer2ID: 94,
 		peer3ID: 94,
 		peer4ID: 94,
 	}
-	r.matchIndex = map[magmatypes.ServerID]types.Index{
+	r.matchIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 94,
 		peer2ID: 94,
 	}
@@ -1029,7 +1029,7 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1076,7 +1076,7 @@ func TestLeaderApplyClientRequestNoTermMarkAllowed(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1107,7 +1107,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1128,7 +1128,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1162,7 +1162,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1183,7 +1183,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
 		peer3ID: 75,
@@ -1218,13 +1218,13 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
-	r.nextIndex = map[magmatypes.ServerID]types.Index{
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 21,
 		peer2ID: 42,
 		peer3ID: 63,
 		peer4ID: 84,
 	}
-	r.matchIndex = map[magmatypes.ServerID]types.Index{
+	r.matchIndex = map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 21,
 		peer2ID: 42,
 		peer3ID: 63,
@@ -1234,13 +1234,13 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 	result, err := r.Apply(peer1ID, nil)
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 94,
 		peer2ID: 42,
 		peer3ID: 63,
 		peer4ID: 84,
 	}, r.nextIndex)
-	requireT.Equal(map[magmatypes.ServerID]types.Index{
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer2ID: 42,
 		peer3ID: 63,
 		peer4ID: 84,

@@ -1,34 +1,9 @@
 package types
 
-import (
-	"github.com/outofforest/magma/types"
-)
+import "github.com/outofforest/magma/types"
 
-// Role is the role of the server.
-type Role int
-
-const (
-	// RoleFollower represents the follower role.
-	RoleFollower Role = iota
-	// RoleCandidate represents the candidate role.
-	RoleCandidate
-	// RoleLeader represents the leader role.
-	RoleLeader
-)
-
-type (
-	// Term represents the term.
-	Term uint64
-
-	// Index represents the index of a log entry.
-	Index uint64
-)
-
-// Command represents a command executed by state machine.
-type Command struct {
-	PeerID types.ServerID
-	Cmd    any
-}
+// Term represents the term.
+type Term uint64
 
 // HeartbeatTick is sent to raft reactor when it's time to send heartbeat to connected peers.
 type HeartbeatTick uint64
@@ -41,7 +16,7 @@ type LogSyncRequest struct {
 	// Term is the leader's current term.
 	Term Term
 	// NextLogIndex is the index of the next log entry.
-	NextLogIndex Index
+	NextLogIndex types.Index
 	// LastLogTerm is the term of the last log entry.
 	LastLogTerm Term
 }
@@ -51,9 +26,9 @@ type LogSyncResponse struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item to receive.
-	NextLogIndex Index
+	NextLogIndex types.Index
 	// SyncLogIndex is the index synced to persistent storage.
-	SyncLogIndex Index
+	SyncLogIndex types.Index
 }
 
 // LogACK acknowledges log transfer.
@@ -61,9 +36,9 @@ type LogACK struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
 	// NextLogIndex is the index of the next log item to receive.
-	NextLogIndex Index
+	NextLogIndex types.Index
 	// SyncLogIndex is the index synced to persistent storage.
-	SyncLogIndex Index
+	SyncLogIndex types.Index
 }
 
 // VoteRequest represents the structure of a request sent by a Raft candidate
@@ -72,7 +47,7 @@ type VoteRequest struct {
 	// Term is the candidate's current term.
 	Term Term
 	// NextLogIndex is the index of the candidate's next log entry.
-	NextLogIndex Index
+	NextLogIndex types.Index
 	// LastLogTerm is the term of the candidate's last log entry.
 	LastLogTerm Term
 }
@@ -91,7 +66,7 @@ type Heartbeat struct {
 	// Term is the leader's current term.
 	Term Term
 	// LeaderCommit is the leader's commit index.
-	LeaderCommit Index
+	LeaderCommit types.Index
 }
 
 // ClientRequest represents a client's request to append item to the log.
@@ -101,6 +76,24 @@ type ClientRequest struct {
 
 // CommitInfo reports the committed height.
 type CommitInfo struct {
-	NextLogIndex   Index
-	CommittedCount Index
+	NextLogIndex   types.Index
+	CommittedCount types.Index
+}
+
+// Role is the role of the server.
+type Role int
+
+const (
+	// RoleFollower represents the follower role.
+	RoleFollower Role = iota
+	// RoleCandidate represents the candidate role.
+	RoleCandidate
+	// RoleLeader represents the leader role.
+	RoleLeader
+)
+
+// Command represents a command executed by state machine.
+type Command struct {
+	PeerID types.ServerID
+	Cmd    any
 }

@@ -2,6 +2,7 @@ package format
 
 import (
 	"github.com/outofforest/magma/raft/types"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 // ChecksumSize is the length of header checksum.
@@ -12,7 +13,7 @@ type Header struct {
 	PreviousTerm     types.Term
 	PreviousChecksum uint64
 	Term             types.Term
-	NextLogIndex     types.Index
-	NextTxOffset     types.Index
+	NextLogIndex     magmatypes.Index
+	NextTxOffset     magmatypes.Index
 	HeaderChecksum   uint64
 }
