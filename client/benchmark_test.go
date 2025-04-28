@@ -65,22 +65,25 @@ func TestCluster(t *testing.T) {
 		Servers: []types.ServerConfig{
 			{
 				ID:         peer1,
+				Partitions: []types.PartitionID{"default"},
 				P2PAddress: p2p1.Addr().String(),
 			},
 			{
 				ID:         peer2,
+				Partitions: []types.PartitionID{"default"},
 				P2PAddress: p2p2.Addr().String(),
 			},
 			{
 				ID:         peer3,
+				Partitions: []types.PartitionID{"default"},
 				P2PAddress: p2p3.Addr().String(),
 			},
 			{
 				ID:         peer4,
+				Partitions: []types.PartitionID{"default"},
 				P2PAddress: p2p4.Addr().String(),
 			},
 		},
-		Partitions:     []types.PartitionID{"default"},
 		MaxMessageSize: 128 * 1024,
 	}
 
