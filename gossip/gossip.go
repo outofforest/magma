@@ -55,21 +55,27 @@ type client struct {
 
 // New returns gossiping function.
 func New(
-	config types.Config,
+	serverID types.ServerID,
+	maxMessageSize uint64,
 	p2pListener,
 	c2pListener net.Listener,
 	partitions map[types.PartitionID]partition.State) *Gossip {
-	validPeers := map[types.ServerID]struct{}{}
-	for _, p := range config.Servers {
-		if p.ID != config.ServerID {
-			validPeers[p.ID] = struct{}{}
-		}
-	}
-
 	pStates := map[types.PartitionID]partitionState{}
 	for id, p := range partitions {
+		validPeers := map[types.ServerID]struct{}{}
+		for _, peer := range p.Servers {
+			if peer.ID != serverID {
+				validPeers[peer.ID] = struct{}{}
+			}
+		}
+
 		pStates[id] = partitionState{
 			State: p,
+
+			minority:        len(p.Servers) / 2,
+			validPeers:      validPeers,
+			providerPeers:   repository.NewTailProvider(),
+			providerClients: repository.NewTailProvider(),
 
 			PeerP2PCh:  make(chan peerP2P),
 			PeerL2PCh:  make(chan peerL2P),
@@ -79,23 +85,25 @@ func New(
 	}
 
 	return &Gossip{
-		config:          config,
+		serverID:        serverID,
+		maxMessageSize:  maxMessageSize,
 		p2pListener:     p2pListener,
 		c2pListener:     c2pListener,
-		minority:        len(config.Servers) / 2,
-		validPeers:      validPeers,
 		partitions:      pStates,
 		helloMarshaller: hello.NewMarshaller(),
 		p2pMarshaller:   p2p.NewMarshaller(),
 		l2pMarshaller:   l2p.NewMarshaller(),
 		c2pMarshaller:   c2p.NewMarshaller(),
-		providerPeers:   repository.NewTailProvider(),
-		providerClients: repository.NewTailProvider(),
 	}
 }
 
 type partitionState struct {
 	partition.State
+
+	minority        int
+	validPeers      map[types.ServerID]struct{}
+	providerPeers   *repository.TailProvider
+	providerClients *repository.TailProvider
 
 	PeerP2PCh  chan peerP2P
 	PeerL2PCh  chan peerL2P
@@ -105,19 +113,15 @@ type partitionState struct {
 
 // Gossip is responsible for gossiping messages between peers and clients.
 type Gossip struct {
-	config                   types.Config
+	serverID                 types.ServerID
+	maxMessageSize           uint64
 	p2pListener, c2pListener net.Listener
-	minority                 int
-	validPeers               map[types.ServerID]struct{}
 	partitions               map[types.PartitionID]partitionState
 
 	helloMarshaller hello.Marshaller
 	p2pMarshaller   p2p.Marshaller
 	l2pMarshaller   l2p.Marshaller
 	c2pMarshaller   c2p.Marshaller
-
-	providerPeers   *repository.TailProvider
-	providerClients *repository.TailProvider
 }
 
 // Run runs the gossiper.
@@ -133,7 +137,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 				}
 			}()
 
-			resConfig := resonance.Config{MaxMessageSize: g.config.MaxMessageSize}
+			resConfig := resonance.Config{MaxMessageSize: g.maxMessageSize}
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
@@ -151,12 +155,12 @@ func (g *Gossip) Run(ctx context.Context) error {
 					)
 				})
 
-				for _, s := range g.config.Servers {
-					if s.ID == g.config.ServerID || !initConnection(g.config.ServerID, s.ID) {
-						continue
-					}
+				for pID, pState := range g.partitions {
+					for _, s := range pState.Servers {
+						if s.ID == g.serverID || !initConnection(g.serverID, s.ID) {
+							continue
+						}
 
-					for _, pID := range g.config.Partitions {
 						spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
 							log := logger.Get(ctx)
 							for {
@@ -237,7 +241,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 	clients := map[*repository.Iterator]chan peerTx2P{}
 	var commitInfo rafttypes.CommitInfo
 
-	if g.minority == 0 {
+	if pState.minority == 0 {
 		pState.MajorityCh <- true
 	}
 
@@ -255,9 +259,9 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 			//nolint:nestif
 			if leaderID != res.LeaderID {
 				leaderID = res.LeaderID
-				if leaderID == g.config.ServerID {
+				if leaderID == g.serverID {
 					pLeader = peerTx2P{
-						ID: g.config.ServerID,
+						ID: g.serverID,
 					}
 				} else {
 					newPLeader := peersTx2P[leaderID]
@@ -297,7 +301,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				case *reactor.StartTransfer:
 					for _, peerID := range res.Recipients {
 						if p := peersL2P[peerID]; p.SendCh != nil {
-							p.Iterator = repository.NewIterator(g.providerPeers, pState.Repo.Iterator(m.NextLogIndex),
+							p.Iterator = repository.NewIterator(pState.providerPeers, pState.Repo.Iterator(m.NextLogIndex),
 								m.NextLogIndex)
 							peersL2P[peerID] = p
 							p.SendCh <- p.Iterator
@@ -312,10 +316,10 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				}
 			}
 			if res.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
-				g.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
+				pState.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
 			}
 			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-				g.providerClients.SetTail(res.CommitInfo.CommittedCount)
+				pState.providerClients.SetTail(res.CommitInfo.CommittedCount)
 			}
 			commitInfo = res.CommitInfo
 		case p, ok := <-pState.PeerP2PCh:
@@ -335,13 +339,13 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				}
 				peersP2P[p.ID] = p
 				close(p.InstalledCh)
-				if !exists && len(peersP2P) == g.minority {
+				if !exists && len(peersP2P) == pState.minority {
 					pState.MajorityCh <- true
 				}
 			case peersP2P[p.ID].SendCh == p.SendCh:
 				delete(peersP2P, p.ID)
 				close(p.SendCh)
-				if len(peersP2P)+1 == g.minority {
+				if len(peersP2P)+1 == pState.minority {
 					pState.MajorityCh <- false
 				}
 			}
@@ -454,14 +458,9 @@ type connProperties struct {
 }
 
 func (g *Gossip) peerHandler(ctx context.Context, prop connProperties, c *resonance.Connection) error {
-	prop, err := g.hello(c, prop)
+	prop, pState, err := g.hello(c, prop)
 	if err != nil {
 		return err
-	}
-
-	pState, exists := g.partitions[prop.PartitionID]
-	if !exists {
-		return errors.Errorf("partition %s is not defined", prop.PartitionID)
 	}
 
 	switch prop.Channel {
@@ -684,7 +683,7 @@ func (g *Gossip) tx2pHandler(
 			leader = <-leaderCh
 		}
 
-		if leader.ID == g.config.ServerID {
+		if leader.ID == g.serverID {
 			cmdCh <- rafttypes.Command{
 				Cmd: &rafttypes.ClientRequest{
 					Data: tx,
@@ -713,7 +712,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
 	}
 
-	it := repository.NewIterator(g.providerClients, pState.Repo.Iterator(msgInit.NextLogIndex), msgInit.NextLogIndex)
+	it := repository.NewIterator(pState.providerClients, pState.Repo.Iterator(msgInit.NextLogIndex), msgInit.NextLogIndex)
 
 	ch2 := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch2
@@ -741,7 +740,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 				}
 
 				switch leader.ID {
-				case g.config.ServerID:
+				case g.serverID:
 					pState.CmdC2PCh <- rafttypes.Command{
 						Cmd: &rafttypes.ClientRequest{
 							Data: tx,
@@ -783,57 +782,62 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 func (g *Gossip) hello(
 	c *resonance.Connection,
 	prop connProperties,
-) (connProperties, error) {
+) (connProperties, partitionState, error) {
 	if err := c.SendProton(&wire.Hello{
-		ServerID:    g.config.ServerID,
+		ServerID:    g.serverID,
 		PartitionID: prop.PartitionID,
 		Channel:     prop.Channel,
 	}, g.helloMarshaller); err != nil {
-		return connProperties{}, err
+		return connProperties{}, partitionState{}, err
 	}
 
 	m, err := c.ReceiveProton(g.helloMarshaller)
 	if err != nil {
-		return connProperties{}, err
+		return connProperties{}, partitionState{}, err
 	}
 
 	h, ok := m.(*wire.Hello)
 	if !ok {
-		return connProperties{}, errors.New("expected hello, got sth else")
-	}
-
-	if _, exists := g.validPeers[h.ServerID]; !exists {
-		return connProperties{}, errors.New("unknown peer")
+		return connProperties{}, partitionState{}, errors.New("expected hello, got sth else")
 	}
 
 	switch {
 	case prop == connProperties{}:
-		if initConnection(g.config.ServerID, h.ServerID) {
-			return connProperties{}, errors.New("peer should wait for my connection")
+		if initConnection(g.serverID, h.ServerID) {
+			return connProperties{}, partitionState{}, errors.New("peer should wait for my connection")
 		}
 		switch h.Channel {
 		case wire.ChannelP2P, wire.ChannelL2P, wire.ChannelTx2P:
 			prop.Channel = h.Channel
 		default:
-			return connProperties{}, errors.Errorf("invalid channel %d", h.Channel)
+			return connProperties{}, partitionState{}, errors.Errorf("invalid channel %d", h.Channel)
 		}
 
 		if _, exists := g.partitions[h.PartitionID]; !exists {
-			return connProperties{}, errors.Errorf("invalid partition %s", h.PartitionID)
+			return connProperties{}, partitionState{}, errors.Errorf("invalid partition %s", h.PartitionID)
 		}
 
 		prop.PartitionID = h.PartitionID
 	case h.ServerID != prop.PeerID:
-		return connProperties{}, errors.New("unexpected peer")
+		return connProperties{}, partitionState{}, errors.New("unexpected peer")
 	case h.Channel != wire.ChannelNone:
-		return connProperties{}, errors.New("peer must not announce requested channel")
+		return connProperties{}, partitionState{}, errors.New("peer must not announce requested channel")
 	case h.PartitionID != "":
-		return connProperties{}, errors.New("peer must not announce partition")
+		return connProperties{}, partitionState{}, errors.New("peer must not announce partition")
 	}
 
 	prop.PeerID = h.ServerID
 
-	return prop, nil
+	pState, exists := g.partitions[prop.PartitionID]
+	if !exists {
+		return connProperties{}, partitionState{}, errors.Errorf("partition %s is not defined", h.PartitionID)
+	}
+
+	if _, exists := pState.validPeers[prop.PeerID]; !exists {
+		return connProperties{}, partitionState{}, errors.New("unknown peer")
+	}
+
+	return prop, pState, nil
 }
 
 func initConnection(serverID, peerID types.ServerID) bool {

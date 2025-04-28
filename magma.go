@@ -26,9 +26,16 @@ func Run(
 	dir string,
 	pageSize uint64,
 ) (retErr error) {
-	partitions := map[types.PartitionID]partition.State{}
+	pStates := map[types.PartitionID]partition.State{}
+	var partitions []types.PartitionID
+	for _, s := range config.Servers {
+		if s.ID == config.ServerID {
+			partitions = s.Partitions
+			break
+		}
+	}
 
-	for _, pID := range config.Partitions {
+	for _, pID := range partitions {
 		dir := filepath.Join(dir, string(pID))
 		repo, err := repository.Open(filepath.Join(dir, "repo"), pageSize)
 		if err != nil {
@@ -45,14 +52,22 @@ func Run(
 		}
 		defer defCloser(sCloser, &retErr)
 
-		servers := make([]types.ServerID, 0, len(config.Servers))
+		servers := make([]types.ServerConfig, 0, len(config.Servers))
+		serverIDs := make([]types.ServerID, 0, len(config.Servers))
 		for _, s := range config.Servers {
-			servers = append(servers, s.ID)
+			for _, p := range s.Partitions {
+				if p == pID {
+					servers = append(servers, s)
+					serverIDs = append(serverIDs, s.ID)
+					break
+				}
+			}
 		}
 
-		partitions[pID] = partition.State{
+		pStates[pID] = partition.State{
 			Repo:       repo,
-			Reactor:    reactor.New(config.ServerID, servers, s),
+			Reactor:    reactor.New(config.ServerID, serverIDs, s),
+			Servers:    servers,
 			CmdP2PCh:   make(chan rafttypes.Command, queueCapacity),
 			CmdC2PCh:   make(chan rafttypes.Command, queueCapacity),
 			ResultCh:   make(chan reactor.Result, 1),
@@ -63,8 +78,8 @@ func Run(
 
 	return raft.Run(
 		ctx,
-		partitions,
-		gossip.New(config, p2pListener, c2pListener, partitions),
+		pStates,
+		gossip.New(config.ServerID, config.MaxMessageSize, p2pListener, c2pListener, pStates),
 	)
 }
 

@@ -16,7 +16,6 @@ type PartitionID string
 type Config struct {
 	ServerID       ServerID
 	Servers        []ServerConfig
-	Partitions     []PartitionID
 	MaxMessageSize uint64
 }
 
@@ -24,4 +23,5 @@ type Config struct {
 type ServerConfig struct {
 	ID         ServerID
 	P2PAddress string
+	Partitions []PartitionID
 }
