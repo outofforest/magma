@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"encoding/binary"
+	"reflect"
 	"time"
 
+	"github.com/hashicorp/go-memdb"
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
 	"go.uber.org/zap"
@@ -27,17 +29,92 @@ type Config struct {
 	BroadcastTimeout time.Duration
 }
 
+func typeName(t reflect.Type) string {
+	pkg := t.PkgPath()
+	if pkg == "" {
+		return t.Name()
+	}
+	return pkg + "." + t.Name()
+}
+
+type idInfo struct {
+	IDIndex       int
+	RevisionIndex int
+}
+
 // New creates new magma client.
-func New(config Config, m proton.Marshaller) *Client {
+func New(config Config, m proton.Marshaller) (*Client, error) {
+	objectTypes := m.Messages()
+	if len(objectTypes) == 0 {
+		return nil, errors.New("no object types provided")
+	}
+
+	dbSchema := &memdb.DBSchema{
+		Tables: map[string]*memdb.TableSchema{},
+	}
+
+	idType := reflect.TypeOf(types.ID{})
+	revisionType := reflect.TypeOf(types.Revision(0))
+
+	typeDefs := map[uint64]idInfo{}
+	for _, o := range objectTypes {
+		t := reflect.TypeOf(o)
+		idF, exists := t.FieldByName("ID")
+		if !exists {
+			return nil, errors.Errorf("object %s has no ID field", typeName(t))
+		}
+		if idF.Type != idType {
+			return nil, errors.Errorf("object's %s ID field must be of type %s", typeName(t), typeName(idType))
+		}
+		revisionF, exists := t.FieldByName("Revision")
+		if !exists {
+			return nil, errors.Errorf("object %s has no Revision field", typeName(t))
+		}
+		if revisionF.Type != revisionType {
+			return nil, errors.Errorf("object's %s Revision field must be of type %s", typeName(t),
+				typeName(revisionType))
+		}
+
+		name := typeName(t)
+		id, err := m.ID(reflect.New(t).Interface())
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := typeDefs[id]; exists {
+			return nil, errors.Errorf("double registration of object %s", name)
+		}
+		typeDefs[id] = idInfo{
+			IDIndex:       idF.Index[0],
+			RevisionIndex: revisionF.Index[0],
+		}
+		dbSchema.Tables[name] = &memdb.TableSchema{
+			Name: name,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &idIndexer{index: idF.Index[0]},
+				},
+			},
+		}
+	}
+
+	db, err := memdb.NewMemDB(dbSchema)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	c := &Client{
 		config:        config,
 		txCh:          make(chan []byte, 1),
 		m:             m,
 		timeoutTicker: time.NewTicker(time.Hour),
 		bufSize:       10 * (config.MaxMessageSize + varuint64.MaxSize),
+		typeDefs:      typeDefs,
+		db:            db,
 	}
 	c.timeoutTicker.Stop()
-	return c
+	return c, nil
 }
 
 // Client connects to magma network, receives log updates and sends transactions.
@@ -45,11 +122,13 @@ type Client struct {
 	config        Config
 	txCh          chan []byte
 	m             proton.Marshaller
-	nextLogIndex  types.Index
 	timeoutTicker *time.Ticker
 
 	buf     []byte
 	bufSize uint64
+
+	typeDefs map[uint64]idInfo
+	db       *memdb.MemDB
 }
 
 // Run runs client.
@@ -59,6 +138,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	log := logger.Get(ctx)
 	var previousChecksum uint64
+	var nextLogIndex types.Index
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -68,14 +148,13 @@ func (c *Client) Run(ctx context.Context) error {
 
 				if err := conn.SendProton(&c2p.Init{
 					PartitionID:  c.config.PartitionID,
-					NextLogIndex: c.nextLogIndex,
+					NextLogIndex: nextLogIndex,
 				}, c2p.NewMarshaller()); err != nil {
 					return errors.WithStack(err)
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
-					loop:
 						for {
 							txRaw, err := conn.ReceiveRawBytes()
 							if err != nil {
@@ -93,39 +172,23 @@ func (c *Client) Run(ctx context.Context) error {
 							if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
 								return errors.New("tx checksum mismatch")
 							}
-							previousChecksum = checksum
 
 							txLen -= format.ChecksumSize
 							txRaw = txRaw[n : n+txLen]
 
-							var count uint64
-							buf := txRaw
-							for len(buf) > 0 {
-								size, n2 := varuint64.Parse(buf)
-								if n2 == txLen {
-									// This is a term mark. Ignore.
-									continue loop
-								}
-								count++
-								buf = buf[n2+size:]
+							if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
+								// This is a term mark. Ignore.
+								previousChecksum = checksum
+								nextLogIndex += txTotalLen
+								continue
 							}
 
-							tx := make([]any, 0, count)
-							for len(txRaw) > 0 {
-								size, n1 := varuint64.Parse(txRaw)
-								id, n2 := varuint64.Parse(txRaw[n1:])
-								m, msgSize, err := c.m.Unmarshal(id, txRaw[n1+n2:n1+size])
-								if err != nil {
-									return err
-								}
-								if msgSize != size-n2 {
-									return errors.Errorf("unexpected message size")
-								}
-								tx = append(tx, m) //nolint:staticcheck
-								txRaw = txRaw[n1+size:]
+							if err := c.applyTx(txRaw); err != nil {
+								return err
 							}
 
-							c.nextLogIndex += txTotalLen
+							previousChecksum = checksum
+							nextLogIndex += txTotalLen
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {
@@ -206,8 +269,73 @@ func (c *Client) Broadcast(tx []any) (retErr error) {
 	return errors.New("timeout on sending transaction")
 }
 
+func (c *Client) applyTx(txRaw []byte) (retErr error) {
+	tx := c.db.Txn(true)
+	defer func() {
+		if retErr != nil {
+			tx.Abort()
+		}
+	}()
+
+	for len(txRaw) > 0 {
+		size, n1 := varuint64.Parse(txRaw)
+		msgID, n2 := varuint64.Parse(txRaw[n1:])
+
+		typeDef, exists := c.typeDefs[msgID]
+		if !exists {
+			return errors.Errorf("unknown message ID %d", msgID)
+		}
+		m, msgSize, err := c.m.Unmarshal(msgID, txRaw[n1+n2:n1+size])
+		if err != nil {
+			return err
+		}
+		if msgSize != size-n2 {
+			return errors.Errorf("unexpected message size")
+		}
+
+		newO := reflect.ValueOf(m).Elem()
+		name := typeName(newO.Type())
+		oID := newO.Field(typeDef.IDIndex).Interface()
+		oldO, err := tx.First(name, "id", oID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if oldO != nil {
+			newRevision := newO.Field(typeDef.RevisionIndex).Interface().(types.Revision)
+			oldRevision := reflect.ValueOf(oldO).Field(typeDef.RevisionIndex).Interface().(types.Revision)
+			if newRevision <= oldRevision {
+				tx.Abort()
+				return nil
+			}
+		}
+
+		if err := tx.Insert(name, newO.Interface()); err != nil {
+			return errors.WithStack(err)
+		}
+
+		txRaw = txRaw[n1+size:]
+	}
+	tx.Commit()
+	return nil
+}
+
 func broadcastRecover(err *error) {
 	if recover() != nil {
 		*err = errors.New("connection closed")
 	}
+}
+
+type idIndexer struct {
+	index int
+}
+
+func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
+	id := args[0].(types.ID)
+	return id[:], nil
+}
+
+func (idi *idIndexer) FromObject(obj any) (bool, []byte, error) {
+	id := reflect.ValueOf(obj).Field(idi.index).Interface().(types.ID)
+	return true, id[:], nil
 }

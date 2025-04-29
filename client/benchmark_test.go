@@ -118,12 +118,14 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, config, p2p3, c2p3, dir, pageSize)
 	})
 
-	client := New(Config{
+	client, err := New(Config{
 		PeerAddress:      c2p1.Addr().String(),
 		PartitionID:      "default",
 		MaxMessageSize:   config.MaxMessageSize,
 		BroadcastTimeout: 3 * time.Second,
 	}, entities.NewMarshaller())
+	requireT.NoError(err)
+
 	group.Spawn("client", parallel.Fail, client.Run)
 
 	time.Sleep(5 * time.Second)
@@ -132,22 +134,27 @@ func TestCluster(t *testing.T) {
 	for range 10_000_000 {
 		err := client.Broadcast([]any{
 			&entities.Account{
+				ID:        types.NewID(),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
+				ID:        types.NewID(),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
+				ID:        types.NewID(),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
+				ID:        types.NewID(),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
+				ID:        types.NewID(),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},

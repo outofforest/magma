@@ -25,6 +25,15 @@ func NewMarshaller() Marshaller {
 type Marshaller struct {
 }
 
+// Messages returns list of the message types supported by marshaller.
+func (m Marshaller) Messages() []any {
+	return []any {
+		types.LogSyncRequest{},
+		types.LogSyncResponse{},
+		StartTransfer{},
+	}
+}
+
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {

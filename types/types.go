@@ -1,5 +1,18 @@
 package types
 
+import "github.com/google/uuid"
+
+// ID is used to define ID field in entities.
+type ID uuid.UUID
+
+// NewID generates new ID.
+func NewID() ID {
+	return ID(uuid.New())
+}
+
+// Revision is used to define Revision field in entities.
+type Revision uint64
+
 // Index represents the index of a log entry.
 type Index uint64
 
