@@ -21,25 +21,14 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+var idType = reflect.TypeOf(types.ID{})
+
 // Config is the configuration of magma client.
 type Config struct {
 	PeerAddress      string
 	PartitionID      types.PartitionID
 	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
-}
-
-func typeName(t reflect.Type) string {
-	pkg := t.PkgPath()
-	if pkg == "" {
-		return t.Name()
-	}
-	return pkg + "." + t.Name()
-}
-
-type idInfo struct {
-	IDIndex       int
-	RevisionIndex int
 }
 
 // New creates new magma client.
@@ -53,7 +42,6 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		Tables: map[string]*memdb.TableSchema{},
 	}
 
-	idType := reflect.TypeOf(types.ID{})
 	revisionType := reflect.TypeOf(types.Revision(0))
 
 	typeDefs := map[uint64]idInfo{}
@@ -63,7 +51,7 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		if !exists {
 			return nil, errors.Errorf("object %s has no ID field", typeName(t))
 		}
-		if idF.Type != idType {
+		if !idF.Type.ConvertibleTo(idType) {
 			return nil, errors.Errorf("object's %s ID field must be of type %s", typeName(t), typeName(idType))
 		}
 		revisionF, exists := t.FieldByName("Revision")
@@ -217,6 +205,9 @@ func (c *Client) Run(ctx context.Context) error {
 
 // Broadcast broadcasts transaction to the magma network.
 func (c *Client) Broadcast(tx []any) (retErr error) {
+	// dbSnapshot := c.db.Txn(false)
+	// dbSnapshot.
+
 	defer broadcastRecover(&retErr)
 
 	if len(tx) == 0 {
@@ -331,11 +322,24 @@ type idIndexer struct {
 }
 
 func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
-	id := args[0].(types.ID)
+	id := reflect.ValueOf(args[0]).Convert(idType).Interface().(types.ID)
 	return id[:], nil
 }
 
 func (idi *idIndexer) FromObject(obj any) (bool, []byte, error) {
-	id := reflect.ValueOf(obj).Field(idi.index).Interface().(types.ID)
+	id := reflect.ValueOf(obj).Field(idi.index).Convert(idType).Interface().(types.ID)
 	return true, id[:], nil
+}
+
+func typeName(t reflect.Type) string {
+	pkg := t.PkgPath()
+	if pkg == "" {
+		return t.Name()
+	}
+	return pkg + "." + t.Name()
+}
+
+type idInfo struct {
+	IDIndex       int
+	RevisionIndex int
 }

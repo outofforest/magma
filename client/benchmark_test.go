@@ -134,27 +134,27 @@ func TestCluster(t *testing.T) {
 	for range 10_000_000 {
 		err := client.Broadcast([]any{
 			&entities.Account{
-				ID:        types.NewID(),
+				ID:        types.NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
-				ID:        types.NewID(),
+				ID:        types.NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
-				ID:        types.NewID(),
+				ID:        types.NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
-				ID:        types.NewID(),
+				ID:        types.NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
 			&entities.Account{
-				ID:        types.NewID(),
+				ID:        types.NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			},
