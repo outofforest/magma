@@ -6,12 +6,14 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-memdb"
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
+	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
@@ -25,6 +27,7 @@ var idType = reflect.TypeOf(types.ID{})
 
 // Config is the configuration of magma client.
 type Config struct {
+	Service          string
 	PeerAddress      string
 	PartitionID      types.PartitionID
 	MaxMessageSize   uint64
@@ -92,6 +95,7 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		config:        config,
 		txCh:          make(chan []byte, 1),
 		m:             m,
+		metaM:         wire.NewMarshaller(),
 		timeoutTicker: time.NewTicker(time.Hour),
 		doneCh:        make(chan struct{}),
 		bufSize:       10 * (config.MaxMessageSize + varuint64.MaxSize),
@@ -107,6 +111,7 @@ type Client struct {
 	config        Config
 	txCh          chan []byte
 	m             proton.Marshaller
+	metaM         proton.Marshaller
 	timeoutTicker *time.Ticker
 	doneCh        chan struct{}
 
@@ -169,7 +174,13 @@ func (c *Client) Run(ctx context.Context) error {
 								continue
 							}
 
-							if err := c.applyTx(txRaw); err != nil {
+							metaID, n := varuint64.Parse(txRaw)
+							_, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
+							if err != nil {
+								return err
+							}
+
+							if err := c.applyTx(txRaw[n+metaSize:]); err != nil {
 								return err
 							}
 
@@ -204,8 +215,10 @@ func (c *Client) Run(ctx context.Context) error {
 // NewTransactor creates new transactor.
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
+		service:        c.config.Service,
 		txCh:           c.txCh,
 		m:              c.m,
+		metaM:          c.metaM,
 		typeDefs:       c.typeDefs,
 		db:             c.db,
 		timeoutTicker:  c.timeoutTicker,
@@ -266,8 +279,10 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
+	service        string
 	txCh           chan []byte
 	m              proton.Marshaller
+	metaM          proton.Marshaller
 	typeDefs       map[reflect.Type]typeInfo
 	db             *memdb.MemDB
 	timeoutTicker  *time.Ticker
@@ -303,6 +318,23 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	}
 
 	i := uint64(varuint64.MaxSize)
+
+	meta := &wire.TxMetadata{
+		ID:      uuid.New(),
+		Service: t.service,
+	}
+
+	metaID, err := t.metaM.ID(meta)
+	if err != nil {
+		return err
+	}
+	i += varuint64.Put(t.buf[i:], metaID)
+	_, metaSize, err := t.metaM.Marshal(meta, t.buf[i:])
+	if err != nil {
+		return err
+	}
+	i += metaSize
+
 	for _, o := range tx.changes {
 		ov := reflect.New(reflect.TypeOf(o))
 		ovValue := ov.Elem()
