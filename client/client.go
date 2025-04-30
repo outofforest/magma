@@ -44,7 +44,7 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 
 	revisionType := reflect.TypeOf(types.Revision(0))
 
-	typeDefs := map[uint64]idInfo{}
+	typeDefs := map[reflect.Type]typeInfo{}
 	for _, o := range objectTypes {
 		t := reflect.TypeOf(o)
 		idF, exists := t.FieldByName("ID")
@@ -64,22 +64,18 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		}
 
 		name := typeName(t)
-		id, err := m.ID(reflect.New(t).Interface())
-		if err != nil {
-			return nil, err
-		}
-		if _, exists := typeDefs[id]; exists {
+		if _, exists := typeDefs[t]; exists {
 			return nil, errors.Errorf("double registration of object %s", name)
 		}
-		typeDefs[id] = idInfo{
+		typeDefs[t] = typeInfo{
 			IDIndex:       idF.Index[0],
 			RevisionIndex: revisionF.Index[0],
 		}
 		dbSchema.Tables[name] = &memdb.TableSchema{
 			Name: name,
 			Indexes: map[string]*memdb.IndexSchema{
-				"id": {
-					Name:    "id",
+				idIndex: {
+					Name:    idIndex,
 					Unique:  true,
 					Indexer: &idIndexer{index: idF.Index[0]},
 				},
@@ -97,6 +93,7 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		txCh:          make(chan []byte, 1),
 		m:             m,
 		timeoutTicker: time.NewTicker(time.Hour),
+		doneCh:        make(chan struct{}),
 		bufSize:       10 * (config.MaxMessageSize + varuint64.MaxSize),
 		typeDefs:      typeDefs,
 		db:            db,
@@ -111,16 +108,17 @@ type Client struct {
 	txCh          chan []byte
 	m             proton.Marshaller
 	timeoutTicker *time.Ticker
+	doneCh        chan struct{}
 
-	buf     []byte
-	bufSize uint64
-
-	typeDefs map[uint64]idInfo
+	typeDefs map[reflect.Type]typeInfo
 	db       *memdb.MemDB
+
+	bufSize uint64
 }
 
 // Run runs client.
 func (c *Client) Run(ctx context.Context) error {
+	defer close(c.doneCh)
 	c.timeoutTicker.Reset(c.config.BroadcastTimeout)
 	defer c.timeoutTicker.Stop()
 
@@ -203,61 +201,18 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-// Broadcast broadcasts transaction to the magma network.
-func (c *Client) Broadcast(tx []any) (retErr error) {
-	// dbSnapshot := c.db.Txn(false)
-	// dbSnapshot.
-
-	defer broadcastRecover(&retErr)
-
-	if len(tx) == 0 {
-		return nil
+// NewTransactor creates new transactor.
+func (c *Client) NewTransactor() *Transactor {
+	return &Transactor{
+		txCh:           c.txCh,
+		m:              c.m,
+		typeDefs:       c.typeDefs,
+		db:             c.db,
+		timeoutTicker:  c.timeoutTicker,
+		maxMessageSize: c.config.MaxMessageSize,
+		bufSize:        c.bufSize,
+		doneCh:         c.doneCh,
 	}
-
-	if uint64(len(c.buf)) < c.config.MaxMessageSize {
-		c.buf = make([]byte, c.bufSize)
-	}
-
-	i := uint64(varuint64.MaxSize)
-	for _, o := range tx {
-		id, err := c.m.ID(o)
-		if err != nil {
-			return err
-		}
-		msgSize, err := c.m.Size(o)
-		if err != nil {
-			return err
-		}
-		if msgSize == 0 {
-			return errors.New("tx message has 0 size")
-		}
-		totalSize := msgSize + varuint64.Size(id)
-		i += varuint64.Put(c.buf[i:], totalSize)
-		i += varuint64.Put(c.buf[i:], id)
-		_, _, err = c.m.Marshal(o, c.buf[i:])
-		if err != nil {
-			return err
-		}
-		i += msgSize
-
-		if i+1 > c.config.MaxMessageSize {
-			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, c.config.MaxMessageSize)
-		}
-	}
-
-	n := varuint64.Size(i - varuint64.MaxSize)
-	varuint64.Put(c.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
-
-	for range 2 {
-		select {
-		case <-c.timeoutTicker.C:
-		case c.txCh <- c.buf[varuint64.MaxSize-n : i]:
-			c.buf = c.buf[i:]
-			return nil
-		}
-	}
-
-	return errors.New("timeout on sending transaction")
 }
 
 func (c *Client) applyTx(txRaw []byte) (retErr error) {
@@ -272,10 +227,6 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 		size, n1 := varuint64.Parse(txRaw)
 		msgID, n2 := varuint64.Parse(txRaw[n1:])
 
-		typeDef, exists := c.typeDefs[msgID]
-		if !exists {
-			return errors.Errorf("unknown message ID %d", msgID)
-		}
 		m, msgSize, err := c.m.Unmarshal(msgID, txRaw[n1+n2:n1+size])
 		if err != nil {
 			return err
@@ -285,9 +236,16 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 		}
 
 		newO := reflect.ValueOf(m).Elem()
-		name := typeName(newO.Type())
+		newOType := newO.Type()
+		name := typeName(newOType)
+
+		typeDef, exists := c.typeDefs[newOType]
+		if !exists {
+			return errors.Errorf("unknown type %s", name)
+		}
+
 		oID := newO.Field(typeDef.IDIndex).Interface()
-		oldO, err := tx.First(name, "id", oID)
+		oldO, err := tx.First(name, idIndex, oID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -311,9 +269,114 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 	return nil
 }
 
-func broadcastRecover(err *error) {
-	if recover() != nil {
-		*err = errors.New("connection closed")
+// Transactor builds and broadcasts transactions.
+type Transactor struct {
+	txCh           chan []byte
+	m              proton.Marshaller
+	typeDefs       map[reflect.Type]typeInfo
+	db             *memdb.MemDB
+	timeoutTicker  *time.Ticker
+	maxMessageSize uint64
+	buf            []byte
+	bufSize        uint64
+	doneCh         chan struct{}
+}
+
+// Tx creates and broadcasts transaction to the magma network.
+func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr error) {
+	tx := &Tx{
+		View: &View{
+			tx:       t.db.Txn(true),
+			typeDefs: t.typeDefs,
+		},
+		changes: map[types.ID]any{},
+	}
+
+	defer tx.tx.Abort()
+	defer txRecover(&retErr)
+
+	if err := txF(tx); err != nil {
+		return err
+	}
+
+	if len(tx.changes) == 0 {
+		return nil
+	}
+
+	if uint64(len(t.buf)) < t.maxMessageSize {
+		t.buf = make([]byte, t.bufSize)
+	}
+
+	i := uint64(varuint64.MaxSize)
+	for _, o := range tx.changes {
+		ov := reflect.New(reflect.TypeOf(o))
+		ovValue := ov.Elem()
+		ovValue.Set(reflect.ValueOf(o))
+
+		name := typeName(ovValue.Type())
+		typeDef, exists := t.typeDefs[ovValue.Type()]
+		if !exists {
+			return errors.Errorf("unknown type %s", name)
+		}
+		revisionF := ovValue.Field(typeDef.RevisionIndex)
+		revisionF.Set(reflect.ValueOf(types.Revision(revisionF.Uint() + 1)))
+
+		o = ov.Interface()
+
+		id, err := t.m.ID(o)
+		if err != nil {
+			return err
+		}
+		msgSize, err := t.m.Size(o)
+		if err != nil {
+			return err
+		}
+		if msgSize == 0 {
+			return errors.New("tx message has 0 size")
+		}
+		totalSize := msgSize + varuint64.Size(id)
+		i += varuint64.Put(t.buf[i:], totalSize)
+		i += varuint64.Put(t.buf[i:], id)
+		_, _, err = t.m.Marshal(o, t.buf[i:])
+		if err != nil {
+			return err
+		}
+		i += msgSize
+
+		if i+1 > t.maxMessageSize {
+			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.maxMessageSize)
+		}
+	}
+
+	n := varuint64.Size(i - varuint64.MaxSize)
+	varuint64.Put(t.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
+
+	for range 2 {
+		select {
+		case <-ctx.Done():
+			return errors.WithStack(ctx.Err())
+		case <-t.doneCh:
+			if ctx.Err() != nil {
+				return errors.WithStack(ctx.Err())
+			}
+			return errors.New("client closed")
+		case <-t.timeoutTicker.C:
+		case t.txCh <- t.buf[varuint64.MaxSize-n : i]:
+			t.buf = t.buf[i:]
+			return nil
+		}
+	}
+
+	return errors.New("timeout on sending transaction")
+}
+
+func txRecover(err *error) {
+	if r := recover(); r != nil {
+		if e, ok := r.(error); ok {
+			*err = e
+			return
+		}
+		*err = errors.New("transaction panicked")
 	}
 }
 
@@ -326,8 +389,8 @@ func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
 	return id[:], nil
 }
 
-func (idi *idIndexer) FromObject(obj any) (bool, []byte, error) {
-	id := reflect.ValueOf(obj).Field(idi.index).Convert(idType).Interface().(types.ID)
+func (idi *idIndexer) FromObject(o any) (bool, []byte, error) {
+	id := reflect.ValueOf(o).Field(idi.index).Convert(idType).Interface().(types.ID)
 	return true, id[:], nil
 }
 
@@ -339,7 +402,7 @@ func typeName(t reflect.Type) string {
 	return pkg + "." + t.Name()
 }
 
-type idInfo struct {
+type typeInfo struct {
 	IDIndex       int
 	RevisionIndex int
 }
