@@ -119,6 +119,7 @@ func TestCluster(t *testing.T) {
 	})
 
 	cl, err := New(Config{
+		Service:          "test",
 		PeerAddress:      c2p1.Addr().String(),
 		PartitionID:      "default",
 		MaxMessageSize:   config.MaxMessageSize,
