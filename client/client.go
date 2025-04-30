@@ -321,6 +321,7 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 
 	meta := &wire.TxMetadata{
 		ID:      uuid.New(),
+		Time:    time.Now(),
 		Service: t.service,
 	}
 

@@ -3,7 +3,6 @@ package entities
 import (
 	"unsafe"
 
-	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
@@ -81,57 +80,15 @@ func size0(m *Account) uint64 {
 	{
 		// Revision
 
-		{
-			vi := m.Revision
-			switch {
-			case vi <= 0x7F:
-			case vi <= 0x3FFF:
-				n++
-			case vi <= 0x1FFFFF:
-				n += 2
-			case vi <= 0xFFFFFFF:
-				n += 3
-			case vi <= 0x7FFFFFFFF:
-				n += 4
-			case vi <= 0x3FFFFFFFFFF:
-				n += 5
-			case vi <= 0x1FFFFFFFFFFFF:
-				n += 6
-			case vi <= 0xFFFFFFFFFFFFFF:
-				n += 7
-			default:
-				n += 8
-			}
-		}
+		helpers.UInt64Size(m.Revision, &n)
 	}
 	{
 		// FirstName
 
 		{
 			l := uint64(len(m.FirstName))
+			helpers.UInt64Size(l, &n)
 			n += l
-			{
-				vi := l
-				switch {
-				case vi <= 0x7F:
-				case vi <= 0x3FFF:
-					n++
-				case vi <= 0x1FFFFF:
-					n += 2
-				case vi <= 0xFFFFFFF:
-					n += 3
-				case vi <= 0x7FFFFFFFF:
-					n += 4
-				case vi <= 0x3FFFFFFFFFF:
-					n += 5
-				case vi <= 0x1FFFFFFFFFFFF:
-					n += 6
-				case vi <= 0xFFFFFFFFFFFFFF:
-					n += 7
-				default:
-					n += 8
-				}
-			}
 		}
 	}
 	{
@@ -139,29 +96,8 @@ func size0(m *Account) uint64 {
 
 		{
 			l := uint64(len(m.LastName))
+			helpers.UInt64Size(l, &n)
 			n += l
-			{
-				vi := l
-				switch {
-				case vi <= 0x7F:
-				case vi <= 0x3FFF:
-					n++
-				case vi <= 0x1FFFFF:
-					n += 2
-				case vi <= 0xFFFFFFF:
-					n += 3
-				case vi <= 0x7FFFFFFFF:
-					n += 4
-				case vi <= 0x3FFFFFFFFFF:
-					n += 5
-				case vi <= 0x1FFFFFFFFFFFF:
-					n += 6
-				case vi <= 0xFFFFFFFFFFFFFF:
-					n += 7
-				default:
-					n += 8
-				}
-			}
 		}
 	}
 	return n
@@ -178,292 +114,14 @@ func marshal0(m *Account, b []byte) uint64 {
 	{
 		// Revision
 
-		{
-			vi := m.Revision
-			switch {
-			case vi <= 0x7F:
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x7FFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x3FFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0x1FFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			case vi <= 0xFFFFFFFFFFFFFF:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			default:
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi) | 0x80
-				o++
-				vi >>= 7
-				b[o] = byte(vi)
-				o++
-			}
-		}
+		helpers.UInt64Marshal(m.Revision, b, &o)
 	}
 	{
 		// FirstName
 
 		{
 			l := uint64(len(m.FirstName))
-			{
-				vi := l
-				switch {
-				case vi <= 0x7F:
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x3FFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x1FFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0xFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x7FFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x3FFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x1FFFFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0xFFFFFFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				default:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				}
-			}
+			helpers.UInt64Marshal(l, b, &o)
 			copy(b[o:o+l], m.FirstName)
 			o += l
 		}
@@ -473,146 +131,7 @@ func marshal0(m *Account, b []byte) uint64 {
 
 		{
 			l := uint64(len(m.LastName))
-			{
-				vi := l
-				switch {
-				case vi <= 0x7F:
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x3FFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x1FFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0xFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x7FFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x3FFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0x1FFFFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				case vi <= 0xFFFFFFFFFFFFFF:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				default:
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi) | 0x80
-					o++
-					vi >>= 7
-					b[o] = byte(vi)
-					o++
-				}
-			}
+			helpers.UInt64Marshal(l, b, &o)
 			copy(b[o:o+l], m.LastName)
 			o += l
 		}
@@ -632,102 +151,14 @@ func unmarshal0(m *Account, b []byte) uint64 {
 	{
 		// Revision
 
-		{
-			vi := types.Revision(b[o] & 0x7F)
-			if b[o]&0x80 == 0 {
-				o++
-			} else {
-				vi |= types.Revision(b[o+1]&0x7F) << 7
-				if b[o+1]&0x80 == 0 {
-					o += 2
-				} else {
-					vi |= types.Revision(b[o+2]&0x7F) << 14
-					if b[o+2]&0x80 == 0 {
-						o += 3
-					} else {
-						vi |= types.Revision(b[o+3]&0x7F) << 21
-						if b[o+3]&0x80 == 0 {
-							o += 4
-						} else {
-							vi |= types.Revision(b[o+4]&0x7F) << 28
-							if b[o+4]&0x80 == 0 {
-								o += 5
-							} else {
-								vi |= types.Revision(b[o+5]&0x7F) << 35
-								if b[o+5]&0x80 == 0 {
-									o += 6
-								} else {
-									vi |= types.Revision(b[o+6]&0x7F) << 42
-									if b[o+6]&0x80 == 0 {
-										o += 7
-									} else {
-										vi |= types.Revision(b[o+7]&0x7F) << 49
-										if b[o+7]&0x80 == 0 {
-											o += 8
-										} else {
-											vi |= types.Revision(b[o+8]) << 56
-											o += 9
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			m.Revision = vi
-		}
+		helpers.UInt64Unmarshal(&m.Revision, b, &o)
 	}
 	{
 		// FirstName
 
 		{
 			var l uint64
-			{
-				vi := uint64(b[o] & 0x7F)
-				if b[o]&0x80 == 0 {
-					o++
-				} else {
-					vi |= uint64(b[o+1]&0x7F) << 7
-					if b[o+1]&0x80 == 0 {
-						o += 2
-					} else {
-						vi |= uint64(b[o+2]&0x7F) << 14
-						if b[o+2]&0x80 == 0 {
-							o += 3
-						} else {
-							vi |= uint64(b[o+3]&0x7F) << 21
-							if b[o+3]&0x80 == 0 {
-								o += 4
-							} else {
-								vi |= uint64(b[o+4]&0x7F) << 28
-								if b[o+4]&0x80 == 0 {
-									o += 5
-								} else {
-									vi |= uint64(b[o+5]&0x7F) << 35
-									if b[o+5]&0x80 == 0 {
-										o += 6
-									} else {
-										vi |= uint64(b[o+6]&0x7F) << 42
-										if b[o+6]&0x80 == 0 {
-											o += 7
-										} else {
-											vi |= uint64(b[o+7]&0x7F) << 49
-											if b[o+7]&0x80 == 0 {
-												o += 8
-											} else {
-												vi |= uint64(b[o+8]) << 56
-												o += 9
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-				l = vi
-			}
+			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
 				m.FirstName = string(b[o:o+l])
 				o += l
@@ -739,51 +170,7 @@ func unmarshal0(m *Account, b []byte) uint64 {
 
 		{
 			var l uint64
-			{
-				vi := uint64(b[o] & 0x7F)
-				if b[o]&0x80 == 0 {
-					o++
-				} else {
-					vi |= uint64(b[o+1]&0x7F) << 7
-					if b[o+1]&0x80 == 0 {
-						o += 2
-					} else {
-						vi |= uint64(b[o+2]&0x7F) << 14
-						if b[o+2]&0x80 == 0 {
-							o += 3
-						} else {
-							vi |= uint64(b[o+3]&0x7F) << 21
-							if b[o+3]&0x80 == 0 {
-								o += 4
-							} else {
-								vi |= uint64(b[o+4]&0x7F) << 28
-								if b[o+4]&0x80 == 0 {
-									o += 5
-								} else {
-									vi |= uint64(b[o+5]&0x7F) << 35
-									if b[o+5]&0x80 == 0 {
-										o += 6
-									} else {
-										vi |= uint64(b[o+6]&0x7F) << 42
-										if b[o+6]&0x80 == 0 {
-											o += 7
-										} else {
-											vi |= uint64(b[o+7]&0x7F) << 49
-											if b[o+7]&0x80 == 0 {
-												o += 8
-											} else {
-												vi |= uint64(b[o+8]) << 56
-												o += 9
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-				l = vi
-			}
+			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
 				m.LastName = string(b[o:o+l])
 				o += l
