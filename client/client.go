@@ -224,15 +224,10 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 	}()
 
 	for len(txRaw) > 0 {
-		size, n1 := varuint64.Parse(txRaw)
-		msgID, n2 := varuint64.Parse(txRaw[n1:])
-
-		m, msgSize, err := c.m.Unmarshal(msgID, txRaw[n1+n2:n1+size])
+		msgID, n := varuint64.Parse(txRaw)
+		m, msgSize, err := c.m.Unmarshal(msgID, txRaw[n:])
 		if err != nil {
 			return err
-		}
-		if msgSize != size-n2 {
-			return errors.Errorf("unexpected message size")
 		}
 
 		newO := reflect.ValueOf(m).Elem()
@@ -263,7 +258,7 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 			return errors.WithStack(err)
 		}
 
-		txRaw = txRaw[n1+size:]
+		txRaw = txRaw[n+msgSize:]
 	}
 	tx.Commit()
 	return nil
@@ -327,17 +322,8 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		if err != nil {
 			return err
 		}
-		msgSize, err := t.m.Size(o)
-		if err != nil {
-			return err
-		}
-		if msgSize == 0 {
-			return errors.New("tx message has 0 size")
-		}
-		totalSize := msgSize + varuint64.Size(id)
-		i += varuint64.Put(t.buf[i:], totalSize)
 		i += varuint64.Put(t.buf[i:], id)
-		_, _, err = t.m.Marshal(o, t.buf[i:])
+		_, msgSize, err := t.m.Marshal(o, t.buf[i:])
 		if err != nil {
 			return err
 		}
