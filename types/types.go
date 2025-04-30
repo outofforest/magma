@@ -5,15 +5,6 @@ import "github.com/google/uuid"
 // ID is used to define ID field in entities.
 type ID uuid.UUID
 
-type idConstraint interface {
-	~[16]byte // In go it's not possible to constraint on ID, so this is the best we can do.
-}
-
-// NewID generates new ID.
-func NewID[T idConstraint]() T {
-	return T(uuid.New())
-}
-
 // Revision is used to define Revision field in entities.
 type Revision uint64
 

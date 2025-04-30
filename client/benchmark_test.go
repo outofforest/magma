@@ -118,7 +118,7 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, config, p2p3, c2p3, dir, pageSize)
 	})
 
-	client, err := New(Config{
+	cl, err := New(Config{
 		PeerAddress:      c2p1.Addr().String(),
 		PartitionID:      "default",
 		MaxMessageSize:   config.MaxMessageSize,
@@ -126,38 +126,41 @@ func TestCluster(t *testing.T) {
 	}, entities.NewMarshaller())
 	requireT.NoError(err)
 
-	group.Spawn("client", parallel.Fail, client.Run)
+	group.Spawn("client", parallel.Fail, cl.Run)
 
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	for range 10_000_000 {
-		err := client.Broadcast([]any{
-			&entities.Account{
-				ID:        types.NewID[entities.AccountID](),
+	tr := cl.NewTransactor()
+	for range 100_000 {
+		err := tr.Tx(ctx, func(tx *Tx) error {
+			tx.Set(entities.Account{
+				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
-			},
-			&entities.Account{
-				ID:        types.NewID[entities.AccountID](),
+			})
+			tx.Set(entities.Account{
+				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
-			},
-			&entities.Account{
-				ID:        types.NewID[entities.AccountID](),
+			})
+			tx.Set(entities.Account{
+				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
-			},
-			&entities.Account{
-				ID:        types.NewID[entities.AccountID](),
+			})
+			tx.Set(entities.Account{
+				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
-			},
-			&entities.Account{
-				ID:        types.NewID[entities.AccountID](),
+			})
+			tx.Set(entities.Account{
+				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
-			},
+			})
+
+			return nil
 		})
 		if err != nil {
 			fmt.Println(err)
@@ -169,12 +172,12 @@ func TestCluster(t *testing.T) {
 
 	fmt.Println("===================")
 
-	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		config, dir := makeConfig(config, peer4)
-		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
-	})
-
-	time.Sleep(30 * time.Second)
+	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+	// 	config, dir := makeConfig(config, peer4)
+	// 	return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
+	// })
+	//
+	// time.Sleep(30 * time.Second)
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) (types.Config, string) {
