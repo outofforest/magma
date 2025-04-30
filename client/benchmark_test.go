@@ -132,7 +132,7 @@ func TestCluster(t *testing.T) {
 	fmt.Println("Start")
 
 	tr := cl.NewTransactor()
-	for range 100_000 {
+	for range 500_000 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
 			tx.Set(entities.Account{
 				ID:        NewID[entities.AccountID](),
@@ -172,12 +172,12 @@ func TestCluster(t *testing.T) {
 
 	fmt.Println("===================")
 
-	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-	// 	config, dir := makeConfig(config, peer4)
-	// 	return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
-	// })
-	//
-	// time.Sleep(30 * time.Second)
+	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+		config, dir := makeConfig(config, peer4)
+		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
+	})
+
+	time.Sleep(30 * time.Second)
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) (types.Config, string) {
