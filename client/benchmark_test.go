@@ -124,6 +124,7 @@ func TestCluster(t *testing.T) {
 		PartitionID:      "default",
 		MaxMessageSize:   config.MaxMessageSize,
 		BroadcastTimeout: 3 * time.Second,
+		AwaitTimeout:     10 * time.Second,
 	}, entities.NewMarshaller())
 	requireT.NoError(err)
 
@@ -133,7 +134,7 @@ func TestCluster(t *testing.T) {
 	fmt.Println("Start")
 
 	tr := cl.NewTransactor()
-	for range 500_000 {
+	for range 100 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
 			tx.Set(entities.Account{
 				ID:        NewID[entities.AccountID](),
@@ -178,7 +179,7 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
 	})
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) (types.Config, string) {

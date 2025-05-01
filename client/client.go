@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,17 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+var (
+	// ErrBroadcastTimeout means that client was not able to broadcast the transaction before timeout.
+	ErrBroadcastTimeout = errors.New("broadcast timeout")
+
+	// ErrAwaitTimeout means that client hasn't received broadcasted transaction before timeout.
+	ErrAwaitTimeout = errors.New("await timeout")
+
+	// ErrOutdatedTx means that awaited transaction is outdated and hasn't been applied.
+	ErrOutdatedTx = errors.New("outdated transaction")
+)
+
 var idType = reflect.TypeOf(types.ID{})
 
 // Config is the configuration of magma client.
@@ -32,6 +44,7 @@ type Config struct {
 	PartitionID      types.PartitionID
 	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
+	AwaitTimeout     time.Duration
 }
 
 // New creates new magma client.
@@ -91,29 +104,25 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	c := &Client{
-		config:        config,
-		txCh:          make(chan []byte, 1),
-		m:             m,
-		metaM:         wire.NewMarshaller(),
-		timeoutTicker: time.NewTicker(time.Hour),
-		doneCh:        make(chan struct{}),
-		bufSize:       10 * (config.MaxMessageSize + varuint64.MaxSize),
-		typeDefs:      typeDefs,
-		db:            db,
-	}
-	c.timeoutTicker.Stop()
-	return c, nil
+	return &Client{
+		config:   config,
+		txCh:     make(chan tx, 1),
+		m:        m,
+		metaM:    wire.NewMarshaller(),
+		doneCh:   make(chan struct{}),
+		bufSize:  10 * (config.MaxMessageSize + varuint64.MaxSize),
+		typeDefs: typeDefs,
+		db:       db,
+	}, nil
 }
 
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
-	config        Config
-	txCh          chan []byte
-	m             proton.Marshaller
-	metaM         proton.Marshaller
-	timeoutTicker *time.Ticker
-	doneCh        chan struct{}
+	config Config
+	txCh   chan tx
+	m      proton.Marshaller
+	metaM  proton.Marshaller
+	doneCh chan struct{}
 
 	typeDefs map[reflect.Type]typeInfo
 	db       *memdb.MemDB
@@ -124,12 +133,14 @@ type Client struct {
 // Run runs client.
 func (c *Client) Run(ctx context.Context) error {
 	defer close(c.doneCh)
-	c.timeoutTicker.Reset(c.config.BroadcastTimeout)
-	defer c.timeoutTicker.Stop()
 
 	log := logger.Get(ctx)
 	var previousChecksum uint64
 	var nextLogIndex types.Index
+
+	var mu sync.Mutex
+	awaitedTxs := map[uuid.UUID]chan<- error{}
+	var awaitedTxsToClean []uuid.UUID
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -175,17 +186,27 @@ func (c *Client) Run(ctx context.Context) error {
 							}
 
 							metaID, n := varuint64.Parse(txRaw)
-							_, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
+							metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
 							if err != nil {
 								return err
 							}
+							meta := metaAny.(*wire.TxMetadata)
 
-							if err := c.applyTx(txRaw[n+metaSize:]); err != nil {
+							err = c.applyTx(txRaw[n+metaSize:])
+							if err != nil && !errors.Is(err, ErrOutdatedTx) {
 								return err
 							}
 
 							previousChecksum = checksum
 							nextLogIndex += txTotalLen
+
+							mu.Lock()
+							receivedCh := awaitedTxs[meta.ID]
+							if receivedCh != nil {
+								delete(awaitedTxs, meta.ID)
+								receivedCh <- err
+							}
+							mu.Unlock()
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {
@@ -194,9 +215,32 @@ func (c *Client) Run(ctx context.Context) error {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case tx := <-c.txCh:
-								if err := conn.SendRawBytes(tx); err != nil {
+								mu.Lock()
+								delete(awaitedTxs, tx.PreviousTxID)
+								awaitedTxs[tx.ID] = tx.ReceivedCh
+								mu.Unlock()
+
+								if err := conn.SendRawBytes(tx.Tx); err != nil {
 									return errors.WithStack(err)
 								}
+							}
+						}
+					})
+					spawn("cleaner", parallel.Fail, func(ctx context.Context) error {
+						for {
+							select {
+							case <-ctx.Done():
+								return errors.WithStack(ctx.Err())
+							case <-time.After(2 * c.config.AwaitTimeout):
+								mu.Lock()
+								for _, id := range awaitedTxsToClean {
+									delete(awaitedTxs, id)
+								}
+								awaitedTxsToClean = make([]uuid.UUID, 0, len(awaitedTxs))
+								for id := range awaitedTxs {
+									awaitedTxsToClean = append(awaitedTxsToClean, id)
+								}
+								mu.Unlock()
 							}
 						}
 					})
@@ -215,16 +259,17 @@ func (c *Client) Run(ctx context.Context) error {
 // NewTransactor creates new transactor.
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
-		service:        c.config.Service,
-		txCh:           c.txCh,
-		m:              c.m,
-		metaM:          c.metaM,
-		typeDefs:       c.typeDefs,
-		db:             c.db,
-		timeoutTicker:  c.timeoutTicker,
-		maxMessageSize: c.config.MaxMessageSize,
-		bufSize:        c.bufSize,
-		doneCh:         c.doneCh,
+		service:          c.config.Service,
+		txCh:             c.txCh,
+		m:                c.m,
+		metaM:            c.metaM,
+		typeDefs:         c.typeDefs,
+		db:               c.db,
+		maxMessageSize:   c.config.MaxMessageSize,
+		bufSize:          c.bufSize,
+		broadcastTimeout: c.config.BroadcastTimeout,
+		awaitTimeout:     c.config.AwaitTimeout,
+		doneCh:           c.doneCh,
 	}
 }
 
@@ -263,7 +308,7 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 			oldRevision := reflect.ValueOf(oldO).Field(typeDef.RevisionIndex).Interface().(types.Revision)
 			if newRevision <= oldRevision {
 				tx.Abort()
-				return nil
+				return ErrOutdatedTx
 			}
 		}
 
@@ -277,24 +322,33 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 	return nil
 }
 
+type tx struct {
+	ID           uuid.UUID
+	Tx           []byte
+	ReceivedCh   chan<- error
+	PreviousTxID uuid.UUID
+}
+
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
-	service        string
-	txCh           chan []byte
-	m              proton.Marshaller
-	metaM          proton.Marshaller
-	typeDefs       map[reflect.Type]typeInfo
-	db             *memdb.MemDB
-	timeoutTicker  *time.Ticker
-	maxMessageSize uint64
-	buf            []byte
-	bufSize        uint64
-	doneCh         chan struct{}
+	service          string
+	txCh             chan tx
+	m                proton.Marshaller
+	metaM            proton.Marshaller
+	typeDefs         map[reflect.Type]typeInfo
+	db               *memdb.MemDB
+	maxMessageSize   uint64
+	buf              []byte
+	bufSize          uint64
+	broadcastTimeout time.Duration
+	awaitTimeout     time.Duration
+	doneCh           chan struct{}
+	previousTxID     uuid.UUID
 }
 
 // Tx creates and broadcasts transaction to the magma network.
 func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr error) {
-	tx := &Tx{
+	pendingTx := &Tx{
 		View: &View{
 			tx:       t.db.Txn(true),
 			typeDefs: t.typeDefs,
@@ -302,14 +356,16 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		changes: map[types.ID]any{},
 	}
 
-	defer tx.tx.Abort()
+	defer pendingTx.tx.Abort()
 	defer txRecover(&retErr)
 
-	if err := txF(tx); err != nil {
+	if err := txF(pendingTx); err != nil {
 		return err
 	}
 
-	if len(tx.changes) == 0 {
+	pendingTx.tx.Abort()
+
+	if len(pendingTx.changes) == 0 {
 		return nil
 	}
 
@@ -319,8 +375,12 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 
 	i := uint64(varuint64.MaxSize)
 
+	txID := uuid.New()
+	previousTxID := t.previousTxID
+	t.previousTxID = txID
+
 	meta := &wire.TxMetadata{
-		ID:      uuid.New(),
+		ID:      txID,
 		Time:    time.Now(),
 		Service: t.service,
 	}
@@ -336,7 +396,7 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	}
 	i += metaSize
 
-	for _, o := range tx.changes {
+	for _, o := range pendingTx.changes {
 		ov := reflect.New(reflect.TypeOf(o))
 		ovValue := ov.Elem()
 		ovValue.Set(reflect.ValueOf(o))
@@ -370,23 +430,39 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	n := varuint64.Size(i - varuint64.MaxSize)
 	varuint64.Put(t.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
 
-	for range 2 {
-		select {
-		case <-ctx.Done():
+	receivedCh := make(chan error, 1)
+	select {
+	case <-ctx.Done():
+		return errors.WithStack(ctx.Err())
+	case <-t.doneCh:
+		if ctx.Err() != nil {
 			return errors.WithStack(ctx.Err())
-		case <-t.doneCh:
-			if ctx.Err() != nil {
-				return errors.WithStack(ctx.Err())
-			}
-			return errors.New("client closed")
-		case <-t.timeoutTicker.C:
-		case t.txCh <- t.buf[varuint64.MaxSize-n : i]:
-			t.buf = t.buf[i:]
-			return nil
 		}
+		return errors.New("client closed")
+	case <-time.After(t.broadcastTimeout):
+		return ErrBroadcastTimeout
+	case t.txCh <- tx{
+		ID:           txID,
+		Tx:           t.buf[varuint64.MaxSize-n : i],
+		ReceivedCh:   receivedCh,
+		PreviousTxID: previousTxID,
+	}:
+		t.buf = t.buf[i:]
 	}
 
-	return errors.New("timeout on sending transaction")
+	select {
+	case <-ctx.Done():
+		return errors.WithStack(ctx.Err())
+	case <-t.doneCh:
+		if ctx.Err() != nil {
+			return errors.WithStack(ctx.Err())
+		}
+		return errors.New("client closed")
+	case <-time.After(t.awaitTimeout):
+		return ErrAwaitTimeout
+	case err := <-receivedCh:
+		return err
+	}
 }
 
 func txRecover(err *error) {
