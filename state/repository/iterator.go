@@ -65,7 +65,6 @@ func NewIterator(provider *TailProvider, fileIterator *FileIterator, acknowledge
 		provider:     provider,
 		fileIterator: fileIterator,
 		current:      acknowledged,
-		files:        map[magmatypes.Index]*File{},
 	}
 }
 
@@ -74,14 +73,14 @@ type Iterator struct {
 	provider     *TailProvider
 	fileIterator *FileIterator
 
+	current magmatypes.Index
+	closed  bool
+
 	readerValidUntil magmatypes.Index
 	reader           io.Reader
 
-	mu    sync.Mutex
-	files map[magmatypes.Index]*File
-
-	current magmatypes.Index
-	closed  bool
+	mu   sync.Mutex
+	file *File
 }
 
 // Reader returns next reader.
@@ -92,15 +91,22 @@ func (i *Iterator) Reader() (io.Reader, error) {
 	}
 
 	if i.current >= i.readerValidUntil {
-		reader, err := i.fileIterator.Next()
+		file, err := i.fileIterator.Next()
 		if err != nil {
 			return nil, err
 		}
-		i.reader = reader.Reader()
-		i.readerValidUntil = reader.ValidUntil()
+		i.reader = file.Reader()
+		i.readerValidUntil = file.ValidUntil()
 
 		i.mu.Lock()
-		i.files[i.readerValidUntil] = reader
+		if i.file != nil {
+			oldFile := i.file
+			i.file = nil
+			if err := oldFile.Close(); err != nil {
+				return nil, errors.WithStack(err)
+			}
+		}
+		i.file = file
 		i.mu.Unlock()
 	}
 
@@ -114,33 +120,6 @@ func (i *Iterator) Reader() (io.Reader, error) {
 	return io.LimitReader(i.reader, int64(size)), nil
 }
 
-// Acknowledge acknowledges stream index which has been processed.
-func (i *Iterator) Acknowledge(count magmatypes.Index) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	var toDelete []magmatypes.Index
-	n := len(i.files)
-	for o, f := range i.files {
-		if o <= count {
-			if toDelete == nil {
-				toDelete = make([]magmatypes.Index, 0, n)
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
-			toDelete = append(toDelete, o)
-		}
-		n--
-	}
-
-	for _, o := range toDelete {
-		delete(i.files, o)
-	}
-
-	return nil
-}
-
 // Close closes the iterator.
 func (i *Iterator) Close() error {
 	i.provider.Call(func() {
@@ -150,11 +129,11 @@ func (i *Iterator) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	for _, file := range i.files {
-		if err := file.Close(); err != nil {
-			return err
-		}
+	if i.file == nil {
+		return nil
 	}
 
-	return nil
+	file := i.file
+	i.file = nil
+	return errors.WithStack(file.Close())
 }

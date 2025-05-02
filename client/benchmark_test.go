@@ -104,7 +104,7 @@ func TestCluster(t *testing.T) {
 		panic(err)
 	}
 
-	const pageSize = 128 * 1024 * 1024 // 1024 * 1024 * 1024
+	const pageSize = 16 * 1024
 	group.Spawn("peer1", parallel.Fail, func(ctx context.Context) error {
 		config, dir := makeConfig(config, peer1)
 		return magma.Run(ctx, config, p2p1, c2p1, dir, pageSize)
