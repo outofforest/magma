@@ -21,7 +21,6 @@ import (
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
-	"github.com/outofforest/varuint64"
 )
 
 const queueCapacity = 10
@@ -605,28 +604,10 @@ func (g *Gossip) l2pHandler(
 			for msg := range sendCh {
 				switch m := msg.(type) {
 				case *repository.Iterator:
-					startMsg := &l2p.StartTransfer{}
-					id, err := g.l2pMarshaller.ID(startMsg)
-					if err != nil {
-						return err
-					}
-					msgSize, err := g.l2pMarshaller.Size(startMsg)
-					if err != nil {
-						return err
-					}
-					startMsgSize := varuint64.Size(id) + msgSize
-					startMsgSize += varuint64.Size(startMsgSize)
-
-					initSentBytes := c.BytesSent() + startMsgSize
-					if err := c.SendProton(startMsg, g.l2pMarshaller); err != nil {
+					if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
 						return err
 					}
 					for {
-						if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
-							if err := m.Acknowledge(types.Index(sentBytes - initSentBytes)); err != nil {
-								return err
-							}
-						}
 						r, err := m.Reader()
 						if err != nil {
 							return err
@@ -757,14 +738,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
-			initSentBytes := c.BytesSent()
 			for {
-				if sentBytes := c.BytesSent(); sentBytes > initSentBytes {
-					if err := it.Acknowledge(types.Index(sentBytes - initSentBytes)); err != nil {
-						return err
-					}
-				}
-
 				r, err := it.Reader()
 				if err != nil {
 					return err
