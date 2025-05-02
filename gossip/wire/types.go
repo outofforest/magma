@@ -21,3 +21,8 @@ type Hello struct {
 	PartitionID types.PartitionID
 	Channel     Channel
 }
+
+// StartLogStream indicates beginning of log stream transfer.
+type StartLogStream struct {
+	Length uint64
+}

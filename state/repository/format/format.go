@@ -14,6 +14,5 @@ type Header struct {
 	PreviousChecksum uint64
 	Term             types.Term
 	NextLogIndex     magmatypes.Index
-	NextTxOffset     magmatypes.Index
 	HeaderChecksum   uint64
 }

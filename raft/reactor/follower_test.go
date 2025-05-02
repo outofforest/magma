@@ -67,21 +67,19 @@ func newReactor(s *state.State) *Reactor {
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
 	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()))
 	requireT.NoError(err)
-	it := repo.Iterator(0)
-	var index magmatypes.Index
+
+	tp := repository.NewTailProvider()
+	tp.SetTail(magmatypes.Index(len(expectedLog)))
+
+	it := repo.Iterator(tp, 0)
+	defer it.Close()
+
 	buf := bytes.NewBuffer(nil)
-	for index < magmatypes.Index(len(expectedLog)) {
-		file, err := it.Next()
+	for buf.Len() < len(expectedLog) {
+		reader, _, err := it.Reader()
 		requireT.NoError(err)
-		requireT.NotNil(file)
-		limit := file.ValidUntil() - index
-		if limit > magmatypes.Index(len(expectedLog))-index {
-			limit = magmatypes.Index(len(expectedLog)) - index
-		}
-		n, err := io.Copy(buf, io.LimitReader(file.Reader(), int64(limit)))
+		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
-		index += magmatypes.Index(n)
-		requireT.NoError(file.Close())
 	}
 	requireT.Equal(expectedLog, buf.Bytes())
 }

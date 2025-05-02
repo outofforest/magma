@@ -39,7 +39,7 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 
 		header := currentFile.Header()
 		highestTermSeen = header.Term
-		nextLogIndexInFile, previousChecksum = initialize(log, header.NextTxOffset, header.PreviousChecksum)
+		nextLogIndexInFile, previousChecksum = initialize(log, header.PreviousChecksum)
 		nextLogIndex = header.NextLogIndex + nextLogIndexInFile
 	}
 
@@ -279,7 +279,7 @@ func (s *State) appendTx(
 			}
 
 			var err error
-			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex, s.previousChecksum, nil)
+			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex, s.previousChecksum)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -316,27 +316,7 @@ func (s *State) appendTx(
 		copy(buf[n:], data[n1:n1+sizeWithoutChecksum])
 		copy(buf[len(buf)-8:], hashBuf[:])
 
-		//nolint:nestif
-		if s.nextLogIndexInFile == types.Index(len(s.log)) {
-			if s.currentFile != nil {
-				if err := s.currentFile.Close(); err != nil {
-					return 0, 0, err
-				}
-			}
-
-			var err error
-			s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, s.previousChecksum, nil)
-			if err != nil {
-				return 0, 0, err
-			}
-			s.log, err = s.currentFile.Map()
-			if err != nil {
-				return 0, 0, err
-			}
-			s.nextLogIndexInFile = 0
-		}
-
-		if err := s.append(buf, checksum); err != nil {
+		if err := s.append(buf, s.previousChecksum); err != nil {
 			return 0, 0, err
 		}
 
@@ -347,12 +327,8 @@ func (s *State) appendTx(
 }
 
 func (s *State) append(data []byte, previousChecksum uint64) error {
-	n := types.Index(copy(s.log[s.nextLogIndexInFile:], data))
-	s.nextLogIndexInFile += n
-	s.nextLogIndex += n
-
 	//nolint:nestif
-	if totalLen := types.Index(len(data)); n < totalLen {
+	if len(data) > len(s.log[s.nextLogIndexInFile:]) {
 		if s.currentFile != nil {
 			if err := s.currentFile.Close(); err != nil {
 				return err
@@ -360,7 +336,7 @@ func (s *State) append(data []byte, previousChecksum uint64) error {
 		}
 
 		var err error
-		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, previousChecksum, data[n:])
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, previousChecksum)
 		if err != nil {
 			return err
 		}
@@ -368,9 +344,12 @@ func (s *State) append(data []byte, previousChecksum uint64) error {
 		if err != nil {
 			return err
 		}
-		s.nextLogIndexInFile = totalLen - n
-		s.nextLogIndex += totalLen - n
+		s.nextLogIndexInFile = 0
 	}
+
+	n := types.Index(copy(s.log[s.nextLogIndexInFile:], data))
+	s.nextLogIndexInFile += n
+	s.nextLogIndex += n
 
 	return nil
 }
@@ -388,8 +367,8 @@ func appendDefer(err *error) {
 	}
 }
 
-func initialize(log []byte, txOffset types.Index, previousChecksum uint64) (types.Index, uint64) {
-	index := txOffset
+func initialize(log []byte, previousChecksum uint64) (types.Index, uint64) {
+	var index types.Index
 	for {
 		if !varuint64.Contains(log[index:]) {
 			return index, previousChecksum

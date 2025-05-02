@@ -59,81 +59,85 @@ func (tp *TailProvider) SetTail(tail magmatypes.Index) {
 	tp.cond.Broadcast()
 }
 
-// NewIterator creates new iterator.
-func NewIterator(provider *TailProvider, fileIterator *FileIterator, acknowledged magmatypes.Index) *Iterator {
-	return &Iterator{
-		provider:     provider,
-		fileIterator: fileIterator,
-		current:      acknowledged,
-	}
-}
-
-// Iterator iterates over log.
+// Iterator iterates over files in the repository.
 type Iterator struct {
-	provider     *TailProvider
-	fileIterator *FileIterator
+	r         *Repository
+	provider  *TailProvider
+	fileIndex uint64
+	offset    uint64
 
 	current magmatypes.Index
 	closed  bool
 
-	readerValidUntil magmatypes.Index
-	reader           io.Reader
-
-	mu   sync.Mutex
-	file *File
+	mu          sync.Mutex
+	currentFile *File
 }
 
 // Reader returns next reader.
-func (i *Iterator) Reader() (io.Reader, error) {
+func (i *Iterator) Reader() (io.Reader, uint64, error) {
 	tail, err := i.provider.Wait(i.current, &i.closed)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if i.current >= i.readerValidUntil {
-		file, err := i.fileIterator.Next()
-		if err != nil {
-			return nil, err
-		}
-		i.reader = file.Reader()
-		i.readerValidUntil = file.ValidUntil()
-
-		i.mu.Lock()
-		if i.file != nil {
-			oldFile := i.file
-			i.file = nil
-			if err := oldFile.Close(); err != nil {
-				return nil, errors.WithStack(err)
-			}
-		}
-		i.file = file
-		i.mu.Unlock()
+	file, validUntil, err := i.file(i.current, tail)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	if tail > i.readerValidUntil {
-		tail = i.readerValidUntil
-	}
+	size := validUntil - i.current
+	i.current = validUntil
 
-	size := tail - i.current
-	i.current = tail
-
-	return io.LimitReader(i.reader, int64(size)), nil
+	return io.LimitReader(file.Reader(), int64(size)), uint64(size), nil
 }
 
-// Close closes the iterator.
+// Close closes iterator.
 func (i *Iterator) Close() error {
-	i.provider.Call(func() {
-		i.closed = true
-	})
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	if file := i.currentFile; file != nil {
+		i.currentFile = nil
+		return file.Close()
+	}
+
+	return nil
+}
+
+func (i *Iterator) file(current, tail magmatypes.Index) (*File, magmatypes.Index, error) {
+	i.r.mu.RLock()
+	defer i.r.mu.RUnlock()
+
+	if len(i.r.files) == 0 {
+		return nil, 0, errors.New("repository is empty")
+	}
 
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	if i.file == nil {
-		return nil
+	lastFileIndex := uint64(len(i.r.files)) - 1
+	if i.fileIndex < lastFileIndex && current == i.r.files[i.fileIndex+1].Header.NextLogIndex {
+		i.fileIndex++
+		if file := i.currentFile; file != nil {
+			i.currentFile = nil
+			if err := file.Close(); err != nil {
+				return nil, 0, err
+			}
+		}
 	}
 
-	file := i.file
-	i.file = nil
-	return errors.WithStack(file.Close())
+	if i.currentFile == nil {
+		var err error
+		i.currentFile, err = i.r.open(i.fileIndex, i.offset)
+		if err != nil {
+			return nil, 0, err
+		}
+		i.offset = 0
+	}
+
+	if i.fileIndex < lastFileIndex && i.r.files[i.fileIndex+1].Header.NextLogIndex < tail {
+		return i.currentFile, i.r.files[i.fileIndex+1].Header.NextLogIndex, nil
+	}
+
+	return i.currentFile, tail, nil
 }

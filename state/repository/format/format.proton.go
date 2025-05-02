@@ -74,7 +74,7 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 }
 
 func size0(m *Header) uint64 {
-	var n uint64 = 6
+	var n uint64 = 5
 	{
 		// PreviousTerm
 
@@ -94,11 +94,6 @@ func size0(m *Header) uint64 {
 		// NextLogIndex
 
 		helpers.UInt64Size(m.NextLogIndex, &n)
-	}
-	{
-		// NextTxOffset
-
-		helpers.UInt64Size(m.NextTxOffset, &n)
 	}
 	{
 		// HeaderChecksum
@@ -131,11 +126,6 @@ func marshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Marshal(m.NextLogIndex, b, &o)
 	}
 	{
-		// NextTxOffset
-
-		helpers.UInt64Marshal(m.NextTxOffset, b, &o)
-	}
-	{
 		// HeaderChecksum
 
 		helpers.UInt64Marshal(m.HeaderChecksum, b, &o)
@@ -165,11 +155,6 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		// NextLogIndex
 
 		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
-	}
-	{
-		// NextTxOffset
-
-		helpers.UInt64Unmarshal(&m.NextTxOffset, b, &o)
 	}
 	{
 		// HeaderChecksum
