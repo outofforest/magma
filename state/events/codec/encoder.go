@@ -14,10 +14,11 @@ import (
 const checksumSize = 8
 
 // NewEncoder creates new encoder.
-func NewEncoder(w io.Writer, m proton.Marshaller) *Encoder {
+func NewEncoder(checksumSeed uint64, w io.Writer, m proton.Marshaller) *Encoder {
 	return &Encoder{
-		w: w,
-		m: m,
+		w:            w,
+		m:            m,
+		checksumSeed: checksumSeed,
 	}
 }
 
