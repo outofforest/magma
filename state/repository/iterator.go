@@ -93,6 +93,10 @@ func (i *Iterator) Reader() (io.Reader, uint64, error) {
 
 // Close closes iterator.
 func (i *Iterator) Close() error {
+	i.provider.Call(func() {
+		i.closed = true
+	})
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 

@@ -180,6 +180,7 @@ func TestCluster(t *testing.T) {
 	})
 
 	time.Sleep(10 * time.Second)
+	fmt.Println("exit")
 }
 
 func makeConfig(config types.Config, peerID types.ServerID) (types.Config, string) {
