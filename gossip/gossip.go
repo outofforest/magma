@@ -300,8 +300,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				case *reactor.StartTransfer:
 					for _, peerID := range res.Recipients {
 						if p := peersL2P[peerID]; p.SendCh != nil {
-							p.Iterator = repository.NewIterator(pState.providerPeers, pState.Repo.Iterator(m.NextLogIndex),
-								m.NextLogIndex)
+							p.Iterator = pState.Repo.Iterator(pState.providerPeers, m.NextLogIndex)
 							peersL2P[peerID] = p
 							p.SendCh <- p.Iterator
 						}
@@ -573,13 +572,16 @@ func (g *Gossip) l2pHandler(
 					return err
 				}
 
-				switch m.(type) {
-				case *l2p.StartTransfer:
-					for {
+				switch msg := m.(type) {
+				case *wire.StartLogStream:
+					var length uint64
+					for length < msg.Length {
 						m, err := c.ReceiveRawBytes()
 						if err != nil {
 							return err
 						}
+
+						length += uint64(len(m))
 
 						cmdCh <- rafttypes.Command{
 							PeerID: peerID,
@@ -604,12 +606,15 @@ func (g *Gossip) l2pHandler(
 			for msg := range sendCh {
 				switch m := msg.(type) {
 				case *repository.Iterator:
-					if err := c.SendProton(&l2p.StartTransfer{}, g.l2pMarshaller); err != nil {
-						return err
-					}
 					for {
-						r, err := m.Reader()
+						r, length, err := m.Reader()
 						if err != nil {
+							return err
+						}
+
+						if err := c.SendProton(&wire.StartLogStream{
+							Length: length,
+						}, g.l2pMarshaller); err != nil {
 							return err
 						}
 						if err := c.SendStream(r); err != nil {
@@ -693,7 +698,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
 	}
 
-	it := repository.NewIterator(pState.providerClients, pState.Repo.Iterator(msgInit.NextLogIndex), msgInit.NextLogIndex)
+	it := pState.Repo.Iterator(pState.providerClients, msgInit.NextLogIndex)
 
 	ch2 := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch2
@@ -739,8 +744,13 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 			defer c.Close()
 
 			for {
-				r, err := it.Reader()
+				r, length, err := it.Reader()
 				if err != nil {
+					return err
+				}
+				if err := c.SendProton(&wire.StartLogStream{
+					Length: length,
+				}, g.c2pMarshaller); err != nil {
 					return err
 				}
 				if err := c.SendStream(r); err != nil {

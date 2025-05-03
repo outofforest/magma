@@ -22,21 +22,15 @@ const maxHeaderSize = 1024
 
 // File represents opened file.
 type File struct {
-	pageSize   uint64
-	header     *format.Header
-	validUntil magmatypes.Index
-	file       *os.File
-	data       []byte
+	pageSize uint64
+	header   *format.Header
+	file     *os.File
+	data     []byte
 }
 
 // Header returns the header of the file.
 func (f *File) Header() format.Header {
 	return *f.header
-}
-
-// ValidUntil returns index which requires opening of the next file.
-func (f *File) ValidUntil() magmatypes.Index {
-	return f.validUntil
 }
 
 // Reader returns file reader.
@@ -120,13 +114,9 @@ func (r *Repository) Create(
 	term types.Term,
 	nextLogIndex magmatypes.Index,
 	previousChecksum uint64,
-	remainingData []byte,
 ) (_ *File, retErr error) {
 	if term == 0 {
 		return nil, errors.New("invalid term")
-	}
-	if maxHeaderSize+uint64(len(remainingData)) > r.pageSize {
-		return nil, errors.New("data size exceeds the page size")
 	}
 
 	r.mu.Lock()
@@ -136,7 +126,6 @@ func (r *Repository) Create(
 		PreviousChecksum: previousChecksum,
 		Term:             term,
 		NextLogIndex:     nextLogIndex,
-		NextTxOffset:     magmatypes.Index(len(remainingData)),
 	}
 
 	if len(r.files) > 0 {
@@ -181,15 +170,6 @@ func (r *Repository) Create(
 	if _, err := f.Write(headerBuf[:]); err != nil {
 		return nil, errors.WithStack(err)
 	}
-	if len(remainingData) > 0 {
-		if _, err := f.Write(remainingData); err != nil {
-			return nil, errors.WithStack(err)
-		}
-		if _, err := f.Seek(maxHeaderSize, io.SeekStart); err != nil {
-			return nil, errors.WithStack(err)
-		}
-	}
-
 	if err := f.Sync(); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -204,10 +184,9 @@ func (r *Repository) Create(
 	})
 
 	file := &File{
-		header:     header,
-		validUntil: header.NextLogIndex + magmatypes.Index(r.PageCapacity()),
-		pageSize:   r.pageSize,
-		file:       f,
+		header:   header,
+		pageSize: r.pageSize,
+		file:     f,
 	}
 
 	r.nextFileIndex++
@@ -228,24 +207,27 @@ func (r *Repository) OpenCurrent() (*File, error) {
 }
 
 // Iterator returns file iterator.
-func (r *Repository) Iterator(offset magmatypes.Index) *FileIterator {
+func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *Iterator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var fileIndex uint64
+	fileOffset := offset
 	for i := len(r.files) - 1; i >= 0; i-- {
 		file := r.files[i]
-		if offset >= file.Header.NextLogIndex {
+		if fileOffset >= file.Header.NextLogIndex {
 			fileIndex = uint64(i)
-			offset -= file.Header.NextLogIndex
+			fileOffset -= file.Header.NextLogIndex
 			break
 		}
 	}
 
-	return &FileIterator{
+	return &Iterator{
 		r:         r,
+		provider:  provider,
 		fileIndex: fileIndex,
-		offset:    uint64(offset),
+		offset:    uint64(fileOffset),
+		current:   offset,
 	}
 }
 
@@ -331,42 +313,15 @@ func (r *Repository) open(fileIndex, offset uint64) (*File, error) {
 
 	header := r.files[fileIndex].Header
 
-	file := &File{
+	return &File{
 		header:   header,
 		pageSize: r.pageSize,
 		file:     f,
-	}
-
-	if fileIndex == uint64(len(r.files)-1) {
-		file.validUntil = r.files[fileIndex].Header.NextLogIndex + magmatypes.Index(r.PageCapacity())
-	} else {
-		file.validUntil = r.files[fileIndex+1].Header.NextLogIndex
-	}
-
-	return file, nil
+	}, nil
 }
 
 func (r *Repository) filePath(fileIndex uint64) string {
 	return filepath.Join(r.dir, strconv.FormatUint(fileIndex, 10))
-}
-
-// FileIterator iterates over files in the repository.
-type FileIterator struct {
-	r         *Repository
-	fileIndex uint64
-	offset    uint64
-}
-
-// Next reads the next file.
-func (i *FileIterator) Next() (*File, error) {
-	s, err := i.r.open(i.fileIndex, i.offset)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	i.fileIndex++
-	i.offset = 0
-
-	return s, nil
 }
 
 type fileInfo struct {

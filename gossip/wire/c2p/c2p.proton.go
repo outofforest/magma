@@ -1,6 +1,7 @@
 package c2p
 
 import (
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
@@ -8,7 +9,8 @@ import (
 )
 
 const (
-	id0 uint64 = iota + 1
+	id1 uint64 = iota + 1
+	id0
 )
 
 var _ proton.Marshaller = Marshaller{}
@@ -26,6 +28,7 @@ type Marshaller struct {
 func (m Marshaller) Messages() []any {
 	return []any {
 		Init{},
+		wire.StartLogStream{},
 	}
 }
 
@@ -33,6 +36,8 @@ func (m Marshaller) Messages() []any {
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
 	case *Init:
+		return id1, nil
+	case *wire.StartLogStream:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -43,6 +48,8 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *Init:
+		return size1(msg2), nil
+	case *wire.StartLogStream:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -55,6 +62,8 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 	switch msg2 := msg.(type) {
 	case *Init:
+		return id1, marshal1(msg2, buf), nil
+	case *wire.StartLogStream:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -66,15 +75,50 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
-	case id0:
+	case id1:
 		msg := &Init{}
+		return msg, unmarshal1(msg, buf), nil
+	case id0:
+		msg := &wire.StartLogStream{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
 }
 
-func size0(m *Init) uint64 {
+func size0(m *wire.StartLogStream) uint64 {
+	var n uint64 = 1
+	{
+		// Length
+
+		helpers.UInt64Size(m.Length, &n)
+	}
+	return n
+}
+
+func marshal0(m *wire.StartLogStream, b []byte) uint64 {
+	var o uint64
+	{
+		// Length
+
+		helpers.UInt64Marshal(m.Length, b, &o)
+	}
+
+	return o
+}
+
+func unmarshal0(m *wire.StartLogStream, b []byte) uint64 {
+	var o uint64
+	{
+		// Length
+
+		helpers.UInt64Unmarshal(&m.Length, b, &o)
+	}
+
+	return o
+}
+
+func size1(m *Init) uint64 {
 	var n uint64 = 2
 	{
 		// PartitionID
@@ -93,7 +137,7 @@ func size0(m *Init) uint64 {
 	return n
 }
 
-func marshal0(m *Init, b []byte) uint64 {
+func marshal1(m *Init, b []byte) uint64 {
 	var o uint64
 	{
 		// PartitionID
@@ -114,7 +158,7 @@ func marshal0(m *Init, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(m *Init, b []byte) uint64 {
+func unmarshal1(m *Init, b []byte) uint64 {
 	var o uint64
 	{
 		// PartitionID

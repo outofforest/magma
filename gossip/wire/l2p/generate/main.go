@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/outofforest/magma/gossip/wire/l2p"
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
 )
@@ -12,6 +12,6 @@ func main() {
 	proton.Generate("../l2p.proton.go",
 		types.LogSyncRequest{},
 		types.LogSyncResponse{},
-		l2p.StartTransfer{},
+		wire.StartLogStream{},
 	)
 }

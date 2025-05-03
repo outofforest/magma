@@ -15,6 +15,7 @@ import (
 
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/client/wire"
+	gossipwire "github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
@@ -142,6 +143,8 @@ func (c *Client) Run(ctx context.Context) error {
 	awaitedTxs := map[uuid.UUID]chan<- error{}
 	var awaitedTxsToClean []uuid.UUID
 
+	cMarshaller := c2p.NewMarshaller()
+
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
 			func(ctx context.Context, conn *resonance.Connection) error {
@@ -151,62 +154,78 @@ func (c *Client) Run(ctx context.Context) error {
 				if err := conn.SendProton(&c2p.Init{
 					PartitionID:  c.config.PartitionID,
 					NextLogIndex: nextLogIndex,
-				}, c2p.NewMarshaller()); err != nil {
+				}, cMarshaller); err != nil {
 					return errors.WithStack(err)
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						for {
-							txRaw, err := conn.ReceiveRawBytes()
+							m, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
 								return err
 							}
-							txTotalLen := types.Index(len(txRaw))
-							txLen, n := varuint64.Parse(txRaw)
 
-							if txLen < format.ChecksumSize {
-								return errors.New("unexpected tx size")
+							msg, ok := m.(*gossipwire.StartLogStream)
+							if !ok {
+								return errors.Errorf("unexpected message %T", msg)
 							}
 
-							i := len(txRaw) - format.ChecksumSize
-							checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
-							if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-								return errors.New("tx checksum mismatch")
-							}
+							var length uint64
+							for length < msg.Length {
+								txRaw, err := conn.ReceiveRawBytes()
+								if err != nil {
+									return err
+								}
 
-							txLen -= format.ChecksumSize
-							txRaw = txRaw[n : n+txLen]
+								length += uint64(len(txRaw))
 
-							if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
-								// This is a term mark. Ignore.
+								txTotalLen := types.Index(len(txRaw))
+								txLen, n := varuint64.Parse(txRaw)
+
+								if txLen < format.ChecksumSize {
+									return errors.New("unexpected tx size")
+								}
+
+								i := len(txRaw) - format.ChecksumSize
+								checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
+								if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
+									return errors.New("tx checksum mismatch")
+								}
+
+								txLen -= format.ChecksumSize
+								txRaw = txRaw[n : n+txLen]
+
+								if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
+									// This is a term mark. Ignore.
+									previousChecksum = checksum
+									nextLogIndex += txTotalLen
+									continue
+								}
+
+								metaID, n := varuint64.Parse(txRaw)
+								metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
+								if err != nil {
+									return err
+								}
+								meta := metaAny.(*wire.TxMetadata)
+
+								err = c.applyTx(txRaw[n+metaSize:])
+								if err != nil && !errors.Is(err, ErrOutdatedTx) {
+									return err
+								}
+
 								previousChecksum = checksum
 								nextLogIndex += txTotalLen
-								continue
-							}
 
-							metaID, n := varuint64.Parse(txRaw)
-							metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
-							if err != nil {
-								return err
+								mu.Lock()
+								receivedCh := awaitedTxs[meta.ID]
+								if receivedCh != nil {
+									delete(awaitedTxs, meta.ID)
+									receivedCh <- err
+								}
+								mu.Unlock()
 							}
-							meta := metaAny.(*wire.TxMetadata)
-
-							err = c.applyTx(txRaw[n+metaSize:])
-							if err != nil && !errors.Is(err, ErrOutdatedTx) {
-								return err
-							}
-
-							previousChecksum = checksum
-							nextLogIndex += txTotalLen
-
-							mu.Lock()
-							receivedCh := awaitedTxs[meta.ID]
-							if receivedCh != nil {
-								delete(awaitedTxs, meta.ID)
-								receivedCh <- err
-							}
-							mu.Unlock()
 						}
 					})
 					spawn("sender", parallel.Fail, func(ctx context.Context) error {

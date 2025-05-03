@@ -5,17 +5,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
-	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
-	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/varuint64"
 )
@@ -42,21 +39,18 @@ func appendLog(requireT *require.Assertions, s *State, data ...byte) {
 }
 
 func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
-	it := s.repo.Iterator(0)
-	var index types.Index
+	tp := repository.NewTailProvider()
+	tp.SetTail(types.Index(len(expectedLog)))
+
+	it := s.repo.Iterator(tp, 0)
+	defer it.Close()
+
 	buf := bytes.NewBuffer(nil)
-	for index < s.nextLogIndex {
-		file, err := it.Next()
+	for buf.Len() < len(expectedLog) {
+		reader, _, err := it.Reader()
 		requireT.NoError(err)
-		requireT.NotNil(file)
-		limit := file.ValidUntil() - index
-		if limit > s.nextLogIndex-index {
-			limit = s.nextLogIndex - index
-		}
-		n, err := io.Copy(buf, io.LimitReader(file.Reader(), int64(limit)))
+		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
-		index += types.Index(n)
-		requireT.NoError(file.Close())
 	}
 	requireT.Equal(expectedLog, buf.Bytes())
 }
@@ -1388,28 +1382,30 @@ func TestAppendManyFiles(t *testing.T) {
 		}
 	}
 
-	it := s.repo.Iterator(0)
-	readers := []io.Reader{}
-	files := []*repository.File{}
+	tp := repository.NewTailProvider()
+	tp.SetTail(828632)
+	it := s.repo.Iterator(tp, 0)
+	defer it.Close()
+
+	buf := bytes.NewBuffer(nil)
 	for range 270 {
-		file, err := it.Next()
+		reader, _, err := it.Reader()
 		requireT.NoError(err)
-		readers = append(readers, file.Reader())
-		files = append(files, file)
+		_, err = io.Copy(buf, reader)
+		requireT.NoError(err)
 	}
 
-	reader := io.MultiReader(readers...)
-
 	b := make([]byte, 11)
-	_, err = io.ReadFull(reader, b[:10])
+	_, err = io.ReadFull(buf, b[:10])
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20}, b[:10])
 
 	seed := binary.LittleEndian.Uint64(b[2:10])
 	for range 300 {
 		for j := range uint8(251) {
-			_, err := io.ReadFull(reader, b)
+			n, err := io.ReadFull(buf, b)
 			requireT.NoError(err)
+			requireT.Equal(len(b), n)
 			requireT.Equal([]byte{0x0a, 0x01, j}, b[:3])
 
 			checksum := binary.LittleEndian.Uint64(b[3:])
@@ -1418,46 +1414,6 @@ func TestAppendManyFiles(t *testing.T) {
 
 			seed = checksum
 		}
-	}
-	for _, file := range files {
-		requireT.NoError(file.Close())
-	}
-
-	it = s.repo.Iterator(0)
-	for i := range uint64(270) {
-		file, err := it.Next()
-		requireT.NoError(err)
-
-		requireT.EqualValues((i+1)*3072, file.ValidUntil(), i)
-
-		var previousTerm rafttypes.Term
-		if i > 0 {
-			previousTerm = 1
-		}
-		h := file.Header()
-		requireT.Equal(format.Header{
-			PreviousTerm:     previousTerm,
-			PreviousChecksum: h.PreviousChecksum,
-			Term:             1,
-			NextLogIndex:     types.Index(i * s.repo.PageCapacity()),
-			NextTxOffset:     h.NextTxOffset,
-			HeaderChecksum:   h.HeaderChecksum,
-		}, h)
-
-		reader := file.Reader().(*os.File)
-		_, err = reader.Seek(int64(h.NextTxOffset), io.SeekCurrent)
-		requireT.NoError(err)
-
-		_, err = io.ReadFull(reader, b)
-		requireT.NoError(err)
-		size, n := varuint64.Parse(b)
-
-		checksum := binary.LittleEndian.Uint64(b[n+size-8:])
-		expectedChecksum := xxh3.HashSeed(b[:n+size-8], h.PreviousChecksum)
-
-		requireT.Equal(expectedChecksum, checksum)
-
-		requireT.NoError(file.Close())
 	}
 }
 
@@ -1475,22 +1431,23 @@ func TestAppendManyTerms(t *testing.T) {
 		requireT.EqualValues(j+1, s.highestTermSeen)
 	}
 
-	it := s.repo.Iterator(0)
-	readers := []io.Reader{}
-	files := []*repository.File{}
-	for range 120 {
-		file, err := it.Next()
-		requireT.NoError(err)
-		readers = append(readers, io.LimitReader(file.Reader(), 10))
-		files = append(files, file)
-	}
+	tp := repository.NewTailProvider()
+	tp.SetTail(1200)
+	it := s.repo.Iterator(tp, 0)
+	defer it.Close()
 
-	reader := io.MultiReader(readers...)
+	buf := bytes.NewBuffer(nil)
+	for range 120 {
+		reader, _, err := it.Reader()
+		requireT.NoError(err)
+		_, err = io.Copy(buf, reader)
+		requireT.NoError(err)
+	}
 
 	b := make([]byte, 10)
 	var seed uint64
 	for j := range uint8(120) {
-		_, err := io.ReadFull(reader, b)
+		_, err := io.ReadFull(buf, b)
 		requireT.NoError(err)
 		requireT.Equal([]byte{0x09, j + 1}, b[:2])
 
@@ -1499,43 +1456,6 @@ func TestAppendManyTerms(t *testing.T) {
 		requireT.Equal(expectedChecksum, checksum)
 
 		seed = checksum
-	}
-	for _, file := range files {
-		requireT.NoError(file.Close())
-	}
-
-	it = s.repo.Iterator(0)
-	for i := range uint64(120) {
-		file, err := it.Next()
-		requireT.NoError(err)
-
-		if i == 119 {
-			requireT.EqualValues(4262, file.ValidUntil())
-		} else {
-			requireT.EqualValues((i+1)*10, file.ValidUntil(), i)
-		}
-
-		h := file.Header()
-		requireT.Equal(format.Header{
-			PreviousTerm:     rafttypes.Term(i),
-			PreviousChecksum: h.PreviousChecksum,
-			Term:             rafttypes.Term(i + 1),
-			NextLogIndex:     types.Index(i * 10),
-			NextTxOffset:     0,
-			HeaderChecksum:   h.HeaderChecksum,
-		}, h)
-
-		reader := file.Reader().(*os.File)
-
-		_, err = io.ReadFull(reader, b)
-		requireT.NoError(err)
-
-		checksum := binary.LittleEndian.Uint64(b[2:])
-		expectedChecksum := xxh3.HashSeed(b[:2], h.PreviousChecksum)
-
-		requireT.Equal(expectedChecksum, checksum)
-
-		requireT.NoError(file.Close())
 	}
 }
 
@@ -1582,7 +1502,7 @@ func TestNew(t *testing.T) {
 	requireT.NoError(file.Close())
 }
 
-func TestNewWithRemainingData(t *testing.T) {
+func TestNewWithTxExceedingPageCapacity(t *testing.T) {
 	requireT := require.New(t)
 
 	s1, dir := newState(t, "")
@@ -1603,7 +1523,7 @@ func TestNewWithRemainingData(t *testing.T) {
 	requireT.EqualValues(1, s2.LastLogTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(s2.repo.PageCapacity()+10, s2.NextLogIndex())
-	requireT.EqualValues(10, s2.nextLogIndexInFile)
+	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextLogIndexInFile)
 }
 
 func TestNewWithValidData(t *testing.T) {
