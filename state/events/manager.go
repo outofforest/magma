@@ -53,7 +53,7 @@ func Open(dir string) (*Store, error) {
 	}
 
 	m := format.NewMarshaller()
-	n, s, err := state(codec.NewDecoder(bufio.NewReader(f), m))
+	n, checksumSeed, s, err := state(codec.NewDecoder(bufio.NewReader(f), m))
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func Open(dir string) (*Store, error) {
 		f:         f,
 		m:         m,
 		fileIndex: fileIndex,
-		encoder:   codec.NewEncoder(f, m),
+		encoder:   codec.NewEncoder(checksumSeed, f, m),
 		s:         s,
 	}, nil
 }
@@ -106,7 +106,7 @@ func (s *Store) Term(term rafttypes.Term) (State, error) {
 		if err != nil {
 			return State{}, errors.WithStack(err)
 		}
-		s.encoder = codec.NewEncoder(s.f, s.m)
+		s.encoder = codec.NewEncoder(0, s.f, s.m)
 		s.fileIndex = fileIndex
 	}
 
@@ -174,21 +174,22 @@ func findFile(dir string) (uint64, error) {
 	return fileIndex, nil
 }
 
-func state(decoder *codec.Decoder) (uint64, State, error) {
+func state(decoder *codec.Decoder) (uint64, uint64, State, error) {
 	var s State
 
-	var processed uint64
+	var processed, checksumSeed uint64
 	for {
-		n, event, err := decoder.Decode()
+		n, chS, event, err := decoder.Decode()
 		switch {
 		case err == nil:
 		case errors.Is(err, io.EOF):
-			return processed, s, nil
+			return processed, checksumSeed, s, nil
 		default:
-			return 0, State{}, errors.WithStack(err)
+			return 0, 0, State{}, errors.WithStack(err)
 		}
 
 		processed = n
+		checksumSeed = chS
 		switch e := event.(type) {
 		case *format.Term:
 			s = s.term(e.Term)

@@ -264,7 +264,6 @@ func (s *State) appendTx(
 				return 0, 0, errors.New("term mark not allowed")
 			}
 
-			// This is a term mark.
 			if rafttypes.Term(term) <= s.highestTermSeen {
 				return 0, 0, errors.New("bug in protocol")
 			}

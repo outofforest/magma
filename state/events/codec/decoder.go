@@ -31,12 +31,12 @@ type Decoder struct {
 }
 
 // Decode decodes single event.
-func (d *Decoder) Decode() (uint64, any, error) {
+func (d *Decoder) Decode() (uint64, uint64, any, error) {
 	var sizeReceived uint64
 	for !varuint64.Contains(d.buf[:sizeReceived]) {
 		n, err := d.r.Read(d.buf[sizeReceived : sizeReceived+1])
 		if err != nil {
-			return 0, nil, errors.WithStack(err)
+			return 0, 0, nil, errors.WithStack(err)
 		}
 		sizeReceived += uint64(n)
 	}
@@ -49,14 +49,14 @@ func (d *Decoder) Decode() (uint64, any, error) {
 	}
 
 	if _, err := io.ReadFull(d.r, d.buf[n:n+size]); err != nil {
-		return 0, nil, errors.WithStack(err)
+		return 0, 0, nil, errors.WithStack(err)
 	}
 
 	checksum := xxh3.HashSeed(d.buf[:n+size-checksumSize], d.checksumSeed)
 	expectedChecksum := binary.LittleEndian.Uint64(d.buf[n+size-checksumSize:])
 
 	if checksum != expectedChecksum {
-		return 0, nil, errors.WithStack(io.EOF)
+		return 0, 0, nil, errors.WithStack(io.EOF)
 	}
 
 	d.checksumSeed = checksum
@@ -64,9 +64,8 @@ func (d *Decoder) Decode() (uint64, any, error) {
 	id, n2 := varuint64.Parse(d.buf[n:])
 	v, _, err := d.m.Unmarshal(id, d.buf[n+n2:n+size])
 	if err != nil {
-		return 0, nil, err
+		return 0, 0, nil, err
 	}
 	d.count += n + size
-
-	return d.count, v, nil
+	return d.count, d.checksumSeed, v, nil
 }

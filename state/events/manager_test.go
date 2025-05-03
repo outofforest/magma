@@ -58,15 +58,15 @@ func TestTermSet(t *testing.T) {
 	defer f.Close()
 	d := codec.NewDecoder(f, format.NewMarshaller())
 
-	_, v, err := d.Decode()
+	_, _, v, err := d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: 1}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: 2}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.ErrorIs(err, io.EOF)
 	requireT.Nil(v)
 }
@@ -90,12 +90,12 @@ func TestTermTwoFiles(t *testing.T) {
 	d := codec.NewDecoder(f0, format.NewMarshaller())
 
 	for i := range termsPerFile - 1 {
-		_, v, err := d.Decode()
+		_, _, v, err := d.Decode()
 		requireT.NoError(err, i)
 		requireT.Equal(&format.Term{Term: types.Term(i + 1)}, v)
 	}
 
-	_, v, err := d.Decode()
+	_, _, v, err := d.Decode()
 	requireT.ErrorIs(err, io.EOF)
 	requireT.Nil(v)
 
@@ -104,15 +104,15 @@ func TestTermTwoFiles(t *testing.T) {
 	defer f1.Close()
 	d = codec.NewDecoder(f1, format.NewMarshaller())
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: termsPerFile}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: termsPerFile + 1}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.ErrorIs(err, io.EOF)
 	requireT.Nil(v)
 }
@@ -181,23 +181,23 @@ func TestVoteSet(t *testing.T) {
 	defer f.Close()
 	d := codec.NewDecoder(f, format.NewMarshaller())
 
-	_, v, err := d.Decode()
+	_, _, v, err := d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: 1}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Vote{Candidate: candidate1}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Term{Term: 2}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.NoError(err)
 	requireT.Equal(&format.Vote{Candidate: candidate2}, v)
 
-	_, v, err = d.Decode()
+	_, _, v, err = d.Decode()
 	requireT.ErrorIs(err, io.EOF)
 	requireT.Nil(v)
 }
