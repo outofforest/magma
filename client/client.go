@@ -105,15 +105,29 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		return nil, errors.WithStack(err)
 	}
 
+	metaM := wire.NewMarshaller()
+
+	metaID, err := metaM.ID(&wire.TxMetadata{})
+	if err != nil {
+		return nil, err
+	}
+
+	entityMetadataID, err := metaM.ID(&wire.EntityMetadata{})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Client{
-		config:   config,
-		txCh:     make(chan tx, 1),
-		m:        m,
-		metaM:    wire.NewMarshaller(),
-		doneCh:   make(chan struct{}),
-		bufSize:  10 * (config.MaxMessageSize + varuint64.MaxSize),
-		typeDefs: typeDefs,
-		db:       db,
+		config:           config,
+		txCh:             make(chan tx, 1),
+		m:                m,
+		metaM:            metaM,
+		doneCh:           make(chan struct{}),
+		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
+		typeDefs:         typeDefs,
+		db:               db,
+		metaID:           metaID,
+		entityMetadataID: entityMetadataID,
 	}, nil
 }
 
@@ -128,7 +142,9 @@ type Client struct {
 	typeDefs map[reflect.Type]typeInfo
 	db       *memdb.MemDB
 
-	bufSize uint64
+	bufSize          uint64
+	metaID           uint64
+	entityMetadataID uint64
 }
 
 // Run runs client.
@@ -210,7 +226,7 @@ func (c *Client) Run(ctx context.Context) error {
 								}
 								meta := metaAny.(*wire.TxMetadata)
 
-								err = c.applyTx(txRaw[n+metaSize:])
+								err = c.applyTx(meta.EntityMetadataID, txRaw[n+metaSize:])
 								if err != nil && !errors.Is(err, ErrOutdatedTx) {
 									return err
 								}
@@ -289,10 +305,12 @@ func (c *Client) NewTransactor() *Transactor {
 		broadcastTimeout: c.config.BroadcastTimeout,
 		awaitTimeout:     c.config.AwaitTimeout,
 		doneCh:           c.doneCh,
+		metaID:           c.metaID,
+		entityMetadataID: c.entityMetadataID,
 	}
 }
 
-func (c *Client) applyTx(txRaw []byte) (retErr error) {
+func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 	tx := c.db.Txn(true)
 	defer func() {
 		if retErr != nil {
@@ -301,8 +319,14 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 	}()
 
 	for len(txRaw) > 0 {
-		msgID, n := varuint64.Parse(txRaw)
-		m, msgSize, err := c.m.Unmarshal(msgID, txRaw[n:])
+		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
+		if err != nil {
+			return err
+		}
+
+		entityMeta := entityMetaRaw.(*wire.EntityMetadata)
+
+		m, msgSize, err := c.m.Unmarshal(entityMeta.MessageID, txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}
@@ -316,26 +340,28 @@ func (c *Client) applyTx(txRaw []byte) (retErr error) {
 			return errors.Errorf("unknown type %s", name)
 		}
 
-		oID := newO.Field(typeDef.IDIndex).Interface()
-		oldO, err := tx.First(name, idIndex, oID)
+		oldO, err := tx.First(name, idIndex, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		if oldO != nil {
-			newRevision := newO.Field(typeDef.RevisionIndex).Interface().(types.Revision)
 			oldRevision := reflect.ValueOf(oldO).Field(typeDef.RevisionIndex).Interface().(types.Revision)
-			if newRevision <= oldRevision {
+			if entityMeta.Revision <= oldRevision {
 				tx.Abort()
 				return ErrOutdatedTx
 			}
 		}
 
+		idF := newO.Field(typeDef.IDIndex)
+		idF.Set(reflect.ValueOf(entityMeta.ID).Convert(idF.Type()))
+		newO.Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
+
 		if err := tx.Insert(name, newO.Interface()); err != nil {
 			return errors.WithStack(err)
 		}
 
-		txRaw = txRaw[n+msgSize:]
+		txRaw = txRaw[entityMetaSize+msgSize:]
 	}
 	tx.Commit()
 	return nil
@@ -363,6 +389,8 @@ type Transactor struct {
 	awaitTimeout     time.Duration
 	doneCh           chan struct{}
 	previousTxID     uuid.UUID
+	metaID           uint64
+	entityMetadataID uint64
 }
 
 // Tx creates and broadcasts transaction to the magma network.
@@ -399,16 +427,13 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	t.previousTxID = txID
 
 	meta := &wire.TxMetadata{
-		ID:      txID,
-		Time:    time.Now(),
-		Service: t.service,
+		ID:               txID,
+		Time:             time.Now(),
+		Service:          t.service,
+		EntityMetadataID: t.entityMetadataID,
 	}
 
-	metaID, err := t.metaM.ID(meta)
-	if err != nil {
-		return err
-	}
-	i += varuint64.Put(t.buf[i:], metaID)
+	i += varuint64.Put(t.buf[i:], t.metaID)
 	_, metaSize, err := t.metaM.Marshal(meta, t.buf[i:])
 	if err != nil {
 		return err
@@ -419,22 +444,34 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		ov := reflect.New(reflect.TypeOf(o))
 		ovValue := ov.Elem()
 		ovValue.Set(reflect.ValueOf(o))
-
-		name := typeName(ovValue.Type())
-		typeDef, exists := t.typeDefs[ovValue.Type()]
-		if !exists {
-			return errors.Errorf("unknown type %s", name)
-		}
-		revisionF := ovValue.Field(typeDef.RevisionIndex)
-		revisionF.Set(reflect.ValueOf(types.Revision(revisionF.Uint() + 1)))
-
 		o = ov.Interface()
 
 		id, err := t.m.ID(o)
 		if err != nil {
 			return err
 		}
-		i += varuint64.Put(t.buf[i:], id)
+
+		name := typeName(ovValue.Type())
+		typeDef, exists := t.typeDefs[ovValue.Type()]
+		if !exists {
+			return errors.Errorf("unknown type %s", name)
+		}
+
+		idF := ovValue.Field(typeDef.IDIndex)
+		revisionF := ovValue.Field(typeDef.RevisionIndex)
+
+		entityMeta := &wire.EntityMetadata{
+			ID:        idF.Convert(idType).Interface().(types.ID),
+			Revision:  types.Revision(revisionF.Uint() + 1),
+			MessageID: id,
+		}
+
+		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
+		if err != nil {
+			return err
+		}
+		i += entitySize
+
 		_, msgSize, err := t.m.Marshal(o, t.buf[i:])
 		if err != nil {
 			return err

@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	id0 uint64 = iota + 1
+	id1 uint64 = iota + 1
+	id0
 )
 
 var _ proton.Marshaller = Marshaller{}
@@ -28,6 +29,7 @@ type Marshaller struct {
 func (m Marshaller) Messages() []any {
 	return []any {
 		TxMetadata{},
+		EntityMetadata{},
 	}
 }
 
@@ -35,6 +37,8 @@ func (m Marshaller) Messages() []any {
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
 	case *TxMetadata:
+		return id1, nil
+	case *EntityMetadata:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -45,6 +49,8 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *TxMetadata:
+		return size1(msg2), nil
+	case *EntityMetadata:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -57,6 +63,8 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 	switch msg2 := msg.(type) {
 	case *TxMetadata:
+		return id1, marshal1(msg2, buf), nil
+	case *EntityMetadata:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -68,16 +76,78 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
-	case id0:
+	case id1:
 		msg := &TxMetadata{}
+		return msg, unmarshal1(msg, buf), nil
+	case id0:
+		msg := &EntityMetadata{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
 	}
 }
 
-func size0(m *TxMetadata) uint64 {
+func size0(m *EntityMetadata) uint64 {
 	var n uint64 = 18
+	{
+		// Revision
+
+		helpers.UInt64Size(m.Revision, &n)
+	}
+	{
+		// MessageID
+
+		helpers.UInt64Size(m.MessageID, &n)
+	}
+	return n
+}
+
+func marshal0(m *EntityMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// ID
+
+		copy(b[o:o+16], unsafe.Slice(&m.ID[0], 16))
+		o += 16
+	}
+	{
+		// Revision
+
+		helpers.UInt64Marshal(m.Revision, b, &o)
+	}
+	{
+		// MessageID
+
+		helpers.UInt64Marshal(m.MessageID, b, &o)
+	}
+
+	return o
+}
+
+func unmarshal0(m *EntityMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// ID
+
+		copy(unsafe.Slice(&m.ID[0], 16), b[o:o+16])
+		o += 16
+	}
+	{
+		// Revision
+
+		helpers.UInt64Unmarshal(&m.Revision, b, &o)
+	}
+	{
+		// MessageID
+
+		helpers.UInt64Unmarshal(&m.MessageID, b, &o)
+	}
+
+	return o
+}
+
+func size1(m *TxMetadata) uint64 {
+	var n uint64 = 19
 	{
 		// Time
 
@@ -92,10 +162,15 @@ func size0(m *TxMetadata) uint64 {
 			n += l
 		}
 	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Size(m.EntityMetadataID, &n)
+	}
 	return n
 }
 
-func marshal0(m *TxMetadata, b []byte) uint64 {
+func marshal1(m *TxMetadata, b []byte) uint64 {
 	var o uint64
 	{
 		// ID
@@ -118,11 +193,16 @@ func marshal0(m *TxMetadata, b []byte) uint64 {
 			o += l
 		}
 	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Marshal(m.EntityMetadataID, b, &o)
+	}
 
 	return o
 }
 
-func unmarshal0(m *TxMetadata, b []byte) uint64 {
+func unmarshal1(m *TxMetadata, b []byte) uint64 {
 	var o uint64
 	{
 		// ID
@@ -148,6 +228,11 @@ func unmarshal0(m *TxMetadata, b []byte) uint64 {
 				o += l
 			}
 		}
+	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
 	}
 
 	return o
