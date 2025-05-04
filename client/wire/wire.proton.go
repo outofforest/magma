@@ -27,7 +27,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		TxMetadata{},
 		EntityMetadata{},
 	}
@@ -224,7 +224,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Service = string(b[o : o+l])
+				m.Service = string(b[o:o+l])
 				o += l
 			}
 		}
