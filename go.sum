@@ -36,8 +36,8 @@ github.com/outofforest/mass v0.2.1 h1:oIzOnoTJqN8eVXo5jxk1htOhW7bL7hy2JHrvnTsfvt
 github.com/outofforest/mass v0.2.1/go.mod h1:rqr19KwYSKncmsmZCmMatTsg8pI+ElxerH9v1SGU1CQ=
 github.com/outofforest/parallel v0.2.3 h1:DRIgHr7XTL4LLgsTqrj041kulv4ajtbCkRbkOG5psWY=
 github.com/outofforest/parallel v0.2.3/go.mod h1:cu210xIjJtOMXR2ERzEcNA2kr0Z0xfZjSKw2jTxAQ2E=
-github.com/outofforest/proton v0.12.0 h1:qQqvJAKraN7nOkAJnIr6J9+pGHjAOelnTwtYPVkaCkU=
-github.com/outofforest/proton v0.12.0/go.mod h1:ygMvEvOD6IbRVVilJ1rqmzz8NuNXUe0N4KdWbDS/bHM=
+github.com/outofforest/proton v0.13.0 h1:8M6GeiiKxfpJL1J11F4NsVZYE562hf1nd7Fk0kpc0o0=
+github.com/outofforest/proton v0.13.0/go.mod h1:ygMvEvOD6IbRVVilJ1rqmzz8NuNXUe0N4KdWbDS/bHM=
 github.com/outofforest/resonance v0.19.0 h1:s2gU6lTG4/yd8KRD9MG6YHrGRhWHuHSf7UFL62+eCOQ=
 github.com/outofforest/resonance v0.19.0/go.mod h1:vWW/C3y85L25M3Q55YSi+HCEqDZv3VR/MzQ+mO/DNhY=
 github.com/outofforest/run v0.8.0 h1:p3tSksh6AWzxsZ+baZzeQhgsfugKz6d6RaE7xfQYt5M=

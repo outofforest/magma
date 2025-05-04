@@ -10,7 +10,7 @@ import (
 
 func main() {
 	proton.Generate("../c2p.proton.go",
-		c2p.Init{},
-		wire.StartLogStream{},
+		proton.Message(c2p.Init{}),
+		proton.Message(wire.StartLogStream{}),
 	)
 }

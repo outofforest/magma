@@ -9,7 +9,7 @@ import (
 
 func main() {
 	proton.Generate("../format.proton.go",
-		format.Term{},
-		format.Vote{},
+		proton.Message(format.Term{}),
+		proton.Message(format.Vote{}),
 	)
 }
