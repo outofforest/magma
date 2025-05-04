@@ -14,9 +14,19 @@ import (
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/proton"
 )
 
 const queueCapacity = 10
+
+// Generate generates serialization code for entities.
+func Generate(filePath string, entities ...any) {
+	msgs := make([]proton.Msg, 0, len(entities))
+	for _, e := range entities {
+		msgs = append(msgs, proton.Message(e, "ID", "Revision"))
+	}
+	proton.Generate(filePath, msgs...)
+}
 
 // Run runs magma.
 func Run(
