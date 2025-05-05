@@ -1,6 +1,8 @@
 package format
 
 import (
+	"reflect"
+
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
@@ -25,7 +27,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		Term{},
 		Vote{},
 	}
@@ -85,6 +87,34 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *Term:
+		return id1, makePatch1(msg2, msgSrc.(*Term), buf), nil
+	case *Vote:
+		return id0, makePatch0(msg2, msgSrc.(*Vote), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *Term:
+		return applyPatch1(msg2, buf), nil
+	case *Vote:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 func size0(m *Vote) uint64 {
 	var n uint64 = 1
 	{
@@ -124,8 +154,49 @@ func unmarshal0(m *Vote, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Candidate = types.ServerID(b[o:o+l])
+				m.Candidate = types.ServerID(b[o : o+l])
 				o += l
+			}
+		}
+	}
+
+	return o
+}
+
+func makePatch0(m, mSrc *Vote, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Candidate
+
+		if reflect.DeepEqual(m.Candidate, mSrc.Candidate) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			{
+				l := uint64(len(m.Candidate))
+				helpers.UInt64Marshal(l, b, &o)
+				copy(b[o:o+l], m.Candidate)
+				o += l
+			}
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *Vote, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Candidate
+
+		if b[0]&0x01 != 0 {
+			{
+				var l uint64
+				helpers.UInt64Unmarshal(&l, b, &o)
+				if l > 0 {
+					m.Candidate = types.ServerID(b[o : o+l])
+					o += l
+				}
 			}
 		}
 	}
@@ -160,6 +231,35 @@ func unmarshal1(m *Term, b []byte) uint64 {
 		// Term
 
 		helpers.UInt64Unmarshal(&m.Term, b, &o)
+	}
+
+	return o
+}
+
+func makePatch1(m, mSrc *Term, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch1(m *Term, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
 	}
 
 	return o

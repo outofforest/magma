@@ -1,6 +1,8 @@
 package l2p
 
 import (
+	"reflect"
+
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
@@ -27,7 +29,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		types.LogSyncRequest{},
 		types.LogSyncResponse{},
 		wire.StartLogStream{},
@@ -97,6 +99,38 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *types.LogSyncRequest:
+		return id2, makePatch2(msg2, msgSrc.(*types.LogSyncRequest), buf), nil
+	case *types.LogSyncResponse:
+		return id1, makePatch1(msg2, msgSrc.(*types.LogSyncResponse), buf), nil
+	case *wire.StartLogStream:
+		return id0, makePatch0(msg2, msgSrc.(*wire.StartLogStream), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *types.LogSyncRequest:
+		return applyPatch2(msg2, buf), nil
+	case *types.LogSyncResponse:
+		return applyPatch1(msg2, buf), nil
+	case *wire.StartLogStream:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 func size0(m *wire.StartLogStream) uint64 {
 	var n uint64 = 1
 	{
@@ -124,6 +158,35 @@ func unmarshal0(m *wire.StartLogStream, b []byte) uint64 {
 		// Length
 
 		helpers.UInt64Unmarshal(&m.Length, b, &o)
+	}
+
+	return o
+}
+
+func makePatch0(m, mSrc *wire.StartLogStream, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Length
+
+		if reflect.DeepEqual(m.Length, mSrc.Length) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Length, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *wire.StartLogStream, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Length
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Length, b, &o)
+		}
 	}
 
 	return o
@@ -191,6 +254,69 @@ func unmarshal1(m *types.LogSyncResponse, b []byte) uint64 {
 	return o
 }
 
+func makePatch1(m, mSrc *types.LogSyncResponse, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// SyncLogIndex
+
+		if reflect.DeepEqual(m.SyncLogIndex, mSrc.SyncLogIndex) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.SyncLogIndex, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch1(m *types.LogSyncResponse, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// SyncLogIndex
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.SyncLogIndex, b, &o)
+		}
+	}
+
+	return o
+}
+
 func size2(m *types.LogSyncRequest) uint64 {
 	var n uint64 = 3
 	{
@@ -248,6 +374,69 @@ func unmarshal2(m *types.LogSyncRequest, b []byte) uint64 {
 		// LastLogTerm
 
 		helpers.UInt64Unmarshal(&m.LastLogTerm, b, &o)
+	}
+
+	return o
+}
+
+func makePatch2(m, mSrc *types.LogSyncRequest, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// LastLogTerm
+
+		if reflect.DeepEqual(m.LastLogTerm, mSrc.LastLogTerm) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.LastLogTerm, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch2(m *types.LogSyncRequest, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// LastLogTerm
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.LastLogTerm, b, &o)
+		}
 	}
 
 	return o

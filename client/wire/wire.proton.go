@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"reflect"
 	"time"
 	"unsafe"
 
@@ -27,7 +28,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		TxMetadata{},
 		EntityMetadata{},
 	}
@@ -87,6 +88,34 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *TxMetadata:
+		return id1, makePatch1(msg2, msgSrc.(*TxMetadata), buf), nil
+	case *EntityMetadata:
+		return id0, makePatch0(msg2, msgSrc.(*EntityMetadata), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *TxMetadata:
+		return applyPatch1(msg2, buf), nil
+	case *EntityMetadata:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 func size0(m *EntityMetadata) uint64 {
 	var n uint64 = 18
 	{
@@ -141,6 +170,71 @@ func unmarshal0(m *EntityMetadata, b []byte) uint64 {
 		// MessageID
 
 		helpers.UInt64Unmarshal(&m.MessageID, b, &o)
+	}
+
+	return o
+}
+
+func makePatch0(m, mSrc *EntityMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if reflect.DeepEqual(m.ID, mSrc.ID) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			copy(b[o:o+16], unsafe.Slice(&m.ID[0], 16))
+			o += 16
+		}
+	}
+	{
+		// Revision
+
+		if reflect.DeepEqual(m.Revision, mSrc.Revision) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.Revision, b, &o)
+		}
+	}
+	{
+		// MessageID
+
+		if reflect.DeepEqual(m.MessageID, mSrc.MessageID) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.MessageID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *EntityMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if b[0]&0x01 != 0 {
+			copy(unsafe.Slice(&m.ID[0], 16), b[o:o+16])
+			o += 16
+		}
+	}
+	{
+		// Revision
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.Revision, b, &o)
+		}
+	}
+	{
+		// MessageID
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.MessageID, b, &o)
+		}
 	}
 
 	return o
@@ -224,7 +318,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Service = string(b[o:o+l])
+				m.Service = string(b[o : o+l])
 				o += l
 			}
 		}
@@ -233,6 +327,102 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 		// EntityMetadataID
 
 		helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
+	}
+
+	return o
+}
+
+func makePatch1(m, mSrc *TxMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if reflect.DeepEqual(m.ID, mSrc.ID) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			copy(b[o:o+16], unsafe.Slice(&m.ID[0], 16))
+			o += 16
+		}
+	}
+	{
+		// Time
+
+		if reflect.DeepEqual(m.Time, mSrc.Time) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.Int64Marshal(m.Time.Unix(), b, &o)
+		}
+	}
+	{
+		// Service
+
+		if reflect.DeepEqual(m.Service, mSrc.Service) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			{
+				l := uint64(len(m.Service))
+				helpers.UInt64Marshal(l, b, &o)
+				copy(b[o:o+l], m.Service)
+				o += l
+			}
+		}
+	}
+	{
+		// EntityMetadataID
+
+		if reflect.DeepEqual(m.EntityMetadataID, mSrc.EntityMetadataID) {
+			b[0] &= 0xF7
+		} else {
+			b[0] |= 0x08
+			helpers.UInt64Marshal(m.EntityMetadataID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch1(m *TxMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if b[0]&0x01 != 0 {
+			copy(unsafe.Slice(&m.ID[0], 16), b[o:o+16])
+			o += 16
+		}
+	}
+	{
+		// Time
+
+		if b[0]&0x02 != 0 {
+			var vi int64
+			helpers.Int64Unmarshal(&vi, b, &o)
+			m.Time = time.Unix(vi, 0)
+		}
+	}
+	{
+		// Service
+
+		if b[0]&0x04 != 0 {
+			{
+				var l uint64
+				helpers.UInt64Unmarshal(&l, b, &o)
+				if l > 0 {
+					m.Service = string(b[o : o+l])
+					o += l
+				}
+			}
+		}
+	}
+	{
+		// EntityMetadataID
+
+		if b[0]&0x08 != 0 {
+			helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
+		}
 	}
 
 	return o

@@ -1,6 +1,8 @@
 package format
 
 import (
+	"reflect"
+
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
 	"github.com/pkg/errors"
@@ -23,7 +25,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		Header{},
 	}
 }
@@ -70,6 +72,30 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
+	}
+}
+
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *Header:
+		return id0, makePatch0(msg2, msgSrc.(*Header), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *Header:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
 	}
 }
 
@@ -160,6 +186,103 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		// HeaderChecksum
 
 		helpers.UInt64Unmarshal(&m.HeaderChecksum, b, &o)
+	}
+
+	return o
+}
+
+func makePatch0(m, mSrc *Header, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// PreviousTerm
+
+		if reflect.DeepEqual(m.PreviousTerm, mSrc.PreviousTerm) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.PreviousTerm, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
+		}
+	}
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xF7
+		} else {
+			b[0] |= 0x08
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// HeaderChecksum
+
+		if reflect.DeepEqual(m.HeaderChecksum, mSrc.HeaderChecksum) {
+			b[0] &= 0xEF
+		} else {
+			b[0] |= 0x10
+			helpers.UInt64Marshal(m.HeaderChecksum, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *Header, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// PreviousTerm
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.PreviousTerm, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
+		}
+	}
+	{
+		// Term
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x08 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// HeaderChecksum
+
+		if b[0]&0x10 != 0 {
+			helpers.UInt64Unmarshal(&m.HeaderChecksum, b, &o)
+		}
 	}
 
 	return o

@@ -61,35 +61,47 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 
 	revisionType := reflect.TypeOf(types.Revision(0))
 
-	typeDefs := map[reflect.Type]typeInfo{}
+	byID := map[uint64]typeInfo{}
+	byType := map[reflect.Type]typeInfo{}
 	for _, o := range objectTypes {
 		t := reflect.TypeOf(o)
+
 		idF, exists := t.FieldByName("ID")
 		if !exists {
-			return nil, errors.Errorf("object %s has no ID field", typeName(t))
+			return nil, errors.Errorf("object %s has no ID field", t)
 		}
 		if !idF.Type.ConvertibleTo(idType) {
-			return nil, errors.Errorf("object's %s ID field must be of type %s", typeName(t), typeName(idType))
+			return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
 		}
 		revisionF, exists := t.FieldByName("Revision")
 		if !exists {
-			return nil, errors.Errorf("object %s has no Revision field", typeName(t))
+			return nil, errors.Errorf("object %s has no Revision field", t)
 		}
 		if revisionF.Type != revisionType {
-			return nil, errors.Errorf("object's %s Revision field must be of type %s", typeName(t),
-				typeName(revisionType))
+			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
 		}
 
-		name := typeName(t)
-		if _, exists := typeDefs[t]; exists {
-			return nil, errors.Errorf("double registration of object %s", name)
+		if _, exists := byType[t]; exists {
+			return nil, errors.Errorf("double registration of object %s", t)
 		}
-		typeDefs[t] = typeInfo{
+
+		mID, err := m.ID(reflect.New(t).Interface())
+		if err != nil {
+			return nil, err
+		}
+
+		table := typeName(t)
+		info := typeInfo{
 			IDIndex:       idF.Index[0],
 			RevisionIndex: revisionF.Index[0],
+			Type:          t,
+			IDType:        idF.Type,
+			Table:         table,
 		}
-		dbSchema.Tables[name] = &memdb.TableSchema{
-			Name: name,
+		byID[mID] = info
+		byType[t] = info
+		dbSchema.Tables[table] = &memdb.TableSchema{
+			Name: table,
 			Indexes: map[string]*memdb.IndexSchema{
 				idIndex: {
 					Name:    idIndex,
@@ -124,7 +136,8 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 		metaM:            metaM,
 		doneCh:           make(chan struct{}),
 		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
-		typeDefs:         typeDefs,
+		byID:             byID,
+		byType:           byType,
 		db:               db,
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
@@ -139,8 +152,9 @@ type Client struct {
 	metaM  proton.Marshaller
 	doneCh chan struct{}
 
-	typeDefs map[reflect.Type]typeInfo
-	db       *memdb.MemDB
+	byID   map[uint64]typeInfo
+	byType map[reflect.Type]typeInfo
+	db     *memdb.MemDB
 
 	bufSize          uint64
 	metaID           uint64
@@ -298,7 +312,7 @@ func (c *Client) NewTransactor() *Transactor {
 		txCh:             c.txCh,
 		m:                c.m,
 		metaM:            c.metaM,
-		typeDefs:         c.typeDefs,
+		byType:           c.byType,
 		db:               c.db,
 		maxMessageSize:   c.config.MaxMessageSize,
 		bufSize:          c.bufSize,
@@ -326,38 +340,43 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 
 		entityMeta := entityMetaRaw.(*wire.EntityMetadata)
 
-		m, msgSize, err := c.m.Unmarshal(entityMeta.MessageID, txRaw[entityMetaSize:])
-		if err != nil {
-			return err
-		}
-
-		newO := reflect.ValueOf(m).Elem()
-		newOType := newO.Type()
-		name := typeName(newOType)
-
-		typeDef, exists := c.typeDefs[newOType]
+		typeDef, exists := c.byID[entityMeta.MessageID]
 		if !exists {
-			return errors.Errorf("unknown type %s", name)
+			return errors.Errorf("unknown type %s", typeDef.Type)
 		}
 
-		oldO, err := tx.First(name, idIndex, entityMeta.ID)
+		o, err := tx.First(typeDef.Table, idIndex, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		if oldO != nil {
-			oldRevision := reflect.ValueOf(oldO).Field(typeDef.RevisionIndex).Interface().(types.Revision)
+		oValue := reflect.ValueOf(o)
+		if o != nil {
+			oldRevision := oValue.Field(typeDef.RevisionIndex).Interface().(types.Revision)
 			if entityMeta.Revision <= oldRevision {
 				tx.Abort()
 				return ErrOutdatedTx
 			}
 		}
 
-		idF := newO.Field(typeDef.IDIndex)
-		idF.Set(reflect.ValueOf(entityMeta.ID).Convert(idF.Type()))
-		newO.Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
+		ov := reflect.New(typeDef.Type)
+		ovValue := ov.Elem()
+		if o != nil {
+			ovValue.Set(oValue)
+		}
 
-		if err := tx.Insert(name, newO.Interface()); err != nil {
+		msgSize, err := c.m.ApplyPatch(ov.Interface(), txRaw[entityMetaSize:])
+		if err != nil {
+			return err
+		}
+
+		if o == nil {
+			idF := ovValue.Field(typeDef.IDIndex)
+			idF.Set(reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType))
+		}
+		ovValue.Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
+
+		if err := tx.Insert(typeDef.Table, ovValue.Interface()); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -380,7 +399,7 @@ type Transactor struct {
 	txCh             chan tx
 	m                proton.Marshaller
 	metaM            proton.Marshaller
-	typeDefs         map[reflect.Type]typeInfo
+	byType           map[reflect.Type]typeInfo
 	db               *memdb.MemDB
 	maxMessageSize   uint64
 	buf              []byte
@@ -397,15 +416,16 @@ type Transactor struct {
 func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr error) {
 	pendingTx := &Tx{
 		View: &View{
-			tx:       t.db.Txn(true),
-			typeDefs: t.typeDefs,
+			tx:     t.db.Txn(true),
+			byType: t.byType,
 		},
-		changes: map[types.ID]any{},
+		changes: map[types.ID]reflect.Value{},
 	}
 
 	defer pendingTx.tx.Abort()
 	defer txRecover(&retErr)
 
+	snapshot := t.db.Txn(false)
 	if err := txF(pendingTx); err != nil {
 		return err
 	}
@@ -440,21 +460,20 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	}
 	i += metaSize
 
-	for _, o := range pendingTx.changes {
-		ov := reflect.New(reflect.TypeOf(o))
+	for _, v := range pendingTx.changes {
+		ov := reflect.New(v.Type())
 		ovValue := ov.Elem()
-		ovValue.Set(reflect.ValueOf(o))
-		o = ov.Interface()
+		ovValue.Set(v)
+		o := ov.Interface()
 
 		id, err := t.m.ID(o)
 		if err != nil {
 			return err
 		}
 
-		name := typeName(ovValue.Type())
-		typeDef, exists := t.typeDefs[ovValue.Type()]
+		typeDef, exists := t.byType[ovValue.Type()]
 		if !exists {
-			return errors.Errorf("unknown type %s", name)
+			return errors.Errorf("unknown type %s", ovValue.Type())
 		}
 
 		idF := ovValue.Field(typeDef.IDIndex)
@@ -466,13 +485,22 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 			MessageID: id,
 		}
 
+		oOldValue, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		oOldV := reflect.New(v.Type())
+		if oOldValue != nil {
+			oOldV.Elem().Set(reflect.ValueOf(oOldValue))
+		}
+
 		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
 		if err != nil {
 			return err
 		}
 		i += entitySize
 
-		_, msgSize, err := t.m.Marshal(o, t.buf[i:])
+		_, msgSize, err := t.m.MakePatch(o, oOldV.Interface(), t.buf[i:])
 		if err != nil {
 			return err
 		}
@@ -556,4 +584,7 @@ func typeName(t reflect.Type) string {
 type typeInfo struct {
 	IDIndex       int
 	RevisionIndex int
+	Type          reflect.Type
+	IDType        reflect.Type
+	Table         string
 }

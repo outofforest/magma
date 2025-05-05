@@ -1,6 +1,8 @@
 package c2p
 
 import (
+	"reflect"
+
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
@@ -26,7 +28,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		Init{},
 		wire.StartLogStream{},
 	}
@@ -86,6 +88,34 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *Init:
+		return id1, makePatch1(msg2, msgSrc.(*Init), buf), nil
+	case *wire.StartLogStream:
+		return id0, makePatch0(msg2, msgSrc.(*wire.StartLogStream), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *Init:
+		return applyPatch1(msg2, buf), nil
+	case *wire.StartLogStream:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 func size0(m *wire.StartLogStream) uint64 {
 	var n uint64 = 1
 	{
@@ -113,6 +143,35 @@ func unmarshal0(m *wire.StartLogStream, b []byte) uint64 {
 		// Length
 
 		helpers.UInt64Unmarshal(&m.Length, b, &o)
+	}
+
+	return o
+}
+
+func makePatch0(m, mSrc *wire.StartLogStream, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Length
+
+		if reflect.DeepEqual(m.Length, mSrc.Length) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Length, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *wire.StartLogStream, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Length
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Length, b, &o)
+		}
 	}
 
 	return o
@@ -167,7 +226,7 @@ func unmarshal1(m *Init, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.PartitionID = types.PartitionID(b[o:o+l])
+				m.PartitionID = types.PartitionID(b[o : o+l])
 				o += l
 			}
 		}
@@ -176,6 +235,64 @@ func unmarshal1(m *Init, b []byte) uint64 {
 		// NextLogIndex
 
 		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+	}
+
+	return o
+}
+
+func makePatch1(m, mSrc *Init, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// PartitionID
+
+		if reflect.DeepEqual(m.PartitionID, mSrc.PartitionID) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			{
+				l := uint64(len(m.PartitionID))
+				helpers.UInt64Marshal(l, b, &o)
+				copy(b[o:o+l], m.PartitionID)
+				o += l
+			}
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch1(m *Init, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// PartitionID
+
+		if b[0]&0x01 != 0 {
+			{
+				var l uint64
+				helpers.UInt64Unmarshal(&l, b, &o)
+				if l > 0 {
+					m.PartitionID = types.PartitionID(b[o : o+l])
+					o += l
+				}
+			}
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
 	}
 
 	return o
