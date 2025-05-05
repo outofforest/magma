@@ -134,8 +134,15 @@ func TestCluster(t *testing.T) {
 	fmt.Println("Start")
 
 	tr := cl.NewTransactor()
-	for range 200 {
+	id := NewID[entities.AccountID]()
+	for i := range 200 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
+			tx.Set(entities.Account{
+				ID:        id,
+				Revision:  types.Revision(i),
+				FirstName: fmt.Sprintf("First-%d", i),
+				LastName:  "Last",
+			})
 			tx.Set(entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",

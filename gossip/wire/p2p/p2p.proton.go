@@ -1,6 +1,8 @@
 package p2p
 
 import (
+	"reflect"
+
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
@@ -107,6 +109,42 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// MakePatch creates a patch.
+func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
+	defer helpers.RecoverMakePatch(&retErr)
+
+	switch msg2 := msgDst.(type) {
+	case *types.LogACK:
+		return id3, makePatch3(msg2, msgSrc.(*types.LogACK), buf), nil
+	case *types.VoteRequest:
+		return id2, makePatch2(msg2, msgSrc.(*types.VoteRequest), buf), nil
+	case *types.VoteResponse:
+		return id1, makePatch1(msg2, msgSrc.(*types.VoteResponse), buf), nil
+	case *types.Heartbeat:
+		return id0, makePatch0(msg2, msgSrc.(*types.Heartbeat), buf), nil
+	default:
+		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
+// ApplyPatch applies patch.
+func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
+	defer helpers.RecoverUnmarshal(&retErr)
+
+	switch msg2 := msg.(type) {
+	case *types.LogACK:
+		return applyPatch3(msg2, buf), nil
+	case *types.VoteRequest:
+		return applyPatch2(msg2, buf), nil
+	case *types.VoteResponse:
+		return applyPatch1(msg2, buf), nil
+	case *types.Heartbeat:
+		return applyPatch0(msg2, buf), nil
+	default:
+		return 0, errors.Errorf("unknown message type %T", msg)
+	}
+}
+
 func size0(m *types.Heartbeat) uint64 {
 	var n uint64 = 2
 	{
@@ -154,6 +192,52 @@ func unmarshal0(m *types.Heartbeat, b []byte) uint64 {
 	return o
 }
 
+func makePatch0(m, mSrc *types.Heartbeat, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// LeaderCommit
+
+		if reflect.DeepEqual(m.LeaderCommit, mSrc.LeaderCommit) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.LeaderCommit, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch0(m *types.Heartbeat, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// LeaderCommit
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.LeaderCommit, b, &o)
+		}
+	}
+
+	return o
+}
+
 func size1(m *types.VoteResponse) uint64 {
 	var n uint64 = 2
 	{
@@ -195,6 +279,51 @@ func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
 		// VoteGranted
 
 		m.VoteGranted = b[0]&0x01 != 0
+	}
+
+	return o
+}
+
+func makePatch1(m, mSrc *types.VoteResponse, b []byte) uint64 {
+	var o uint64 = 2
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// VoteGranted
+
+		if m.VoteGranted == mSrc.VoteGranted {
+			b[1] &= 0xFE
+		} else {
+			b[1] |= 0x01
+		}
+	}
+
+	return o
+}
+
+func applyPatch1(m *types.VoteResponse, b []byte) uint64 {
+	var o uint64 = 2
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// VoteGranted
+
+		if b[1]&0x01 != 0 {
+			m.VoteGranted = !m.VoteGranted
+		}
 	}
 
 	return o
@@ -262,6 +391,69 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 	return o
 }
 
+func makePatch2(m, mSrc *types.VoteRequest, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// LastLogTerm
+
+		if reflect.DeepEqual(m.LastLogTerm, mSrc.LastLogTerm) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.LastLogTerm, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch2(m *types.VoteRequest, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// LastLogTerm
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.LastLogTerm, b, &o)
+		}
+	}
+
+	return o
+}
+
 func size3(m *types.LogACK) uint64 {
 	var n uint64 = 3
 	{
@@ -319,6 +511,69 @@ func unmarshal3(m *types.LogACK, b []byte) uint64 {
 		// SyncLogIndex
 
 		helpers.UInt64Unmarshal(&m.SyncLogIndex, b, &o)
+	}
+
+	return o
+}
+
+func makePatch3(m, mSrc *types.LogACK, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// SyncLogIndex
+
+		if reflect.DeepEqual(m.SyncLogIndex, mSrc.SyncLogIndex) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.SyncLogIndex, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch3(m *types.LogACK, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Term
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// NextLogIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		}
+	}
+	{
+		// SyncLogIndex
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.SyncLogIndex, b, &o)
+		}
 	}
 
 	return o

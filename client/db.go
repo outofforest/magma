@@ -11,51 +11,51 @@ import (
 
 // View represents immutable snapshot of the DB.
 type View struct {
-	tx       *memdb.Txn
-	typeDefs map[reflect.Type]typeInfo
+	tx     *memdb.Txn
+	byType map[reflect.Type]typeInfo
 }
 
 // Tx represents transaction.
 type Tx struct {
 	*View
 
-	changes map[types.ID]any
+	changes map[types.ID]reflect.Value
 }
 
 var emptyID types.ID
 
 // Set sets object in transaction.
 func (tx *Tx) Set(o any) {
-	oType := reflect.TypeOf(o)
+	oValue := reflect.ValueOf(o)
+	oType := oValue.Type()
 	if oType.Kind() == reflect.Ptr {
 		panic(errors.New("object must not be a pointer"))
 	}
 
-	name := typeName(oType)
-	typeDef, exists := tx.typeDefs[oType]
+	typeDef, exists := tx.byType[oType]
 	if !exists {
-		panic(errors.Errorf("unknown type %s", name))
+		panic(errors.Errorf("unknown type %s", oType))
 	}
-	id := reflect.ValueOf(o).Field(typeDef.IDIndex).Convert(idType).Interface().(types.ID)
+	id := oValue.Field(typeDef.IDIndex).Convert(idType).Interface().(types.ID)
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
 
-	if err := tx.tx.Insert(name, o); err != nil {
+	if err := tx.tx.Insert(typeDef.Table, o); err != nil {
 		panic(errors.WithStack(err))
 	}
-	tx.changes[id] = o
+
+	tx.changes[id] = oValue
 }
 
 // Get gets object from view.
 func Get[ET any, IDT idConstraint](v *View, id IDT) (ET, bool) {
 	var e ET
 	et := reflect.TypeOf(e)
-	name := typeName(et)
 
-	typeDef, exists := v.typeDefs[et]
+	typeDef, exists := v.byType[et]
 	if !exists {
-		panic(errors.Errorf("unknown type %s", name))
+		panic(errors.Errorf("unknown type %s", et))
 	}
 
 	expectedIDType := et.Field(typeDef.IDIndex).Type
@@ -64,7 +64,7 @@ func Get[ET any, IDT idConstraint](v *View, id IDT) (ET, bool) {
 		panic(errors.Errorf("expected id type %s, got %s", expectedIDType, receivedIDType))
 	}
 
-	o, err := v.tx.First(name, idIndex, id)
+	o, err := v.tx.First(typeDef.Table, idIndex, id)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
