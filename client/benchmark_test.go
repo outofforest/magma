@@ -64,23 +64,31 @@ func TestCluster(t *testing.T) {
 	config := types.Config{
 		Servers: []types.ServerConfig{
 			{
-				ID:         peer1,
-				Partitions: []types.PartitionID{"default"},
+				ID: peer1,
+				Partitions: types.Partitions{
+					"default": true,
+				},
 				P2PAddress: p2p1.Addr().String(),
 			},
 			{
-				ID:         peer2,
-				Partitions: []types.PartitionID{"default"},
+				ID: peer2,
+				Partitions: types.Partitions{
+					"default": true,
+				},
 				P2PAddress: p2p2.Addr().String(),
 			},
 			{
-				ID:         peer3,
-				Partitions: []types.PartitionID{"default"},
+				ID: peer3,
+				Partitions: types.Partitions{
+					"default": true,
+				},
 				P2PAddress: p2p3.Addr().String(),
 			},
 			{
-				ID:         peer4,
-				Partitions: []types.PartitionID{"default"},
+				ID: peer4,
+				Partitions: types.Partitions{
+					"default": true,
+				},
 				P2PAddress: p2p4.Addr().String(),
 			},
 		},

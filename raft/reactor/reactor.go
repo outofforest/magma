@@ -48,20 +48,18 @@ type Result struct {
 }
 
 // New creates new reactor of raft consensus algorithm.
-func New(serverID magmatypes.ServerID, servers []magmatypes.ServerID, s *state.State) *Reactor {
-	peers := make([]magmatypes.ServerID, 0, len(servers))
-	for _, s := range servers {
-		if s != serverID {
-			peers = append(peers, s)
-		}
-	}
-
+func New(
+	serverID magmatypes.ServerID,
+	activePeers []magmatypes.ServerID,
+	passivePeers []magmatypes.ServerID,
+	s *state.State,
+) *Reactor {
 	r := &Reactor{
 		serverID:    serverID,
-		servers:     servers,
-		peers:       peers,
+		peers:       append(append([]magmatypes.ServerID{}, activePeers...), passivePeers...),
+		activePeers: activePeers,
 		state:       s,
-		majority:    (len(peers)+1)/2 + 1,
+		majority:    (len(activePeers)+1)/2 + 1,
 		lastLogTerm: s.LastLogTerm(),
 		commitInfo: types.CommitInfo{
 			NextLogIndex: s.NextLogIndex(),
@@ -77,11 +75,11 @@ func New(serverID magmatypes.ServerID, servers []magmatypes.ServerID, s *state.S
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
-	serverID magmatypes.ServerID
-	servers  []magmatypes.ServerID
-	peers    []magmatypes.ServerID
-	leaderID magmatypes.ServerID
-	state    *state.State
+	serverID    magmatypes.ServerID
+	peers       []magmatypes.ServerID
+	activePeers []magmatypes.ServerID
+	leaderID    magmatypes.ServerID
+	state       *state.State
 
 	majority             int
 	role                 types.Role
@@ -177,7 +175,7 @@ func (r *Reactor) applyLogACK(peerID magmatypes.ServerID, m *types.LogACK) (Resu
 
 	if m.NextLogIndex >= r.nextIndex[peerID] {
 		r.nextIndex[peerID] = m.NextLogIndex
-		if m.SyncLogIndex > r.matchIndex[peerID] {
+		if index, exists := r.matchIndex[peerID]; exists && m.SyncLogIndex > index {
 			r.matchIndex[peerID] = m.SyncLogIndex
 			r.updateLeaderCommit(m.SyncLogIndex)
 		}
@@ -223,8 +221,10 @@ func (r *Reactor) applyLogSyncResponse(
 	}
 
 	if m.NextLogIndex == r.nextIndex[peerID] {
-		r.matchIndex[peerID] = m.SyncLogIndex
-		r.updateLeaderCommit(m.SyncLogIndex)
+		if _, exists := r.matchIndex[peerID]; exists {
+			r.matchIndex[peerID] = m.SyncLogIndex
+			r.updateLeaderCommit(m.SyncLogIndex)
+		}
 
 		return r.resultMessageAndRecipient(ChannelL2P, &StartTransfer{
 			NextLogIndex: m.NextLogIndex,
@@ -380,7 +380,9 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 		return r.resultEmpty()
 	}
 
-	delete(r.matchIndex, peerID)
+	if _, exists := r.matchIndex[peerID]; exists {
+		r.matchIndex[peerID] = 0
+	}
 
 	r.nextIndex[peerID] = r.commitInfo.NextLogIndex
 
@@ -437,7 +439,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 		return r.transitionToLeader()
 	}
 
-	return r.resultBroadcastMessage(ChannelP2P, &types.VoteRequest{
+	return r.resultBroadcastMessage(r.activePeers, ChannelP2P, &types.VoteRequest{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.commitInfo.NextLogIndex,
 		LastLogTerm:  r.lastLogTerm,
@@ -463,11 +465,12 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	for _, p := range r.peers {
+	for _, p := range r.activePeers {
 		r.nextIndex[p] = r.commitInfo.NextLogIndex
+		r.matchIndex[p] = 0
 	}
 
-	return r.resultBroadcastMessage(ChannelL2P, r.newLogSyncRequest())
+	return r.resultBroadcastMessage(r.peers, ChannelL2P, r.newLogSyncRequest())
 }
 
 func (r *Reactor) newLogSyncRequest() *types.LogSyncRequest {
@@ -548,7 +551,7 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultBroadcastMessage(ChannelP2P, &types.Heartbeat{
+	return r.resultBroadcastMessage(r.activePeers, ChannelP2P, &types.Heartbeat{
 		Term:         r.state.CurrentTerm(),
 		LeaderCommit: r.commitInfo.CommittedCount,
 	})
@@ -571,8 +574,7 @@ func (r *Reactor) updateLeaderCommit(candidate magmatypes.Index) bool {
 
 	var greater int
 	nextCommittedCount := candidate
-	for _, s := range r.servers {
-		index := r.matchIndex[s]
+	for _, index := range r.matchIndex {
 		if index <= r.commitInfo.CommittedCount || index <= r.indexTermStarted {
 			continue
 		}
@@ -616,13 +618,17 @@ func (r *Reactor) resultMessageAndRecipient(
 	}, nil
 }
 
-func (r *Reactor) resultBroadcastMessage(channel Channel, message any) (Result, error) {
+func (r *Reactor) resultBroadcastMessage(
+	recipients []magmatypes.ServerID,
+	channel Channel,
+	message any,
+) (Result, error) {
 	return Result{
 		Role:       r.role,
 		LeaderID:   r.leaderID,
 		CommitInfo: r.commitInfo,
 		Channel:    channel,
 		Message:    message,
-		Recipients: r.peers,
+		Recipients: recipients,
 	}, nil
 }

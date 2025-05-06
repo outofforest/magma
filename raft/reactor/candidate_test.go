@@ -400,6 +400,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 			peer2ID,
 			peer3ID,
 			peer4ID,
+			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
 			Term:         2,
@@ -413,7 +414,12 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		peer3ID: 10,
 		peer4ID: 10,
 	}, r.nextIndex)
-	requireT.Empty(r.matchIndex)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(2, r.lastLogTerm)
 	requireT.Equal(types.CommitInfo{

@@ -11,13 +11,15 @@ import (
 func TestUnknownCommand(t *testing.T) {
 	requireT := require.New(t)
 
-	servers := make([]magmatypes.ServerID, 0, len(config.Servers))
+	activePeers := make([]magmatypes.ServerID, 0, len(config.Servers))
 	for _, s := range config.Servers {
-		servers = append(servers, s.ID)
+		if s.ID != serverID {
+			activePeers = append(activePeers, s.ID)
+		}
 	}
 
 	s, _ := newState(t, "")
-	r := New(config.ServerID, servers, s)
+	r := New(config.ServerID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
 	result, err := r.Apply(magmatypes.ZeroServerID, "aaa")
 	requireT.Error(err)
 	requireT.Equal(Result{}, result)

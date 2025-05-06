@@ -58,6 +58,7 @@ func TestLeaderSetup(t *testing.T) {
 			peer2ID,
 			peer3ID,
 			peer4ID,
+			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
 			Term:         3,
@@ -72,7 +73,12 @@ func TestLeaderSetup(t *testing.T) {
 		peer3ID: 53,
 		peer4ID: 53,
 	}, r.nextIndex)
-	requireT.Empty(r.matchIndex)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
 
 	requireT.EqualValues(3, r.lastLogTerm)
 
@@ -545,6 +551,83 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	}, r.commitInfo)
 }
 
+func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	_, err = r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
+		Data: []byte{0x02, 0x01, 0x00},
+	})
+	requireT.NoError(err)
+
+	r.matchIndex[serverID] = 42
+
+	result, err := r.Apply(peer1ID, &types.LogACK{
+		Term:         2,
+		NextLogIndex: 31,
+		SyncLogIndex: 31,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		serverID: 42,
+		peer1ID:  31,
+		peer2ID:  0,
+		peer3ID:  0,
+		peer4ID:  0,
+	}, r.matchIndex)
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 0,
+	}, r.commitInfo)
+
+	result, err = r.Apply(passivePeerID, &types.LogACK{
+		Term:         2,
+		NextLogIndex: 42,
+		SyncLogIndex: 42,
+	})
+	requireT.NoError(err)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   42,
+			CommittedCount: 0,
+		},
+	}, result)
+	requireT.EqualValues(31, r.nextIndex[peer1ID])
+	requireT.EqualValues(42, r.nextIndex[passivePeerID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		serverID: 42,
+		peer1ID:  31,
+		peer2ID:  0,
+		peer3ID:  0,
+		peer4ID:  0,
+	}, r.matchIndex)
+	requireT.Equal(types.CommitInfo{
+		NextLogIndex:   42,
+		CommittedCount: 0,
+	}, r.commitInfo)
+}
+
 func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
@@ -581,7 +664,13 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
-	requireT.EqualValues(31, r.matchIndex[peer1ID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		serverID: 42,
+		peer1ID:  31,
+		peer2ID:  0,
+		peer3ID:  0,
+		peer4ID:  0,
+	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 0,
@@ -602,9 +691,14 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
-	requireT.EqualValues(31, r.matchIndex[peer1ID])
 	requireT.EqualValues(42, r.nextIndex[peer2ID])
-	requireT.EqualValues(42, r.matchIndex[peer2ID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		serverID: 42,
+		peer1ID:  31,
+		peer2ID:  42,
+		peer3ID:  0,
+		peer4ID:  0,
+	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 31,
@@ -781,6 +875,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
 		Term:         5,
 		NextLogIndex: 42,
+		SyncLogIndex: 30,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -800,7 +895,72 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 		},
 	}, result)
 	requireT.EqualValues(42, r.nextIndex[peer1ID])
-	requireT.EqualValues(0, r.matchIndex[peer1ID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 30,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
+	requireT.Equal(serverID, r.leaderID)
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+		txb(0x05),
+	))
+}
+
+func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x01),
+		txb(0x02), txb(0x01, 0x02),
+		txb(0x03), txb(0x01, 0x03),
+		txb(0x04), txb(0x01, 0x04),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex[passivePeerID] = 42
+
+	result, err := r.Apply(passivePeerID, &types.LogSyncResponse{
+		Term:         5,
+		NextLogIndex: 42,
+		SyncLogIndex: 30,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 0,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			passivePeerID,
+		},
+		Message: &StartTransfer{
+			NextLogIndex: 42,
+		},
+	}, result)
+	requireT.EqualValues(42, r.nextIndex[passivePeerID])
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
 	requireT.Equal(serverID, r.leaderID)
 
 	txb = newTxBuilder()
@@ -1134,7 +1294,12 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		peer3ID: 75,
 		peer4ID: 75,
 	}, r.nextIndex)
-	requireT.Empty(r.matchIndex)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 
 	txb = newTxBuilder()
@@ -1189,7 +1354,12 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		peer3ID: 75,
 		peer4ID: 75,
 	}, r.nextIndex)
-	requireT.Empty(r.matchIndex)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
+		peer2ID: 0,
+		peer3ID: 0,
+		peer4ID: 0,
+	}, r.matchIndex)
 	requireT.EqualValues(4, r.lastLogTerm)
 
 	txb = newTxBuilder()
@@ -1201,7 +1371,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyPeerConnected(t *testing.T) {
+func TestLeaderApplyActivePeerConnected(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1241,6 +1411,7 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		peer4ID: 84,
 	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 0,
 		peer2ID: 42,
 		peer3ID: 63,
 		peer4ID: 84,
@@ -1255,6 +1426,73 @@ func TestLeaderApplyPeerConnected(t *testing.T) {
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
 			peer1ID,
+		},
+		Message: &types.LogSyncRequest{
+			Term:         5,
+			NextLogIndex: 94,
+			LastLogTerm:  5,
+		},
+	}, result)
+	requireT.Equal(serverID, r.leaderID)
+}
+
+func TestLeaderApplyPassivePeerConnected(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x01, 0x00),
+		txb(0x03), txb(0x01, 0x00),
+		txb(0x04), txb(0x01, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+	_, err = r.transitionToLeader()
+	requireT.NoError(err)
+
+	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID:       21,
+		peer2ID:       42,
+		peer3ID:       63,
+		peer4ID:       84,
+		passivePeerID: 10,
+	}
+	r.matchIndex = map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 21,
+		peer2ID: 42,
+		peer3ID: 63,
+		peer4ID: 84,
+	}
+
+	result, err := r.Apply(passivePeerID, nil)
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID:       21,
+		peer2ID:       42,
+		peer3ID:       63,
+		peer4ID:       84,
+		passivePeerID: 94,
+	}, r.nextIndex)
+	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
+		peer1ID: 21,
+		peer2ID: 42,
+		peer3ID: 63,
+		peer4ID: 84,
+	}, r.matchIndex)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   94,
+			CommittedCount: 0,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
 			Term:         5,

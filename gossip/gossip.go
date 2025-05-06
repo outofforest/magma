@@ -62,16 +62,14 @@ func New(
 	pStates := map[types.PartitionID]partitionState{}
 	for id, p := range partitions {
 		validPeers := map[types.ServerID]struct{}{}
-		for _, peer := range p.Servers {
-			if peer.ID != serverID {
-				validPeers[peer.ID] = struct{}{}
-			}
+		for _, peer := range p.Peers {
+			validPeers[peer.ID] = struct{}{}
 		}
 
 		pStates[id] = partitionState{
 			State: p,
 
-			minority:        len(p.Servers) / 2,
+			minority:        (len(p.Peers) + 1) / 2,
 			validPeers:      validPeers,
 			providerPeers:   repository.NewTailProvider(),
 			providerClients: repository.NewTailProvider(),
@@ -155,8 +153,8 @@ func (g *Gossip) Run(ctx context.Context) error {
 				})
 
 				for pID, pState := range g.partitions {
-					for _, s := range pState.Servers {
-						if s.ID == g.serverID || !initConnection(g.serverID, s.ID) {
+					for _, s := range pState.Peers {
+						if !initConnection(g.serverID, s.ID) {
 							continue
 						}
 

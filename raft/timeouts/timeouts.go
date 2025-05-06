@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/raft/types"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 const (
@@ -16,8 +17,9 @@ const (
 )
 
 // New creates new timeout manager.
-func New(roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
+func New(partitionRole magmatypes.PartitionRole, roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
 	return &Timeouts{
+		partitionRole:   partitionRole,
 		roleCh:          roleCh,
 		majorityCh:      majorityCh,
 		tickerHeartbeat: newTicker(),
@@ -27,8 +29,9 @@ func New(roleCh <-chan types.Role, majorityCh <-chan bool) *Timeouts {
 
 // Timeouts manages timeouts (election and heartbeat) defined by raft protocol.
 type Timeouts struct {
-	roleCh     <-chan types.Role
-	majorityCh <-chan bool
+	partitionRole magmatypes.PartitionRole
+	roleCh        <-chan types.Role
+	majorityCh    <-chan bool
 
 	tickerHeartbeat *ticker
 	tickerElection  *ticker
@@ -71,7 +74,9 @@ func (t *Timeouts) applyRole(role types.Role) {
 	switch role {
 	case types.RoleFollower, types.RoleCandidate:
 		if t.majorityPresent {
-			t.tickerElection.Start(electionInterval())
+			if t.partitionRole == magmatypes.PartitionRoleActive {
+				t.tickerElection.Start(electionInterval())
+			}
 		} else {
 			t.tickerElection.Stop()
 		}
@@ -92,7 +97,9 @@ func (t *Timeouts) applyMajority(majorityPresent bool) {
 		t.tickerElection.Stop()
 		return
 	}
-	t.tickerElection.Start(electionInterval())
+	if t.partitionRole == magmatypes.PartitionRoleActive {
+		t.tickerElection.Start(electionInterval())
+	}
 }
 
 func electionInterval() time.Duration {
