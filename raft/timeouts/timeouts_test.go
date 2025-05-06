@@ -6,20 +6,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/raft/types"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 func TestTickersStoppedOnStartup(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 	requireT.False(tm.tickerHeartbeat.Ticking())
 	requireT.False(tm.tickerElection.Ticking())
 }
 
-func TestMajorityWhenFollower(t *testing.T) {
+func TestApplyMajorityWhenFollower(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.applyRole(types.RoleFollower)
 
@@ -46,10 +47,40 @@ func TestMajorityWhenFollower(t *testing.T) {
 	requireT.False(tm.tickerElection.Ticking())
 }
 
-func TestPeersWhenCandidate(t *testing.T) {
+func TestApplyMajorityWhenPassive(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRolePassive, nil, nil)
+
+	tm.applyRole(types.RoleFollower)
+
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.applyMajority(false)
+
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.applyMajority(true)
+
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.applyMajority(true)
+
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.applyMajority(false)
+
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.applyMajority(false)
+
+	requireT.False(tm.tickerElection.Ticking())
+}
+
+func TestApplyMajorityWhenCandidate(t *testing.T) {
+	requireT := require.New(t)
+
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.role = types.RoleCandidate
 	tm.applyRole(types.RoleCandidate)
@@ -77,10 +108,10 @@ func TestPeersWhenCandidate(t *testing.T) {
 	requireT.False(tm.tickerElection.Ticking())
 }
 
-func TestPeersWhenLeader(t *testing.T) {
+func TestApplyMajorityWhenLeader(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.role = types.RoleLeader
 	tm.applyRole(types.RoleLeader)
@@ -111,7 +142,7 @@ func TestPeersWhenLeader(t *testing.T) {
 func TestApplyRoleFollower(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleFollower)
@@ -126,10 +157,28 @@ func TestApplyRoleFollower(t *testing.T) {
 	requireT.False(tm.tickerElection.Ticking())
 }
 
+func TestApplyRoleFollowerWhenPassive(t *testing.T) {
+	requireT := require.New(t)
+
+	tm := New(magmatypes.PartitionRolePassive, nil, nil)
+
+	tm.majorityPresent = false
+	tm.applyRole(types.RoleFollower)
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.majorityPresent = true
+	tm.applyRole(types.RoleFollower)
+	requireT.False(tm.tickerElection.Ticking())
+
+	tm.majorityPresent = false
+	tm.applyRole(types.RoleFollower)
+	requireT.False(tm.tickerElection.Ticking())
+}
+
 func TestApplyRoleCandidate(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleCandidate)
@@ -147,7 +196,7 @@ func TestApplyRoleCandidate(t *testing.T) {
 func TestApplyRoleLeader(t *testing.T) {
 	requireT := require.New(t)
 
-	tm := New(nil, nil)
+	tm := New(magmatypes.PartitionRoleActive, nil, nil)
 
 	tm.majorityPresent = false
 	tm.applyRole(types.RoleLeader)

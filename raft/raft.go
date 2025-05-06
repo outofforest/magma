@@ -31,7 +31,7 @@ func Run(
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				for _, pState := range partitions {
-					t := timeouts.New(pState.RoleCh, pState.MajorityCh)
+					t := timeouts.New(pState.PartitionRole, pState.RoleCh, pState.MajorityCh)
 					spawn("timeoutProducer", parallel.Fail, t.Run)
 					spawn("timeoutConsumer", parallel.Fail, func(ctx context.Context) error {
 						return runTimeoutConsumer(ctx, t, pState.CmdP2PCh)

@@ -5,6 +5,8 @@ import (
 	"net"
 	"path/filepath"
 
+	"github.com/samber/lo"
+
 	"github.com/outofforest/magma/gossip"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/partition"
@@ -40,7 +42,7 @@ func Run(
 	var partitions []types.PartitionID
 	for _, s := range config.Servers {
 		if s.ID == config.ServerID {
-			partitions = s.Partitions
+			partitions = lo.Keys(s.Partitions)
 			break
 		}
 	}
@@ -62,27 +64,35 @@ func Run(
 		}
 		defer defCloser(sCloser, &retErr)
 
-		servers := make([]types.ServerConfig, 0, len(config.Servers))
-		serverIDs := make([]types.ServerID, 0, len(config.Servers))
+		peers := make([]types.ServerConfig, 0, len(config.Servers))
+		activePeers := make([]types.ServerID, 0, len(config.Servers))
+		passivePeers := make([]types.ServerID, 0, len(config.Servers))
+		var role types.PartitionRole
 		for _, s := range config.Servers {
-			for _, p := range s.Partitions {
-				if p == pID {
-					servers = append(servers, s)
-					serverIDs = append(serverIDs, s.ID)
-					break
+			if pRole, exists := s.Partitions[pID]; exists {
+				if config.ServerID == s.ID {
+					role = pRole
+					continue
+				}
+				peers = append(peers, s)
+				if pRole == types.PartitionRoleActive {
+					activePeers = append(activePeers, s.ID)
+				} else {
+					passivePeers = append(passivePeers, s.ID)
 				}
 			}
 		}
 
 		pStates[pID] = partition.State{
-			Repo:       repo,
-			Reactor:    reactor.New(config.ServerID, serverIDs, s),
-			Servers:    servers,
-			CmdP2PCh:   make(chan rafttypes.Command, queueCapacity),
-			CmdC2PCh:   make(chan rafttypes.Command, queueCapacity),
-			ResultCh:   make(chan reactor.Result, 1),
-			RoleCh:     make(chan rafttypes.Role, 1),
-			MajorityCh: make(chan bool, 1),
+			Repo:          repo,
+			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, s),
+			Peers:         peers,
+			PartitionRole: role,
+			CmdP2PCh:      make(chan rafttypes.Command, queueCapacity),
+			CmdC2PCh:      make(chan rafttypes.Command, queueCapacity),
+			ResultCh:      make(chan reactor.Result, 1),
+			RoleCh:        make(chan rafttypes.Role, 1),
+			MajorityCh:    make(chan bool, 1),
 		}
 	}
 

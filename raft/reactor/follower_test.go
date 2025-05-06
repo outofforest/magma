@@ -26,6 +26,8 @@ var (
 	peer3ID  = magmatypes.ServerID("P3")
 	peer4ID  = magmatypes.ServerID("P4")
 
+	passivePeerID = magmatypes.ServerID("PP")
+
 	config = magmatypes.Config{
 		ServerID: serverID,
 		Servers: []magmatypes.ServerConfig{
@@ -56,12 +58,14 @@ func newState(t *testing.T, dir string) (*state.State, string) {
 }
 
 func newReactor(s *state.State) *Reactor {
-	servers := make([]magmatypes.ServerID, 0, len(config.Servers))
+	activePeers := make([]magmatypes.ServerID, 0, len(config.Servers))
 	for _, s := range config.Servers {
-		servers = append(servers, s.ID)
+		if s.ID != serverID {
+			activePeers = append(activePeers, s.ID)
+		}
 	}
 
-	return New(config.ServerID, servers, s)
+	return New(config.ServerID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
 }
 
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
