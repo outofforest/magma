@@ -477,23 +477,22 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		}
 
 		idF := ovValue.Field(typeDef.IDIndex)
-		revisionF := ovValue.Field(typeDef.RevisionIndex)
-
-		entityMeta := &wire.EntityMetadata{
-			ID:        idF.Convert(idType).Interface().(types.ID),
-			Revision:  types.Revision(revisionF.Uint() + 1),
-			MessageID: id,
-		}
-
 		oOldValue, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
 		if err != nil {
 			return errors.WithStack(err)
 		}
 		oOldV := reflect.New(v.Type())
+		oOldValueV := oOldV.Elem()
 		if oOldValue != nil {
-			oOldV.Elem().Set(reflect.ValueOf(oOldValue))
+			oOldValueV.Set(reflect.ValueOf(oOldValue))
 		}
 
+		revisionF := oOldValueV.Field(typeDef.RevisionIndex)
+		entityMeta := &wire.EntityMetadata{
+			ID:        idF.Convert(idType).Interface().(types.ID),
+			Revision:  types.Revision(revisionF.Uint() + 1),
+			MessageID: id,
+		}
 		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
 		if err != nil {
 			return err
