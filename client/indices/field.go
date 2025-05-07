@@ -1,4 +1,4 @@
-package index
+package indices
 
 import (
 	"encoding/binary"
@@ -47,15 +47,17 @@ func NewFieldIndex(name string, ePtr, fieldPtr any) (*FieldIndex, error) {
 	}
 
 	return &FieldIndex{
-		name:    name,
-		indexer: indexer,
+		name:       name,
+		entityType: ePtrType.Elem(),
+		indexer:    indexer,
 	}, nil
 }
 
 // FieldIndex defines index indexing entities by struct field.
 type FieldIndex struct {
-	name    string
-	indexer memdb.Indexer
+	name       string
+	entityType reflect.Type
+	indexer    memdb.Indexer
 }
 
 // Name returns name of the index.
@@ -63,8 +65,13 @@ func (i *FieldIndex) Name() string {
 	return i.name
 }
 
-// Index returns memdb index.
-func (i *FieldIndex) Index() *memdb.IndexSchema {
+// Type returns type of entity index is defined for.
+func (i *FieldIndex) Type() reflect.Type {
+	return i.entityType
+}
+
+// Schema returns memdb index schema.
+func (i *FieldIndex) Schema() *memdb.IndexSchema {
 	return &memdb.IndexSchema{
 		Name:    i.name,
 		Indexer: i.indexer,
