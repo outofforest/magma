@@ -223,9 +223,8 @@ func TestTimeIndexer(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(expected, value)
 
-	//nolint:gosmopolitan
-	v.Value2.Value2.ValueTime = time.Date(2024, 1, 1, 1, 1, 1, 99999, time.Local)
-	expected = []byte{0x80, 0x0, 0x0, 0xe, 0xdd, 0x23, 0xf7, 0xbd, 0x0, 0x1, 0x86, 0x9f}
+	v.Value2.Value2.ValueTime = time.Date(2024, 1, 1, 1, 1, 1, 99999, time.UTC)
+	expected = []byte{0x80, 0x0, 0x0, 0xe, 0xdd, 0x24, 0x5, 0xcd, 0x0, 0x1, 0x86, 0x9f}
 	value, err = indexer.FromArgs(v)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
@@ -234,9 +233,8 @@ func TestTimeIndexer(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(expected, value)
 
-	//nolint:gosmopolitan
-	v.Value2.Value2.ValueTime = time.Date(1, 1, 1, 1, 1, 1, 99999, time.Local)
-	expected = []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfa, 0x9d, 0x0, 0x1, 0x86, 0x9f}
+	v.Value2.Value2.ValueTime = time.Date(-1, 1, 1, 1, 1, 1, 99999, time.UTC)
+	expected = []byte{0x7f, 0xff, 0xff, 0xff, 0xfc, 0x3c, 0x55, 0xcd, 0x0, 0x1, 0x86, 0x9f}
 	value, err = indexer.FromArgs(v)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
