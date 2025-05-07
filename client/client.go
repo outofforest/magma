@@ -305,6 +305,14 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
+// View returns db view.
+func (c *Client) View() *View {
+	return &View{
+		tx:     c.db.Txn(false),
+		byType: c.byType,
+	}
+}
+
 // NewTransactor creates new transactor.
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{

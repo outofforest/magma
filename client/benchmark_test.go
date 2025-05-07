@@ -145,6 +145,11 @@ func TestCluster(t *testing.T) {
 	id := NewID[entities.AccountID]()
 	for i := range 200 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
+			var acc entities.Account
+			if tx.Get(&acc, id) {
+				fmt.Println(acc)
+			}
+
 			tx.Set(entities.Account{
 				ID:        id,
 				Revision:  types.Revision(i),
