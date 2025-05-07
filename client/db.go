@@ -9,10 +9,43 @@ import (
 	"github.com/outofforest/magma/types"
 )
 
+var emptyID types.ID
+
 // View represents immutable snapshot of the DB.
 type View struct {
 	tx     *memdb.Txn
 	byType map[reflect.Type]typeInfo
+}
+
+// Get returns the object.
+func (v *View) Get(ePtr any, id any) (bool, error) {
+	ePtrV := reflect.ValueOf(ePtr)
+	if ePtrV.Kind() != reflect.Ptr {
+		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
+	}
+	eV := ePtrV.Elem()
+	eT := eV.Type()
+	typeDef, exists := v.byType[eT]
+	if !exists {
+		return false, errors.Errorf("type %s not defined", eT)
+	}
+
+	receivedIDType := reflect.TypeOf(id)
+	if receivedIDType != typeDef.IDType {
+		return false, errors.Errorf("expected id type %s, got %s", typeDef.IDType, receivedIDType)
+	}
+
+	o, err := v.tx.First(typeDef.Table, idIndex, id)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+
+	if o == nil {
+		return false, nil
+	}
+
+	eV.Set(reflect.ValueOf(o))
+	return true, nil
 }
 
 // Tx represents transaction.
@@ -22,7 +55,14 @@ type Tx struct {
 	changes map[types.ID]reflect.Value
 }
 
-var emptyID types.ID
+// Get returns the object.
+func (tx *Tx) Get(ePtr any, id any) bool {
+	exists, err := tx.View.Get(ePtr, id)
+	if err != nil {
+		panic(err)
+	}
+	return exists
+}
 
 // Set sets object in transaction.
 func (tx *Tx) Set(o any) {
@@ -46,32 +86,4 @@ func (tx *Tx) Set(o any) {
 	}
 
 	tx.changes[id] = oValue
-}
-
-// Get gets object from view.
-func Get[ET any, IDT idConstraint](v *View, id IDT) (ET, bool) {
-	var e ET
-	et := reflect.TypeOf(e)
-
-	typeDef, exists := v.byType[et]
-	if !exists {
-		panic(errors.Errorf("unknown type %s", et))
-	}
-
-	expectedIDType := et.Field(typeDef.IDIndex).Type
-	receivedIDType := reflect.TypeOf(id)
-	if receivedIDType != expectedIDType {
-		panic(errors.Errorf("expected id type %s, got %s", expectedIDType, receivedIDType))
-	}
-
-	o, err := v.tx.First(typeDef.Table, idIndex, id)
-	if err != nil {
-		panic(errors.WithStack(err))
-	}
-
-	if o == nil {
-		return e, false
-	}
-
-	return o.(ET), true
 }
