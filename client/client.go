@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
+	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/client/wire"
 	gossipwire "github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
@@ -46,11 +47,13 @@ type Config struct {
 	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
 	AwaitTimeout     time.Duration
+	Marshaller       proton.Marshaller
+	Indices          []indices.Index
 }
 
 // New creates new magma client.
-func New(config Config, m proton.Marshaller) (*Client, error) {
-	objectTypes := m.Messages()
+func New(config Config) (*Client, error) {
+	objectTypes := config.Marshaller.Messages()
 	if len(objectTypes) == 0 {
 		return nil, errors.New("no object types provided")
 	}
@@ -85,23 +88,24 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 			return nil, errors.Errorf("double registration of object %s", t)
 		}
 
-		mID, err := m.ID(reflect.New(t).Interface())
+		mID, err := config.Marshaller.ID(reflect.New(t).Interface())
 		if err != nil {
 			return nil, err
 		}
 
-		table := typeName(t)
+		tableName := typeName(t)
 		info := typeInfo{
 			IDIndex:       idF.Index[0],
 			RevisionIndex: revisionF.Index[0],
 			Type:          t,
 			IDType:        idF.Type,
-			Table:         table,
+			Table:         tableName,
 		}
 		byID[mID] = info
 		byType[t] = info
-		dbSchema.Tables[table] = &memdb.TableSchema{
-			Name: table,
+
+		table := &memdb.TableSchema{
+			Name: tableName,
 			Indexes: map[string]*memdb.IndexSchema{
 				idIndex: {
 					Name:    idIndex,
@@ -110,6 +114,12 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 				},
 			},
 		}
+		for _, index := range config.Indices {
+			if index.Type() == t {
+				table.Indexes[index.Name()] = index.Schema()
+			}
+		}
+		dbSchema.Tables[tableName] = table
 	}
 
 	db, err := memdb.NewMemDB(dbSchema)
@@ -132,7 +142,6 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 	return &Client{
 		config:           config,
 		txCh:             make(chan tx, 1),
-		m:                m,
 		metaM:            metaM,
 		doneCh:           make(chan struct{}),
 		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
@@ -148,7 +157,6 @@ func New(config Config, m proton.Marshaller) (*Client, error) {
 type Client struct {
 	config Config
 	txCh   chan tx
-	m      proton.Marshaller
 	metaM  proton.Marshaller
 	doneCh chan struct{}
 
@@ -318,7 +326,7 @@ func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
 		service:          c.config.Service,
 		txCh:             c.txCh,
-		m:                c.m,
+		m:                c.config.Marshaller,
 		metaM:            c.metaM,
 		byType:           c.byType,
 		db:               c.db,
@@ -373,7 +381,7 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			ovValue.Set(oValue)
 		}
 
-		msgSize, err := c.m.ApplyPatch(ov.Interface(), txRaw[entityMetaSize:])
+		msgSize, err := c.config.Marshaller.ApplyPatch(ov.Interface(), txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}

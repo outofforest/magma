@@ -15,6 +15,7 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client/entities"
+	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 )
@@ -126,6 +127,10 @@ func TestCluster(t *testing.T) {
 		return magma.Run(ctx, config, p2p3, c2p3, dir, pageSize)
 	})
 
+	var acc entities.Account
+	firstNameIndex, err := indices.NewFieldIndex("firstName", &acc, &acc.FirstName)
+	requireT.NoError(err)
+
 	cl, err := New(Config{
 		Service:          "test",
 		PeerAddress:      c2p1.Addr().String(),
@@ -133,7 +138,11 @@ func TestCluster(t *testing.T) {
 		MaxMessageSize:   config.MaxMessageSize,
 		BroadcastTimeout: 3 * time.Second,
 		AwaitTimeout:     10 * time.Second,
-	}, entities.NewMarshaller())
+		Marshaller:       entities.NewMarshaller(),
+		Indices: []indices.Index{
+			firstNameIndex,
+		},
+	})
 	requireT.NoError(err)
 
 	group.Spawn("client", parallel.Fail, cl.Run)
