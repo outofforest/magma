@@ -98,6 +98,9 @@ func findField(t reflect.Type, offset uintptr) reflect.Type {
 }
 
 func valueByOffset[T any](v any, offset uintptr) T {
+	if offset == 0 {
+		return v.(T)
+	}
 	v1 := reflect.ValueOf(v)
 	v2 := reflect.New(v1.Type())
 	v2.Elem().Set(v1)
@@ -116,7 +119,7 @@ type boolIndexer struct {
 }
 
 func (i boolIndexer) FromArgs(args ...any) ([]byte, error) {
-	return boolToBytes(args[0], i.offset), nil
+	return boolToBytes(args[0], 0), nil
 }
 
 func (i boolIndexer) FromObject(o any) (bool, []byte, error) {
@@ -132,7 +135,7 @@ type stringIndexer struct {
 }
 
 func (i stringIndexer) FromArgs(args ...any) ([]byte, error) {
-	return stringToBytes(args[0], i.offset), nil
+	return stringToBytes(args[0], 0), nil
 }
 
 func (i stringIndexer) FromObject(o any) (bool, []byte, error) {
@@ -159,7 +162,7 @@ type timeIndexer struct {
 }
 
 func (i timeIndexer) FromArgs(args ...any) ([]byte, error) {
-	return timeToBytes(args[0], i.offset), nil
+	return timeToBytes(args[0], 0), nil
 }
 
 func (i timeIndexer) FromObject(o any) (bool, []byte, error) {
@@ -175,7 +178,7 @@ type int8Indexer struct {
 }
 
 func (i int8Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int8ToBytes(args[0], i.offset), nil
+	return int8ToBytes(args[0], 0), nil
 }
 
 func (i int8Indexer) FromObject(o any) (bool, []byte, error) {
@@ -194,7 +197,7 @@ type int16Indexer struct {
 }
 
 func (i int16Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int16ToBytes(args[0], i.offset), nil
+	return int16ToBytes(args[0], 0), nil
 }
 
 func (i int16Indexer) FromObject(o any) (bool, []byte, error) {
@@ -213,7 +216,7 @@ type int32Indexer struct {
 }
 
 func (i int32Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int32ToBytes(args[0], i.offset), nil
+	return int32ToBytes(args[0], 0), nil
 }
 
 func (i int32Indexer) FromObject(o any) (bool, []byte, error) {
@@ -232,7 +235,7 @@ type int64Indexer struct {
 }
 
 func (i int64Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int64ToBytes(args[0], i.offset), nil
+	return int64ToBytes(args[0], 0), nil
 }
 
 func (i int64Indexer) FromObject(o any) (bool, []byte, error) {
@@ -248,7 +251,7 @@ type uint8Indexer struct {
 }
 
 func (i uint8Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint8ToBytes(args[0], i.offset), nil
+	return uint8ToBytes(args[0], 0), nil
 }
 
 func (i uint8Indexer) FromObject(o any) (bool, []byte, error) {
@@ -266,7 +269,7 @@ type uint16Indexer struct {
 }
 
 func (i uint16Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint16ToBytes(args[0], i.offset), nil
+	return uint16ToBytes(args[0], 0), nil
 }
 
 func (i uint16Indexer) FromObject(o any) (bool, []byte, error) {
@@ -284,7 +287,7 @@ type uint32Indexer struct {
 }
 
 func (i uint32Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint32ToBytes(args[0], i.offset), nil
+	return uint32ToBytes(args[0], 0), nil
 }
 
 func (i uint32Indexer) FromObject(o any) (bool, []byte, error) {
@@ -302,7 +305,7 @@ type uint64Indexer struct {
 }
 
 func (i uint64Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint64ToBytes(args[0], i.offset), nil
+	return uint64ToBytes(args[0], 0), nil
 }
 
 func (i uint64Indexer) FromObject(o any) (bool, []byte, error) {

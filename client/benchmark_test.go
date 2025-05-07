@@ -154,9 +154,12 @@ func TestCluster(t *testing.T) {
 	id := NewID[entities.AccountID]()
 	for i := range 200 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
-			var acc entities.Account
-			if tx.Get(&acc, id) {
-				fmt.Println(acc)
+			var acc1, acc2 entities.Account
+			if tx.Get(&acc1, id) {
+				fmt.Println(acc1)
+			}
+			if tx.Find(&acc2, firstNameIndex, fmt.Sprintf("First-%d", i-1)) {
+				fmt.Println(acc2)
 			}
 
 			tx.Set(entities.Account{

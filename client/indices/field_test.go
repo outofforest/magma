@@ -159,7 +159,7 @@ func TestBoolIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueBool = false
 	expected := []byte{0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueBool)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -169,7 +169,7 @@ func TestBoolIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueBool = true
 	expected = []byte{0x01}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueBool)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -188,7 +188,7 @@ func TestStringIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueString = ""
 	expected := []byte{0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueString)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -198,7 +198,7 @@ func TestStringIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueString = "ABC"
 	expected = []byte{0x41, 0x42, 0x43, 0x00}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueString)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -217,7 +217,7 @@ func TestTimeIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueTime = time.Time{}
 	expected := []byte{0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueTime)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -227,7 +227,7 @@ func TestTimeIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueTime = time.Date(2024, 1, 1, 1, 1, 1, 99999, time.UTC)
 	expected = []byte{0x80, 0x0, 0x0, 0xe, 0xdd, 0x24, 0x5, 0xcd, 0x0, 0x1, 0x86, 0x9f}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueTime)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -237,7 +237,7 @@ func TestTimeIndexer(t *testing.T) {
 
 	v.Value2.Value2.ValueTime = time.Date(-1, 1, 1, 1, 1, 1, 99999, time.UTC)
 	expected = []byte{0x7f, 0xff, 0xff, 0xff, 0xfc, 0x3c, 0x55, 0xcd, 0x0, 0x1, 0x86, 0x9f}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueTime)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -256,7 +256,7 @@ func TestInt8Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt8 = 0
 	expected := []byte{0x80}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueInt8)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -266,7 +266,7 @@ func TestInt8Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt8 = 127
 	expected = []byte{0xff}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt8)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -276,7 +276,7 @@ func TestInt8Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt8 = -128
 	expected = []byte{0x00}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt8)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -295,7 +295,7 @@ func TestInt16Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt16 = 0
 	expected := []byte{0x80, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueInt16)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -305,7 +305,7 @@ func TestInt16Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt16 = 30000
 	expected = []byte{0xf5, 0x30}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt16)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -315,7 +315,7 @@ func TestInt16Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt16 = -30000
 	expected = []byte{0x0a, 0xd0}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt16)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -334,7 +334,7 @@ func TestInt32Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt32 = 0
 	expected := []byte{0x80, 0x00, 0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueInt32)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -344,7 +344,7 @@ func TestInt32Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt32 = 300000000
 	expected = []byte{0x91, 0xe1, 0xa3, 0x0}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt32)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -354,7 +354,7 @@ func TestInt32Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt32 = -300000000
 	expected = []byte{0x6e, 0x1e, 0x5d, 0x0}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt32)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -373,7 +373,7 @@ func TestInt64Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt64 = 0
 	expected := []byte{0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueInt64)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -383,7 +383,7 @@ func TestInt64Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt64 = 3000000000000000000
 	expected = []byte{0xa9, 0xa2, 0x24, 0x1a, 0xf6, 0x2c, 0x0, 0x0}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt64)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -393,7 +393,7 @@ func TestInt64Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueInt64 = -3000000000000000000
 	expected = []byte{0x56, 0x5d, 0xdb, 0xe5, 0x9, 0xd4, 0x0, 0x0}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueInt64)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -412,7 +412,7 @@ func TestUInt8Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint8 = 0
 	expected := []byte{0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueUint8)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -422,7 +422,7 @@ func TestUInt8Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint8 = math.MaxUint8
 	expected = []byte{0xff}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueUint8)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -441,7 +441,7 @@ func TestUInt16Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint16 = 0
 	expected := []byte{0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueUint16)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -451,7 +451,7 @@ func TestUInt16Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint16 = math.MaxUint16
 	expected = []byte{0xff, 0xff}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueUint16)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -470,7 +470,7 @@ func TestUInt32Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint32 = 0
 	expected := []byte{0x00, 0x00, 0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueUint32)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -480,7 +480,7 @@ func TestUInt32Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint32 = math.MaxUint32
 	expected = []byte{0xff, 0xff, 0xff, 0xff}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueUint32)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)
@@ -499,7 +499,7 @@ func TestUInt64Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint64 = 0
 	expected := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	value, err := indexer.FromArgs(v)
+	value, err := indexer.FromArgs(v.Value2.Value2.ValueUint64)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err := indexer.FromObject(v)
@@ -509,7 +509,7 @@ func TestUInt64Indexer(t *testing.T) {
 
 	v.Value2.Value2.ValueUint64 = math.MaxUint64
 	expected = []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	value, err = indexer.FromArgs(v)
+	value, err = indexer.FromArgs(v.Value2.Value2.ValueUint64)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
 	exists, value, err = indexer.FromObject(v)

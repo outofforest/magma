@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/go-memdb"
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/types"
 )
 
@@ -48,6 +49,36 @@ func (v *View) Get(ePtr any, id any) (bool, error) {
 	return true, nil
 }
 
+// Find returns the first object matching indexed values.
+func (v *View) Find(ePtr any, index indices.Index, args ...any) (bool, error) {
+	ePtrV := reflect.ValueOf(ePtr)
+	if ePtrV.Kind() != reflect.Ptr {
+		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
+	}
+	eV := ePtrV.Elem()
+	eT := eV.Type()
+	if eT != index.Type() {
+		return false, errors.Errorf("expected index type %s, got %s", eT, index.Type())
+	}
+
+	typeDef, exists := v.byType[eT]
+	if !exists {
+		return false, errors.Errorf("type %s not defined", eT)
+	}
+
+	o, err := v.tx.First(typeDef.Table, index.Name(), args...)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+
+	if o == nil {
+		return false, nil
+	}
+
+	eV.Set(reflect.ValueOf(o))
+	return true, nil
+}
+
 // Tx represents transaction.
 type Tx struct {
 	*View
@@ -58,6 +89,15 @@ type Tx struct {
 // Get returns the object.
 func (tx *Tx) Get(ePtr any, id any) bool {
 	exists, err := tx.View.Get(ePtr, id)
+	if err != nil {
+		panic(err)
+	}
+	return exists
+}
+
+// Find returns the first object matching indexed values.
+func (tx *Tx) Find(ePtr any, index indices.Index, args ...any) bool {
+	exists, err := tx.View.Find(ePtr, index, args...)
 	if err != nil {
 		panic(err)
 	}
