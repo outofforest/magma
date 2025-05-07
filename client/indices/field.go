@@ -98,9 +98,6 @@ func findField(t reflect.Type, offset uintptr) reflect.Type {
 }
 
 func valueByOffset[T any](v any, offset uintptr) T {
-	if offset == 0 {
-		return v.(T)
-	}
 	v1 := reflect.ValueOf(v)
 	v2 := reflect.New(v1.Type())
 	v2.Elem().Set(v1)

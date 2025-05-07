@@ -23,9 +23,6 @@ type subO1 struct {
 }
 
 type subO2 struct {
-	Value1      string
-	Value2      int16
-	Value3      uint8
 	ValueBool   bool
 	ValueString string
 	ValueTime   time.Time
@@ -37,6 +34,9 @@ type subO2 struct {
 	ValueUint16 uint16
 	ValueUint32 uint32
 	ValueUint64 uint64
+	Value1      string
+	Value2      int16
+	Value3      uint8
 }
 
 func TestFieldIndexOffset(t *testing.T) {
@@ -100,25 +100,25 @@ func TestFieldIndexOffset(t *testing.T) {
 	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value1)
 	requireT.NoError(err)
 	requireT.Equal(stringIndexer{
-		offset: 0x10,
+		offset: 0x60,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value2)
 	requireT.NoError(err)
 	requireT.Equal(int16Indexer{
-		offset: 0x20,
+		offset: 0x70,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value3)
 	requireT.NoError(err)
 	requireT.Equal(uint8Indexer{
-		offset: 0x22,
+		offset: 0x72,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value2.Value3)
 	requireT.NoError(err)
 	requireT.Equal(stringIndexer{
-		offset: 0x70,
+		offset: 0x78,
 	}, i.Schema().Indexer)
 
 	_, err = NewFieldIndex("index", &v, &v.Value3)
@@ -127,26 +127,55 @@ func TestFieldIndexOffset(t *testing.T) {
 	i, err = NewFieldIndex("index", &v, &v.Value3.Value1)
 	requireT.NoError(err)
 	requireT.Equal(stringIndexer{
-		offset: 0x80,
+		offset: 0xd8,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value3.Value2)
 	requireT.NoError(err)
 	requireT.Equal(int16Indexer{
-		offset: 0x90,
+		offset: 0xe8,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value3.Value3)
 	requireT.NoError(err)
 	requireT.Equal(uint8Indexer{
-		offset: 0x92,
+		offset: 0xea,
 	}, i.Schema().Indexer)
 
 	i, err = NewFieldIndex("index", &v, &v.Value4)
 	requireT.NoError(err)
 	requireT.Equal(stringIndexer{
-		offset: 0xe0,
+		offset: 0xf0,
 	}, i.Schema().Indexer)
+}
+
+func TestIndexerOffset0(t *testing.T) {
+	requireT := require.New(t)
+	var v subO2
+
+	index, err := NewFieldIndex("index", &v, &v.ValueBool)
+	requireT.NoError(err)
+	indexer := index.Schema().Indexer.(boolIndexer)
+
+	v.ValueBool = false
+	expected := []byte{0x00}
+	value, err := indexer.FromArgs(v.ValueBool)
+	requireT.NoError(err)
+	requireT.Equal(expected, value)
+	exists, value, err := indexer.FromObject(v)
+	requireT.NoError(err)
+	requireT.True(exists)
+	requireT.Equal(expected, value)
+
+	v.ValueBool = true
+	expected = []byte{0x01}
+	value, err = indexer.FromArgs(v.ValueBool)
+	requireT.NoError(err)
+	requireT.Equal(expected, value)
+	exists, value, err = indexer.FromObject(v)
+	requireT.NoError(err)
+	requireT.True(exists)
+	requireT.Equal(expected, value)
 }
 
 func TestBoolIndexer(t *testing.T) {
