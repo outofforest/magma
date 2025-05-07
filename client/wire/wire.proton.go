@@ -241,11 +241,12 @@ func applyPatch0(m *EntityMetadata, b []byte) uint64 {
 }
 
 func size1(m *TxMetadata) uint64 {
-	var n uint64 = 19
+	var n uint64 = 20
 	{
 		// Time
 
-		helpers.Int64Size(m.Time.Unix(), &n)
+		helpers.Int64Size(m.Time.Unix() - -62135596800, &n)
+		helpers.UInt32Size(uint32(m.Time.Nanosecond()), &n)
 	}
 	{
 		// Service
@@ -275,7 +276,8 @@ func marshal1(m *TxMetadata, b []byte) uint64 {
 	{
 		// Time
 
-		helpers.Int64Marshal(m.Time.Unix(), b, &o)
+		helpers.Int64Marshal(m.Time.Unix() - -62135596800, b, &o)
+		helpers.UInt32Marshal(uint32(m.Time.Nanosecond()), b, &o)
 	}
 	{
 		// Service
@@ -307,9 +309,11 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 	{
 		// Time
 
-		var vi int64
-		helpers.Int64Unmarshal(&vi, b, &o)
-		m.Time = time.Unix(vi, 0)
+		var seconds int64
+		var nanoseconds uint32
+		helpers.Int64Unmarshal(&seconds, b, &o)
+		helpers.UInt32Unmarshal(&nanoseconds, b, &o)
+		m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 	}
 	{
 		// Service
@@ -352,7 +356,8 @@ func makePatch1(m, mSrc *TxMetadata, b []byte) uint64 {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			helpers.Int64Marshal(m.Time.Unix(), b, &o)
+			helpers.Int64Marshal(m.Time.Unix() - -62135596800, b, &o)
+			helpers.UInt32Marshal(uint32(m.Time.Nanosecond()), b, &o)
 		}
 	}
 	{
@@ -398,9 +403,11 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 		// Time
 
 		if b[0]&0x02 != 0 {
-			var vi int64
-			helpers.Int64Unmarshal(&vi, b, &o)
-			m.Time = time.Unix(vi, 0)
+			var seconds int64
+			var nanoseconds uint32
+			helpers.Int64Unmarshal(&seconds, b, &o)
+			helpers.UInt32Unmarshal(&nanoseconds, b, &o)
+			m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 		}
 	}
 	{
