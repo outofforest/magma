@@ -367,21 +367,20 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 		}
 
 		oValue := reflect.ValueOf(o)
-		if o != nil {
-			oldRevision := oValue.Field(typeDef.RevisionIndex).Interface().(types.Revision)
+		var ovValue reflect.Value
+		if o == nil {
+			oValue = reflect.New(typeDef.Type)
+			ovValue = oValue.Elem()
+		} else {
+			ovValue = oValue.Elem()
+			oldRevision := ovValue.Field(typeDef.RevisionIndex).Interface().(types.Revision)
 			if entityMeta.Revision <= oldRevision {
 				tx.Abort()
 				return ErrOutdatedTx
 			}
 		}
 
-		ov := reflect.New(typeDef.Type)
-		ovValue := ov.Elem()
-		if o != nil {
-			ovValue.Set(oValue)
-		}
-
-		msgSize, err := c.config.Marshaller.ApplyPatch(ov.Interface(), txRaw[entityMetaSize:])
+		msgSize, err := c.config.Marshaller.ApplyPatch(oValue.Interface(), txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}
@@ -391,8 +390,7 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			idF.Set(reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType))
 		}
 		ovValue.Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
-
-		if err := tx.Insert(typeDef.Table, ovValue.Interface()); err != nil {
+		if err := tx.Insert(typeDef.Table, oValue.Interface()); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -477,36 +475,35 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	i += metaSize
 
 	for _, v := range pendingTx.changes {
-		ov := reflect.New(v.Type())
-		ovValue := ov.Elem()
-		ovValue.Set(v)
-		o := ov.Interface()
+		vt := v.Type().Elem()
 
-		id, err := t.m.ID(o)
+		id, err := t.m.ID(v.Interface())
 		if err != nil {
 			return err
 		}
 
-		typeDef, exists := t.byType[ovValue.Type()]
+		typeDef, exists := t.byType[vt]
 		if !exists {
-			return errors.Errorf("unknown type %s", ovValue.Type())
+			return errors.Errorf("unknown type %s", vt)
 		}
 
-		idF := ovValue.Field(typeDef.IDIndex)
+		idF := v.Elem().Field(typeDef.IDIndex)
 		oOldValue, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		oOldV := reflect.New(v.Type())
-		oOldValueV := oOldV.Elem()
-		if oOldValue != nil {
-			oOldValueV.Set(reflect.ValueOf(oOldValue))
-		}
+		var revision types.Revision
+		if oOldValue == nil {
+			oOldValue = reflect.New(typeDef.Type).Interface()
+		} else {
+			oOldValueV := reflect.ValueOf(oOldValue)
 
-		revisionF := oOldValueV.Field(typeDef.RevisionIndex)
+			revisionF := oOldValueV.Elem().Field(typeDef.RevisionIndex)
+			revision = types.Revision(revisionF.Uint() + 1)
+		}
 		entityMeta := &wire.EntityMetadata{
 			ID:        idF.Convert(idType).Interface().(types.ID),
-			Revision:  types.Revision(revisionF.Uint() + 1),
+			Revision:  revision,
 			MessageID: id,
 		}
 		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
@@ -515,12 +512,11 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		}
 		i += entitySize
 
-		_, msgSize, err := t.m.MakePatch(o, oOldV.Interface(), t.buf[i:])
+		_, msgSize, err := t.m.MakePatch(v.Interface(), oOldValue, t.buf[i:])
 		if err != nil {
 			return err
 		}
 		i += msgSize
-
 		if i+1 > t.maxMessageSize {
 			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.maxMessageSize)
 		}
@@ -584,7 +580,7 @@ func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
 }
 
 func (idi *idIndexer) FromObject(o any) (bool, []byte, error) {
-	id := reflect.ValueOf(o).Field(idi.index).Convert(idType).Interface().(types.ID)
+	id := reflect.ValueOf(o).Elem().Field(idi.index).Convert(idType).Interface().(types.ID)
 	return true, id[:], nil
 }
 

@@ -21,7 +21,7 @@ import (
 )
 
 func TestCluster(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	requireT := require.New(t)
 	ctx := logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig))
 
@@ -152,9 +152,9 @@ func TestCluster(t *testing.T) {
 
 	tr := cl.NewTransactor()
 	id := NewID[entities.AccountID]()
-	for i := range 200 {
+	for i := range 50 {
 		err := tr.Tx(ctx, func(tx *Tx) error {
-			var acc1, acc2 entities.Account
+			var acc1, acc2 *entities.Account
 			if tx.Get(&acc1, id) {
 				fmt.Println(acc1)
 			}
@@ -162,33 +162,33 @@ func TestCluster(t *testing.T) {
 				fmt.Println(acc2)
 			}
 
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        id,
 				Revision:  types.Revision(i),
 				FirstName: fmt.Sprintf("First-%d", i),
 				LastName:  "Last",
 			})
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			})
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			})
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			})
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
 			})
-			tx.Set(entities.Account{
+			tx.Set(&entities.Account{
 				ID:        NewID[entities.AccountID](),
 				FirstName: "Test1",
 				LastName:  "Test2",
@@ -197,7 +197,7 @@ func TestCluster(t *testing.T) {
 			return nil
 		})
 		if err != nil {
-			fmt.Println(err)
+			logger.Get(ctx).Error("Error", zap.Error(err))
 			return
 		}
 	}
@@ -206,12 +206,12 @@ func TestCluster(t *testing.T) {
 
 	fmt.Println("===================")
 
-	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		config, dir := makeConfig(config, peer4)
-		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
-	})
-
-	time.Sleep(10 * time.Second)
+	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+	// 	config, dir := makeConfig(config, peer4)
+	// 	return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
+	// })
+	//
+	// time.Sleep(10 * time.Second)
 	fmt.Println("exit")
 }
 

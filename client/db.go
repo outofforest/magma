@@ -25,7 +25,7 @@ func (v *View) Get(ePtr any, id any) (bool, error) {
 		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
 	}
 	eV := ePtrV.Elem()
-	eT := eV.Type()
+	eT := reflect.TypeOf(ePtr).Elem().Elem()
 	typeDef, exists := v.byType[eT]
 	if !exists {
 		return false, errors.Errorf("type %s not defined", eT)
@@ -56,7 +56,7 @@ func (v *View) Find(ePtr any, index indices.Index, args ...any) (bool, error) {
 		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
 	}
 	eV := ePtrV.Elem()
-	eT := eV.Type()
+	eT := reflect.TypeOf(ePtr).Elem().Elem()
 	if eT != index.Type() {
 		return false, errors.Errorf("expected index type %s, got %s", eT, index.Type())
 	}
@@ -106,24 +106,24 @@ func (tx *Tx) Find(ePtr any, index indices.Index, args ...any) bool {
 
 // Set sets object in transaction.
 func (tx *Tx) Set(o any) {
-	oValue := reflect.ValueOf(o)
-	oType := oValue.Type()
-	if oType.Kind() == reflect.Ptr {
-		panic(errors.New("object must not be a pointer"))
+	oType := reflect.TypeOf(o)
+	if oType.Kind() != reflect.Ptr {
+		panic(errors.New("object must be a pointer"))
 	}
 
+	oType = oType.Elem()
 	typeDef, exists := tx.byType[oType]
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
 	}
-	id := oValue.Field(typeDef.IDIndex).Convert(idType).Interface().(types.ID)
+
+	oValue := reflect.ValueOf(o)
+	id := oValue.Elem().Field(typeDef.IDIndex).Convert(idType).Interface().(types.ID)
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
-
 	if err := tx.tx.Insert(typeDef.Table, o); err != nil {
 		panic(errors.WithStack(err))
 	}
-
 	tx.changes[id] = oValue
 }

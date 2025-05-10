@@ -98,10 +98,10 @@ func findField(t reflect.Type, offset uintptr) reflect.Type {
 }
 
 func valueByOffset[T any](v any, offset uintptr) T {
-	v1 := reflect.ValueOf(v)
-	v2 := reflect.New(v1.Type())
-	v2.Elem().Set(v1)
-	return *(*T)(unsafe.Pointer(uintptr(v2.UnsafePointer()) + offset))
+	if vv := reflect.ValueOf(v); vv.Kind() == reflect.Ptr {
+		return *(*T)(unsafe.Pointer(vv.Pointer() + offset))
+	}
+	return v.(T)
 }
 
 func boolToBytes(v any, offset uintptr) []byte {
