@@ -150,59 +150,67 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	tr := cl.NewTransactor()
-	id := NewID[entities.AccountID]()
-	for i := range 200 {
-		err := tr.Tx(ctx, func(tx *Tx) error {
-			var acc1, acc2 entities.Account
-			if tx.Get(&acc1, id) {
-				fmt.Println(acc1)
-			}
-			if tx.Find(&acc2, firstNameIndex, fmt.Sprintf("First-%d", i-1)) {
-				fmt.Println(acc2)
-			}
+	const clientCount = 1000
+	groupClients := parallel.NewSubgroup(group.Spawn, "clients", parallel.Continue)
+	for range clientCount {
+		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
+			tr := cl.NewTransactor()
+			id := NewID[entities.AccountID]()
+			for i := range 50 {
+				err := tr.Tx(ctx, func(tx *Tx) error {
+					var acc1, acc2 entities.Account
+					if tx.Get(&acc1, id) {
+						fmt.Println(acc1)
+					}
+					if tx.Find(&acc2, firstNameIndex, fmt.Sprintf("First-%d", i-1)) {
+						fmt.Println(acc2)
+					}
 
-			tx.Set(entities.Account{
-				ID:        id,
-				Revision:  types.Revision(i),
-				FirstName: fmt.Sprintf("First-%d", i),
-				LastName:  "Last",
-			})
-			tx.Set(entities.Account{
-				ID:        NewID[entities.AccountID](),
-				FirstName: "Test1",
-				LastName:  "Test2",
-			})
-			tx.Set(entities.Account{
-				ID:        NewID[entities.AccountID](),
-				FirstName: "Test1",
-				LastName:  "Test2",
-			})
-			tx.Set(entities.Account{
-				ID:        NewID[entities.AccountID](),
-				FirstName: "Test1",
-				LastName:  "Test2",
-			})
-			tx.Set(entities.Account{
-				ID:        NewID[entities.AccountID](),
-				FirstName: "Test1",
-				LastName:  "Test2",
-			})
-			tx.Set(entities.Account{
-				ID:        NewID[entities.AccountID](),
-				FirstName: "Test1",
-				LastName:  "Test2",
-			})
+					tx.Set(entities.Account{
+						ID:        id,
+						Revision:  types.Revision(i),
+						FirstName: fmt.Sprintf("First-%d", i),
+						LastName:  "Last",
+					})
+					tx.Set(entities.Account{
+						ID:        NewID[entities.AccountID](),
+						FirstName: "Test1",
+						LastName:  "Test2",
+					})
+					tx.Set(entities.Account{
+						ID:        NewID[entities.AccountID](),
+						FirstName: "Test1",
+						LastName:  "Test2",
+					})
+					tx.Set(entities.Account{
+						ID:        NewID[entities.AccountID](),
+						FirstName: "Test1",
+						LastName:  "Test2",
+					})
+					tx.Set(entities.Account{
+						ID:        NewID[entities.AccountID](),
+						FirstName: "Test1",
+						LastName:  "Test2",
+					})
+					tx.Set(entities.Account{
+						ID:        NewID[entities.AccountID](),
+						FirstName: "Test1",
+						LastName:  "Test2",
+					})
 
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		})
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
 	}
-
-	time.Sleep(5 * time.Second)
+	if err := groupClients.Wait(); err != nil {
+		logger.Get(ctx).Error("Error", zap.Error(err))
+		return
+	}
 
 	fmt.Println("===================")
 
