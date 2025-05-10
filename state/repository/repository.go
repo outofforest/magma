@@ -283,9 +283,6 @@ func (r *Repository) PreviousTerm(index magmatypes.Index) types.Term {
 }
 
 func (r *Repository) open(fileIndex, offset uint64) (*File, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	if fileIndex >= uint64(len(r.files)) {
 		return nil, errors.Errorf("file index out of range: %d", fileIndex)
 	}
