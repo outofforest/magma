@@ -19,64 +19,97 @@ type View struct {
 }
 
 // Get returns the object.
-func (v *View) Get(ePtr any, id any) (bool, error) {
-	ePtrV := reflect.ValueOf(ePtr)
-	if ePtrV.Kind() != reflect.Ptr {
-		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
-	}
-	eV := ePtrV.Elem()
-	eT := eV.Type()
-	typeDef, exists := v.byType[eT]
-	if !exists {
-		return false, errors.Errorf("type %s not defined", eT)
-	}
-
-	receivedIDType := reflect.TypeOf(id)
-	if receivedIDType != typeDef.IDType {
-		return false, errors.Errorf("expected id type %s, got %s", typeDef.IDType, receivedIDType)
-	}
-
-	o, err := v.tx.First(typeDef.Table, idIndex, id)
-	if err != nil {
-		return false, errors.WithStack(err)
-	}
-
-	if o == nil {
-		return false, nil
-	}
-
-	eV.Set(o.(reflect.Value).Elem())
-	return true, nil
+func Get[T any](v *View, id any) (T, bool) {
+	return find[T](v, idIndex, id)
 }
 
 // Find returns the first object matching indexed values.
-func (v *View) Find(ePtr any, index indices.Index, args ...any) (bool, error) {
-	ePtrV := reflect.ValueOf(ePtr)
-	if ePtrV.Kind() != reflect.Ptr {
-		return false, errors.Errorf("pointer expected, got %s", ePtrV.Type())
-	}
-	eV := ePtrV.Elem()
-	eT := eV.Type()
-	if eT != index.Type() {
-		return false, errors.Errorf("expected index type %s, got %s", eT, index.Type())
-	}
+func Find[T any](v *View, index indices.Index, args ...any) (T, bool) {
+	return find[T](v, index.Name(), args...)
+}
 
-	typeDef, exists := v.byType[eT]
+// All iterates over all entities using ID index.
+func All[T any](v *View) func(func(T) bool) {
+	return iterate[T](v, idIndex)
+}
+
+// Iterate iterates over entities using provided index.
+func Iterate[T any](v *View, index indices.Index, args ...any) func(func(T) bool) {
+	return iterate[T](v, index.Name(), args...)
+}
+
+// AllIterator returns iterator iterating over all entities using ID index.
+func AllIterator[T any](v *View) func() (T, bool) {
+	return iterator[T](v, idIndex)
+}
+
+// Iterator returns iterator iterating over all entities using provided index.
+func Iterator[T any](v *View, index indices.Index, args ...any) func() (T, bool) {
+	return iterator[T](v, index.Name(), args...)
+}
+
+func find[T any](v *View, index string, args ...any) (T, bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
 	if !exists {
-		return false, errors.Errorf("type %s not defined", eT)
+		panic(errors.Errorf("type %s not defined", tt))
 	}
 
-	o, err := v.tx.First(typeDef.Table, index.Name(), args...)
+	o, err := v.tx.First(typeDef.Table, index, args...)
 	if err != nil {
-		return false, errors.WithStack(err)
+		panic(errors.WithStack(err))
 	}
 
 	if o == nil {
-		return false, nil
+		return t, false
 	}
 
-	eV.Set(o.(reflect.Value).Elem())
-	return true, nil
+	return o.(reflect.Value).Elem().Interface().(T), true
+}
+
+func iterate[T any](v *View, index string, args ...any) func(func(T) bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	it, err := v.tx.Get(typeDef.Table, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	return func(yield func(e T) bool) {
+		for e := it.Next(); e != nil; e = it.Next() {
+			if !yield(e.(reflect.Value).Elem().Interface().(T)) {
+				return
+			}
+		}
+	}
+}
+
+func iterator[T any](v *View, index string, args ...any) func() (T, bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	it, err := v.tx.Get(typeDef.Table, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	return func() (T, bool) {
+		e := it.Next()
+		if e == nil {
+			return t, false
+		}
+		return e.(reflect.Value).Elem().Interface().(T), true
+	}
 }
 
 // Tx represents transaction.
@@ -84,24 +117,6 @@ type Tx struct {
 	*View
 
 	changes map[types.ID]reflect.Value
-}
-
-// Get returns the object.
-func (tx *Tx) Get(ePtr any, id any) bool {
-	exists, err := tx.View.Get(ePtr, id)
-	if err != nil {
-		panic(err)
-	}
-	return exists
-}
-
-// Find returns the first object matching indexed values.
-func (tx *Tx) Find(ePtr any, index indices.Index, args ...any) bool {
-	exists, err := tx.View.Find(ePtr, index, args...)
-	if err != nil {
-		panic(err)
-	}
-	return exists
 }
 
 // Set sets object in transaction.
