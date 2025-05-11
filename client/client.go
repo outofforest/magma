@@ -337,6 +337,7 @@ func (c *Client) NewTransactor() *Transactor {
 		doneCh:           c.doneCh,
 		metaID:           c.metaID,
 		entityMetadataID: c.entityMetadataID,
+		changes:          map[types.ID]reflect.Value{},
 	}
 }
 
@@ -366,33 +367,29 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			return errors.WithStack(err)
 		}
 
-		oValue := reflect.ValueOf(o)
+		oV := reflect.New(typeDef.Type)
 		if o != nil {
-			oldRevision := oValue.Field(typeDef.RevisionIndex).Interface().(types.Revision)
+			oV2 := o.(reflect.Value).Elem()
+			oldRevision := oV2.Field(typeDef.RevisionIndex).Interface().(types.Revision)
 			if entityMeta.Revision <= oldRevision {
 				tx.Abort()
 				return ErrOutdatedTx
 			}
+			oV.Elem().Set(oV2)
 		}
 
-		ov := reflect.New(typeDef.Type)
-		ovValue := ov.Elem()
-		if o != nil {
-			ovValue.Set(oValue)
-		}
-
-		msgSize, err := c.config.Marshaller.ApplyPatch(ov.Interface(), txRaw[entityMetaSize:])
+		msgSize, err := c.config.Marshaller.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}
 
 		if o == nil {
-			idF := ovValue.Field(typeDef.IDIndex)
+			idF := oV.Elem().Field(typeDef.IDIndex)
 			idF.Set(reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType))
 		}
-		ovValue.Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
+		oV.Elem().Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
 
-		if err := tx.Insert(typeDef.Table, ovValue.Interface()); err != nil {
+		if err := tx.Insert(typeDef.Table, oV); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -426,16 +423,19 @@ type Transactor struct {
 	previousTxID     uuid.UUID
 	metaID           uint64
 	entityMetadataID uint64
+	changes          map[types.ID]reflect.Value
 }
 
 // Tx creates and broadcasts transaction to the magma network.
 func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr error) {
+	defer clear(t.changes)
+
 	pendingTx := &Tx{
 		View: &View{
 			tx:     t.db.Txn(true),
 			byType: t.byType,
 		},
-		changes: map[types.ID]reflect.Value{},
+		changes: t.changes,
 	}
 
 	defer pendingTx.tx.Abort()
@@ -477,36 +477,36 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	i += metaSize
 
 	for _, v := range pendingTx.changes {
-		ov := reflect.New(v.Type())
-		ovValue := ov.Elem()
-		ovValue.Set(v)
-		o := ov.Interface()
-
-		id, err := t.m.ID(o)
+		id, err := t.m.ID(v.Interface())
 		if err != nil {
 			return err
 		}
 
-		typeDef, exists := t.byType[ovValue.Type()]
+		vv := v.Elem()
+		typeDef, exists := t.byType[vv.Type()]
 		if !exists {
-			return errors.Errorf("unknown type %s", ovValue.Type())
+			return errors.Errorf("unknown type %s", vv.Type())
 		}
 
-		idF := ovValue.Field(typeDef.IDIndex)
-		oOldValue, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
+		idF := vv.Field(typeDef.IDIndex)
+		old, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		oOldV := reflect.New(v.Type())
-		oOldValueV := oOldV.Elem()
-		if oOldValue != nil {
-			oOldValueV.Set(reflect.ValueOf(oOldValue))
+
+		var oldV reflect.Value
+		var revision types.Revision
+		if old == nil {
+			oldV = reflect.New(typeDef.Type)
+		} else {
+			oldV = old.(reflect.Value)
+			revisionF := oldV.Elem().Field(typeDef.RevisionIndex)
+			revision = types.Revision(revisionF.Uint() + 1)
 		}
 
-		revisionF := oOldValueV.Field(typeDef.RevisionIndex)
 		entityMeta := &wire.EntityMetadata{
 			ID:        idF.Convert(idType).Interface().(types.ID),
-			Revision:  types.Revision(revisionF.Uint() + 1),
+			Revision:  revision,
 			MessageID: id,
 		}
 		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
@@ -515,7 +515,7 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		}
 		i += entitySize
 
-		_, msgSize, err := t.m.MakePatch(o, oOldV.Interface(), t.buf[i:])
+		_, msgSize, err := t.m.MakePatch(v.Interface(), oldV.Interface(), t.buf[i:])
 		if err != nil {
 			return err
 		}
@@ -546,22 +546,27 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		ReceivedCh:   receivedCh,
 		PreviousTxID: previousTxID,
 	}:
-		t.buf = t.buf[i:]
 	}
 
 	select {
 	case <-ctx.Done():
-		return errors.WithStack(ctx.Err())
+		err = errors.WithStack(ctx.Err())
 	case <-t.doneCh:
 		if ctx.Err() != nil {
-			return errors.WithStack(ctx.Err())
+			err = errors.WithStack(ctx.Err())
+		} else {
+			err = errors.New("client closed")
 		}
-		return errors.New("client closed")
 	case <-time.After(t.awaitTimeout):
-		return ErrAwaitTimeout
-	case err := <-receivedCh:
-		return err
+		err = ErrAwaitTimeout
+	case err = <-receivedCh:
 	}
+
+	if err != nil {
+		t.buf = t.buf[i:]
+	}
+
+	return err
 }
 
 func txRecover(err *error) {
@@ -570,7 +575,7 @@ func txRecover(err *error) {
 			*err = e
 			return
 		}
-		*err = errors.New("transaction panicked")
+		*err = errors.Errorf("transaction panicked: %s", r)
 	}
 }
 
@@ -584,7 +589,7 @@ func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
 }
 
 func (idi *idIndexer) FromObject(o any) (bool, []byte, error) {
-	id := reflect.ValueOf(o).Field(idi.index).Convert(idType).Interface().(types.ID)
+	id := o.(reflect.Value).Elem().Field(idi.index).Convert(idType).Interface().(types.ID)
 	return true, id[:], nil
 }
 

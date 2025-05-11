@@ -45,7 +45,7 @@ func (v *View) Get(ePtr any, id any) (bool, error) {
 		return false, nil
 	}
 
-	eV.Set(reflect.ValueOf(o))
+	eV.Set(o.(reflect.Value).Elem())
 	return true, nil
 }
 
@@ -75,7 +75,7 @@ func (v *View) Find(ePtr any, index indices.Index, args ...any) (bool, error) {
 		return false, nil
 	}
 
-	eV.Set(reflect.ValueOf(o))
+	eV.Set(o.(reflect.Value).Elem())
 	return true, nil
 }
 
@@ -107,11 +107,11 @@ func (tx *Tx) Find(ePtr any, index indices.Index, args ...any) bool {
 // Set sets object in transaction.
 func (tx *Tx) Set(o any) {
 	oValue := reflect.ValueOf(o)
-	oType := oValue.Type()
-	if oType.Kind() == reflect.Ptr {
+	if oValue.Kind() == reflect.Ptr {
 		panic(errors.New("object must not be a pointer"))
 	}
 
+	oType := oValue.Type()
 	typeDef, exists := tx.byType[oType]
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
@@ -121,9 +121,11 @@ func (tx *Tx) Set(o any) {
 		panic(errors.Errorf("id is empty"))
 	}
 
-	if err := tx.tx.Insert(typeDef.Table, o); err != nil {
+	oPtrValue := reflect.New(oType)
+	oPtrValue.Elem().Set(oValue)
+	if err := tx.tx.Insert(typeDef.Table, oPtrValue); err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	tx.changes[id] = oValue
+	tx.changes[id] = oPtrValue
 }

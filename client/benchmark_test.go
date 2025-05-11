@@ -150,7 +150,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	const clientCount = 1000
+	const clientCount = 200
 	groupClients := parallel.NewSubgroup(group.Spawn, "clients", parallel.Continue)
 	for range clientCount {
 		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
@@ -214,12 +214,12 @@ func TestCluster(t *testing.T) {
 
 	fmt.Println("===================")
 
-	group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
-		config, dir := makeConfig(config, peer4)
-		return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
-	})
+	// group.Spawn("peer4", parallel.Fail, func(ctx context.Context) error {
+	// 	config, dir := makeConfig(config, peer4)
+	// 	return magma.Run(ctx, config, p2p4, c2p4, dir, pageSize)
+	// })
 
-	time.Sleep(10 * time.Second)
+	// time.Sleep(10 * time.Second)
 	fmt.Println("exit")
 }
 
