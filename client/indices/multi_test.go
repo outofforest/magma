@@ -26,6 +26,7 @@ func TestMultiIndexer(t *testing.T) {
 	requireT.Equal("index1,index2", index.Name())
 	requireT.EqualValues(2, index.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), index.Type())
+	requireT.False(index.Schema().AllowMissing)
 
 	indexer := index.Schema().Indexer.(*multiIndexer)
 
@@ -149,6 +150,60 @@ func TestMultiIndexerWithMultiSubIndexer1Argument(t *testing.T) {
 	value, err := indexer.FromArgs(v.Value2.Value3)
 	requireT.NoError(err)
 	requireT.Equal(expected, value)
+}
+
+func TestMultiIndexerWithIfSubindex(t *testing.T) {
+	requireT := require.New(t)
+	var v o
+
+	index1, err := NewFieldIndex("index1", &v, &v.Value1)
+	requireT.NoError(err)
+	index2, err := NewFieldIndex("index2", &v, &v.Value4)
+	requireT.NoError(err)
+	index3, err := NewIfIndex("if", index2, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 2, Value4: xyz}))
+	requireT.NoError(err)
+
+	index, err := NewMultiIndex(index1, index3)
+	requireT.NoError(err)
+	requireT.Equal("index1,index2,if", index.Name())
+	requireT.EqualValues(2, index.NumOfArgs())
+	requireT.IsType(reflect.TypeOf(o{}), index.Type())
+	requireT.True(index.Schema().AllowMissing)
+
+	indexer := index.Schema().Indexer.(*multiIndexer)
+
+	v.Value1 = 1
+	v.Value4 = abc
+	expected := []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x41, 0x42, 0x43, 0x0}
+	value, err := indexer.FromArgs(v.Value1, v.Value4)
+	requireT.NoError(err)
+	requireT.Equal(expected, value)
+	exists, value, err := indexer.FromObject(reflect.ValueOf(&v))
+	requireT.NoError(err)
+	requireT.True(exists)
+	requireT.Equal(expected, value)
+
+	v.Value1 = 2
+	v.Value4 = xyz
+	expected = []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2, 0x58, 0x59, 0x5a, 0x0}
+	value, err = indexer.FromArgs(v.Value1, v.Value4)
+	requireT.NoError(err)
+	requireT.Equal(expected, value)
+	exists, value, err = indexer.FromObject(reflect.ValueOf(&v))
+	requireT.NoError(err)
+	requireT.True(exists)
+	requireT.Equal(expected, value)
+
+	v.Value1 = 1
+	v.Value4 = xyz
+	expected = []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x58, 0x59, 0x5a, 0x0}
+	value, err = indexer.FromArgs(v.Value1, v.Value4)
+	requireT.NoError(err)
+	requireT.Equal(expected, value)
+	exists, value, err = indexer.FromObject(reflect.ValueOf(&v))
+	requireT.NoError(err)
+	requireT.False(exists)
+	requireT.Nil(value)
 }
 
 func TestMultiErrorIfNoSubIndices(t *testing.T) {

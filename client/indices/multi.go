@@ -17,6 +17,7 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 
 	var numOfArgs uint64
 	var name string
+	var allowMissingValues bool
 	subIndexers := make([]memdb.Indexer, 0, len(subIndices))
 	singleSubIndexers := make([]memdb.SingleIndexer, 0, len(subIndices))
 	prefixSubIndexers := make([]memdb.PrefixIndexer, 0, len(subIndices))
@@ -31,7 +32,11 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 		}
 		name += si.Name()
 
-		subIndexer := si.Schema().Indexer
+		schema := si.Schema()
+
+		allowMissingValues = allowMissingValues || schema.AllowMissing
+
+		subIndexer := schema.Indexer
 		subIndexers = append(subIndexers, subIndexer)
 		singleSubIndexers = append(singleSubIndexers, subIndexer.(memdb.SingleIndexer))
 		prefixSubIndexer, _ := subIndexer.(memdb.PrefixIndexer)
@@ -39,9 +44,10 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 	}
 
 	return &MultiIndex{
-		name:       name,
-		numOfArgs:  numOfArgs,
-		entityType: t,
+		name:               name,
+		numOfArgs:          numOfArgs,
+		entityType:         t,
+		allowMissingValues: allowMissingValues,
 		indexer: &multiIndexer{
 			subIndices:        subIndices,
 			subIndexers:       subIndexers,
@@ -53,10 +59,11 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 
 // MultiIndex compiles many indices into a single one.
 type MultiIndex struct {
-	name       string
-	numOfArgs  uint64
-	entityType reflect.Type
-	indexer    memdb.Indexer
+	name               string
+	numOfArgs          uint64
+	entityType         reflect.Type
+	indexer            memdb.Indexer
+	allowMissingValues bool
 }
 
 // Name returns name of the index.
@@ -77,8 +84,9 @@ func (i *MultiIndex) NumOfArgs() uint64 {
 // Schema returns memdb index schema.
 func (i *MultiIndex) Schema() *memdb.IndexSchema {
 	return &memdb.IndexSchema{
-		Name:    i.name,
-		Indexer: i.indexer,
+		Name:         i.name,
+		Indexer:      i.indexer,
+		AllowMissing: i.allowMissingValues,
 	}
 }
 
@@ -117,8 +125,8 @@ func (mi *multiIndexer) PrefixFromArgs(args ...any) ([]byte, error) {
 		subValues = append(subValues, subValue)
 	}
 	value := make([]byte, 0, size)
-	for _, fragment := range subValues {
-		value = append(value, fragment...)
+	for _, subValue := range subValues {
+		value = append(value, subValue...)
 	}
 	return value, nil
 }
@@ -135,8 +143,8 @@ func (mi *multiIndexer) FromObject(o any) (bool, []byte, error) {
 		subValues = append(subValues, b)
 	}
 	value := make([]byte, 0, size)
-	for _, fragment := range subValues {
-		value = append(value, fragment...)
+	for _, subValue := range subValues {
+		value = append(value, subValue...)
 	}
 	return true, value, nil
 }

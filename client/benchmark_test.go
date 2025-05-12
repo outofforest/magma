@@ -134,6 +134,10 @@ func TestCluster(t *testing.T) {
 	requireT.NoError(err)
 	nameIndex, err := indices.NewMultiIndex(firstNameIndex, lastNameIndex)
 	requireT.NoError(err)
+	ifFirstName, err := indices.NewIfIndex("test1", firstNameIndex, func(acc *entities.Account) bool {
+		return acc.FirstName == "Test1"
+	})
+	requireT.NoError(err)
 
 	cl, err := New(Config{
 		Service:          "test",
@@ -146,6 +150,7 @@ func TestCluster(t *testing.T) {
 		Indices: []indices.Index{
 			firstNameIndex,
 			nameIndex,
+			ifFirstName,
 		},
 	})
 	requireT.NoError(err)
@@ -155,7 +160,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	const clientCount = 100
+	const clientCount = 1
 	groupClients := parallel.NewSubgroup(group.Spawn, "clients", parallel.Continue)
 	for range clientCount {
 		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
@@ -163,39 +168,44 @@ func TestCluster(t *testing.T) {
 			id := NewID[entities.AccountID]()
 			for i := range 50 {
 				err := tr.Tx(ctx, func(tx *Tx) error {
-					if acc, exists := Get[entities.Account](tx.View, id); exists {
-						fmt.Println(acc)
-					}
-					if acc, exists := Find[entities.Account](tx.View, firstNameIndex,
-						fmt.Sprintf("First-%d", i-1)); exists {
-						fmt.Println(acc)
-					}
-					for acc := range All[entities.Account](tx.View) {
-						fmt.Println(acc)
-					}
-					for acc := range Iterate[entities.Account](tx.View, firstNameIndex) {
-						fmt.Println(acc)
-					}
-
-					it := AllIterator[entities.Account](tx.View)
-					for {
-						acc, exists := it()
-						if !exists {
-							break
+					/*
+						if acc, exists := Get[entities.Account](tx.View, id); exists {
+							fmt.Println(acc)
 						}
-						fmt.Println(acc)
-					}
-
-					it = Iterator[entities.Account](tx.View, firstNameIndex)
-					for {
-						acc, exists := it()
-						if !exists {
-							break
+						if acc, exists := Find[entities.Account](tx.View, firstNameIndex,
+							fmt.Sprintf("First-%d", i-1)); exists {
+							fmt.Println(acc)
 						}
-						fmt.Println(acc)
-					}
+						for acc := range All[entities.Account](tx.View) {
+							fmt.Println(acc)
+						}
+						for acc := range Iterate[entities.Account](tx.View, firstNameIndex) {
+							fmt.Println(acc)
+						}
 
-					for acc := range Iterate[entities.Account](tx.View, nameIndex, "Test1") {
+						it := AllIterator[entities.Account](tx.View)
+						for {
+							acc, exists := it()
+							if !exists {
+								break
+							}
+							fmt.Println(acc)
+						}
+
+						it = Iterator[entities.Account](tx.View, firstNameIndex)
+						for {
+							acc, exists := it()
+							if !exists {
+								break
+							}
+							fmt.Println(acc)
+						}
+
+						for acc := range Iterate[entities.Account](tx.View, nameIndex, "Test1") {
+							fmt.Println(acc)
+						}
+					*/
+					for acc := range Iterate[entities.Account](tx.View, ifFirstName) {
 						fmt.Println(acc)
 					}
 
