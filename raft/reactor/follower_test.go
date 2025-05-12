@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state"
 	"github.com/outofforest/magma/state/events"
@@ -80,7 +81,7 @@ func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
 
 	buf := bytes.NewBuffer(nil)
 	for buf.Len() < len(expectedLog) {
-		reader, _, err := it.Reader()
+		reader, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -140,6 +141,7 @@ func TestFollowerSetup(t *testing.T) {
 	r.commitInfo = types.CommitInfo{
 		NextLogIndex:   10,
 		CommittedCount: 5,
+		HotEndIndex:    100,
 	}
 
 	r.transitionToFollower()
@@ -156,6 +158,7 @@ func TestFollowerSetup(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   10,
 		CommittedCount: 5,
+		HotEndIndex:    0,
 	}, r.commitInfo)
 
 	requireT.EqualValues(0, s.CurrentTerm())
@@ -1636,4 +1639,72 @@ func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
 		LeaderCommit: 10,
 	})
 	requireT.Error(err)
+}
+
+func TestFollowerApplyHotEnd(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.leaderID = peer1ID
+	r.commitInfo = types.CommitInfo{
+		NextLogIndex:   20,
+		CommittedCount: 10,
+		HotEndIndex:    0,
+	}
+
+	result, err := r.Apply(peer1ID, &wire.HotEnd{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   20,
+			CommittedCount: 10,
+			HotEndIndex:    20,
+		},
+	}, result)
+}
+
+func TestFollowerApplyHotEndIgnoreFromNonLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(s)
+	r.leaderID = peer1ID
+	r.commitInfo = types.CommitInfo{
+		NextLogIndex:   20,
+		CommittedCount: 10,
+		HotEndIndex:    0,
+	}
+
+	result, err := r.Apply(peer2ID, &wire.HotEnd{})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   20,
+			CommittedCount: 10,
+			HotEndIndex:    0,
+		},
+	}, result)
 }

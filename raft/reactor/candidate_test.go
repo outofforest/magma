@@ -27,6 +27,7 @@ func TestCandidateSetup(t *testing.T) {
 	r.commitInfo = types.CommitInfo{
 		NextLogIndex:   10,
 		CommittedCount: 5,
+		HotEndIndex:    100,
 	}
 	result, err := r.transitionToCandidate()
 	requireT.NoError(err)
@@ -44,6 +45,7 @@ func TestCandidateSetup(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   10,
 			CommittedCount: 5,
+			HotEndIndex:    0,
 		},
 		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
@@ -63,6 +65,7 @@ func TestCandidateSetup(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   10,
 		CommittedCount: 5,
+		HotEndIndex:    0,
 	}, r.commitInfo)
 
 	requireT.EqualValues(2, s.CurrentTerm())
@@ -393,6 +396,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   10,
 			CommittedCount: 0,
+			HotEndIndex:    10,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -425,6 +429,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   10,
 		CommittedCount: 0,
+		HotEndIndex:    10,
 	}, r.commitInfo)
 
 	requireT.EqualValues(2, s.CurrentTerm())

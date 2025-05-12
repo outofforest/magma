@@ -605,9 +605,20 @@ func (g *Gossip) l2pHandler(
 				switch m := msg.(type) {
 				case *repository.Iterator:
 					for {
-						r, length, err := m.Reader()
+						r, length, err := m.Reader(false)
 						if err != nil {
 							return err
+						}
+
+						if r == nil {
+							if err := c.SendProton(&wire.HotEnd{}, g.l2pMarshaller); err != nil {
+								return err
+							}
+
+							r, length, err = m.Reader(true)
+							if err != nil {
+								return err
+							}
 						}
 
 						if err := c.SendProton(&wire.StartLogStream{
@@ -742,7 +753,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 			defer c.Close()
 
 			for {
-				r, length, err := it.Reader()
+				r, length, err := it.Reader(true)
 				if err != nil {
 					return err
 				}

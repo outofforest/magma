@@ -35,6 +35,7 @@ func TestLeaderSetup(t *testing.T) {
 	r.commitInfo = types.CommitInfo{
 		NextLogIndex:   43,
 		CommittedCount: 2,
+		HotEndIndex:    0,
 	}
 
 	result, err := r.transitionToLeader()
@@ -51,6 +52,7 @@ func TestLeaderSetup(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   53,
 			CommittedCount: 2,
+			HotEndIndex:    53,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -293,6 +295,7 @@ func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -331,6 +334,7 @@ func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -371,6 +375,7 @@ func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(21, r.nextIndex[peer1ID])
@@ -411,6 +416,7 @@ func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -451,6 +457,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -458,6 +465,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   31,
 		CommittedCount: 0,
+		HotEndIndex:    31,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
@@ -472,6 +480,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   31,
 			CommittedCount: 0,
+			HotEndIndex:    31,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -481,6 +490,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   31,
 		CommittedCount: 0,
+		HotEndIndex:    31,
 	}, r.commitInfo)
 }
 
@@ -518,6 +528,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 42,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -525,6 +536,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 42,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
@@ -539,6 +551,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 42,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -548,6 +561,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 42,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 }
 
@@ -584,6 +598,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 0,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -597,6 +612,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 0,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(passivePeerID, &types.LogACK{
@@ -611,6 +627,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 0,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -625,6 +642,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 0,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 }
 
@@ -661,6 +679,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 0,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -674,6 +693,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 0,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
@@ -688,6 +708,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   42,
 			CommittedCount: 31,
+			HotEndIndex:    42,
 		},
 	}, result)
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
@@ -702,6 +723,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   42,
 		CommittedCount: 31,
+		HotEndIndex:    42,
 	}, r.commitInfo)
 }
 
@@ -837,6 +859,7 @@ func TestLeaderApplyLogSyncResponseIgnorePastTerm(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 	}, result)
 	requireT.Zero(r.nextIndex[peer1ID])
@@ -885,6 +908,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -945,6 +969,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -1004,6 +1029,7 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -1062,6 +1088,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
@@ -1113,6 +1140,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Force: true,
 	}, result)
@@ -1156,6 +1184,7 @@ func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 94,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelP2P,
 		Recipients: []magmatypes.ServerID{
@@ -1207,6 +1236,7 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   75,
 			CommittedCount: 0,
+			HotEndIndex:    75,
 		},
 	}, result)
 	requireT.EqualValues(4, r.lastLogTerm)
@@ -1285,6 +1315,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   86,
 			CommittedCount: 0,
+			HotEndIndex:    86,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
@@ -1345,6 +1376,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   87,
 			CommittedCount: 0,
+			HotEndIndex:    87,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreHeartbeatTick)
@@ -1422,6 +1454,7 @@ func TestLeaderApplyActivePeerConnected(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{
@@ -1489,6 +1522,7 @@ func TestLeaderApplyPassivePeerConnected(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   94,
 			CommittedCount: 0,
+			HotEndIndex:    94,
 		},
 		Channel: ChannelL2P,
 		Recipients: []magmatypes.ServerID{

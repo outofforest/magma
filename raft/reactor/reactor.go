@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state"
 	magmatypes "github.com/outofforest/magma/types"
@@ -135,6 +136,8 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 			return r.applyVoteRequest(peerID, c)
 		case *types.VoteResponse:
 			return r.applyVoteResponse(c)
+		case *wire.HotEnd:
+			return r.applyHotEnd(peerID)
 		}
 	}
 
@@ -318,6 +321,8 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultError(err)
 	}
 
+	r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
+
 	return r.resultEmpty()
 }
 
@@ -375,6 +380,14 @@ func (r *Reactor) applyElectionTick(tick types.ElectionTick) (Result, error) {
 	return r.transitionToCandidate()
 }
 
+func (r *Reactor) applyHotEnd(peerID magmatypes.ServerID) (Result, error) {
+	if r.role != types.RoleLeader && r.leaderID == peerID {
+		r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
+	}
+
+	return r.resultEmpty()
+}
+
 func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error) {
 	if r.role != types.RoleLeader {
 		return r.resultEmpty()
@@ -412,6 +425,7 @@ func (r *Reactor) transitionToFollower() {
 	r.leaderID = magmatypes.ZeroServerID
 	r.ignoreElectionTick = r.electionTick + 1
 	r.votedForMe = 0
+	r.commitInfo.HotEndIndex = 0
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 }
@@ -432,6 +446,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	r.leaderID = magmatypes.ZeroServerID
 	r.votedForMe = 1
 	r.ignoreElectionTick = r.electionTick + 1
+	r.commitInfo.HotEndIndex = 0
 	clear(r.nextIndex)
 	clear(r.matchIndex)
 
@@ -457,6 +472,7 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	if err != nil {
 		return r.resultError(err)
 	}
+	r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
 
 	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 

@@ -78,6 +78,7 @@ type ClientRequest struct {
 type CommitInfo struct {
 	NextLogIndex   types.Index
 	CommittedCount types.Index
+	HotEndIndex    types.Index
 }
 
 // Role is the role of the server.

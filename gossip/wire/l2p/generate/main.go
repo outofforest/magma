@@ -13,5 +13,6 @@ func main() {
 		proton.Message(types.LogSyncRequest{}),
 		proton.Message(types.LogSyncResponse{}),
 		proton.Message(wire.StartLogStream{}),
+		proton.Message(wire.HotEnd{}),
 	)
 }

@@ -26,3 +26,6 @@ type Hello struct {
 type StartLogStream struct {
 	Length uint64
 }
+
+// HotEnd indicates that hot end has been reached.
+type HotEnd struct{}
