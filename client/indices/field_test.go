@@ -87,6 +87,7 @@ func TestFieldIndexOffset(t *testing.T) {
 	requireT.EqualValues(1, i.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), i.Type())
 	requireT.Equal("index", i.Schema().Name)
+	requireT.False(i.Schema().AllowMissing)
 	requireT.Equal(uint64Indexer{
 		offset: 0x00,
 	}, i.Schema().Indexer)
