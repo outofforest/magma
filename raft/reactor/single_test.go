@@ -32,6 +32,7 @@ func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   10,
 			CommittedCount: 10,
+			HotEndIndex:    10,
 		},
 	}, result)
 	requireT.Empty(r.nextIndex)
@@ -80,6 +81,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   86,
 			CommittedCount: 75,
+			HotEndIndex:    86,
 		},
 	}, result)
 	requireT.Empty(r.nextIndex)
@@ -123,6 +125,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 		CommitInfo: types.CommitInfo{
 			NextLogIndex:   75,
 			CommittedCount: 75,
+			HotEndIndex:    75,
 		},
 		Force: true,
 	}, result)
@@ -131,6 +134,7 @@ func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
 	requireT.Equal(types.CommitInfo{
 		NextLogIndex:   75,
 		CommittedCount: 75,
+		HotEndIndex:    75,
 	}, r.commitInfo)
 	requireT.EqualValues(4, r.lastLogTerm)
 

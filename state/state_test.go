@@ -47,7 +47,7 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 
 	buf := bytes.NewBuffer(nil)
 	for buf.Len() < len(expectedLog) {
-		reader, _, err := it.Reader()
+		reader, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -1389,7 +1389,7 @@ func TestAppendManyFiles(t *testing.T) {
 
 	buf := bytes.NewBuffer(nil)
 	for range 270 {
-		reader, _, err := it.Reader()
+		reader, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -1438,7 +1438,7 @@ func TestAppendManyTerms(t *testing.T) {
 
 	buf := bytes.NewBuffer(nil)
 	for range 120 {
-		reader, _, err := it.Reader()
+		reader, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
