@@ -25,6 +25,9 @@ func Get[T any](v *View, id any) (T, bool) {
 
 // Find returns the first object matching indexed values.
 func Find[T any](v *View, index indices.Index, args ...any) (T, bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
 	return find[T](v, index.Name(), args...)
 }
 
@@ -35,6 +38,9 @@ func All[T any](v *View) func(func(T) bool) {
 
 // Iterate iterates over entities using provided index.
 func Iterate[T any](v *View, index indices.Index, args ...any) func(func(T) bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
 	return iterate[T](v, index.Name(), args...)
 }
 
@@ -45,6 +51,9 @@ func AllIterator[T any](v *View) func() (T, bool) {
 
 // Iterator returns iterator iterating over all entities using provided index.
 func Iterator[T any](v *View, index indices.Index, args ...any) func() (T, bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
 	return iterator[T](v, index.Name(), args...)
 }
 
