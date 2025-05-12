@@ -70,6 +70,11 @@ func (i *FieldIndex) Type() reflect.Type {
 	return i.entityType
 }
 
+// NumOfArgs returns number of arguments taken by the index.
+func (i *FieldIndex) NumOfArgs() uint64 {
+	return 1
+}
+
 // Schema returns memdb index schema.
 func (i *FieldIndex) Schema() *memdb.IndexSchema {
 	return &memdb.IndexSchema{

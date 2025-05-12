@@ -9,6 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	abc = "ABC"
+	def = "DEF"
+)
+
 type o struct {
 	Value1 uint64
 	Value2 subO1
@@ -46,11 +51,11 @@ func TestFieldIndexOffset(t *testing.T) {
 		Value2: subO1{
 			Value1: 2,
 			Value2: subO2{
-				Value1: "ABC",
+				Value1: abc,
 				Value2: 2,
 				Value3: 3,
 			},
-			Value3: "DEF",
+			Value3: def,
 		},
 		Value3: subO2{
 			Value1: "GHI",
@@ -79,6 +84,7 @@ func TestFieldIndexOffset(t *testing.T) {
 	i, err := NewFieldIndex("index", &v, &v.Value1)
 	requireT.NoError(err)
 	requireT.Equal("index", i.Name())
+	requireT.EqualValues(1, i.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), i.Type())
 	requireT.Equal("index", i.Schema().Name)
 	requireT.Equal(uint64Indexer{
@@ -225,7 +231,7 @@ func TestStringIndexer(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(expected, value)
 
-	v.Value2.Value2.ValueString = "ABC"
+	v.Value2.Value2.ValueString = abc
 	expected = []byte{0x41, 0x42, 0x43, 0x00}
 	value, err = indexer.FromArgs(v.Value2.Value2.ValueString)
 	requireT.NoError(err)

@@ -130,6 +130,10 @@ func TestCluster(t *testing.T) {
 	var acc entities.Account
 	firstNameIndex, err := indices.NewFieldIndex("firstName", &acc, &acc.FirstName)
 	requireT.NoError(err)
+	lastNameIndex, err := indices.NewFieldIndex("lastName", &acc, &acc.LastName)
+	requireT.NoError(err)
+	nameIndex, err := indices.NewMultiIndex(firstNameIndex, lastNameIndex)
+	requireT.NoError(err)
 
 	cl, err := New(Config{
 		Service:          "test",
@@ -141,6 +145,7 @@ func TestCluster(t *testing.T) {
 		Marshaller:       entities.NewMarshaller(),
 		Indices: []indices.Index{
 			firstNameIndex,
+			nameIndex,
 		},
 	})
 	requireT.NoError(err)
@@ -187,6 +192,10 @@ func TestCluster(t *testing.T) {
 						if !exists {
 							break
 						}
+						fmt.Println(acc)
+					}
+
+					for acc := range Iterate[entities.Account](tx.View, nameIndex, "Test1") {
 						fmt.Println(acc)
 					}
 

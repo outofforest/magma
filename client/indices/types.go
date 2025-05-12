@@ -10,5 +10,6 @@ import (
 type Index interface {
 	Name() string
 	Type() reflect.Type
+	NumOfArgs() uint64
 	Schema() *memdb.IndexSchema
 }
