@@ -152,6 +152,10 @@ func TestCluster(t *testing.T) {
 			nameIndex,
 			ifFirstName,
 		},
+		TriggerFunc: func(ctx context.Context, v *View) error {
+			fmt.Println("================")
+			return nil
+		},
 	})
 	requireT.NoError(err)
 
