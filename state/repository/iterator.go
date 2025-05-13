@@ -23,7 +23,12 @@ type TailProvider struct {
 }
 
 // Wait waits until transaction is available.
-func (tp *TailProvider) Wait(current magmatypes.Index, block bool, closed *bool) (magmatypes.Index, bool, error) {
+func (tp *TailProvider) Wait(
+	current magmatypes.Index,
+	hotEnd *magmatypes.Index,
+	block bool,
+	closed *bool,
+) (magmatypes.Index, bool, error) {
 	tp.cond.L.Lock()
 	defer tp.cond.L.Unlock()
 
@@ -40,8 +45,8 @@ func (tp *TailProvider) Wait(current magmatypes.Index, block bool, closed *bool)
 			return 0, false, nil
 		}
 
-		if tp.hotEnd > 0 && current == tp.hotEnd {
-			tp.hotEnd = 0
+		if tp.hotEnd > *hotEnd && current == tp.hotEnd {
+			*hotEnd = tp.hotEnd
 			return 0, false, nil
 		}
 
@@ -78,6 +83,7 @@ type Iterator struct {
 
 	current magmatypes.Index
 	closed  bool
+	hotEnd  magmatypes.Index
 
 	mu          sync.Mutex
 	currentFile *File
@@ -85,7 +91,7 @@ type Iterator struct {
 
 // Reader returns next reader.
 func (i *Iterator) Reader(block bool) (io.Reader, uint64, error) {
-	tail, valid, err := i.provider.Wait(i.current, block, &i.closed)
+	tail, valid, err := i.provider.Wait(i.current, &i.hotEnd, block, &i.closed)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -321,7 +321,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 			}
 			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount ||
 				res.CommitInfo.HotEndIndex > commitInfo.HotEndIndex {
-				pState.providerClients.SetTail(res.CommitInfo.CommittedCount, commitInfo.HotEndIndex)
+				pState.providerClients.SetTail(res.CommitInfo.CommittedCount, res.CommitInfo.HotEndIndex)
 			}
 			commitInfo = res.CommitInfo
 		case p, ok := <-pState.PeerP2PCh:
