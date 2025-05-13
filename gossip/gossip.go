@@ -37,6 +37,7 @@ type peerL2P struct {
 	SendCh      chan any
 	InstalledCh chan struct{}
 	Iterator    *repository.Iterator
+	Connection  *resonance.Connection
 	Connected   bool
 }
 
@@ -255,6 +256,10 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 
 			//nolint:nestif
 			if leaderID != res.LeaderID {
+				if peer, exists := peersL2P[leaderID]; exists {
+					peer.Connection.Close()
+				}
+
 				leaderID = res.LeaderID
 				if leaderID == g.serverID {
 					pLeader = peerTx2P{
@@ -311,7 +316,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 					}
 				}
 			}
-			if res.CommitInfo.NextLogIndex > commitInfo.NextLogIndex {
+			if res.CommitInfo.NextLogIndex != commitInfo.NextLogIndex && leaderID == g.serverID {
 				pState.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
 			}
 			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
@@ -551,6 +556,7 @@ func (g *Gossip) l2pHandler(
 				SendCh:      ch,
 				InstalledCh: make(chan struct{}),
 				Connected:   true,
+				Connection:  c,
 			}
 			peerCh <- p
 			defer func() {
