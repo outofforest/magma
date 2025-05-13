@@ -12,5 +12,6 @@ func main() {
 	proton.Generate("../c2p.proton.go",
 		proton.Message(c2p.Init{}),
 		proton.Message(wire.StartLogStream{}),
+		proton.Message(wire.HotEnd{}),
 	)
 }

@@ -18,8 +18,8 @@ func NewTailProvider() *TailProvider {
 
 // TailProvider provides the valid tail index of the transaction stream.
 type TailProvider struct {
-	cond *sync.Cond
-	tail magmatypes.Index
+	cond         *sync.Cond
+	tail, hotEnd magmatypes.Index
 }
 
 // Wait waits until transaction is available.
@@ -40,6 +40,11 @@ func (tp *TailProvider) Wait(current magmatypes.Index, block bool, closed *bool)
 			return 0, false, nil
 		}
 
+		if tp.hotEnd > 0 && current == tp.hotEnd {
+			tp.hotEnd = 0
+			return 0, false, nil
+		}
+
 		tp.cond.Wait()
 	}
 }
@@ -55,11 +60,12 @@ func (tp *TailProvider) Call(f func()) {
 }
 
 // SetTail sets tail.
-func (tp *TailProvider) SetTail(tail magmatypes.Index) {
+func (tp *TailProvider) SetTail(tail, hotEnd magmatypes.Index) {
 	tp.cond.L.Lock()
 	defer tp.cond.L.Unlock()
 
 	tp.tail = tail
+	tp.hotEnd = hotEnd
 	tp.cond.Broadcast()
 }
 
