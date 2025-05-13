@@ -49,6 +49,7 @@ type Config struct {
 	AwaitTimeout     time.Duration
 	Marshaller       proton.Marshaller
 	Indices          []indices.Index
+	TriggerFunc      func(ctx context.Context, v *View) error
 }
 
 // New creates new magma client.
@@ -150,6 +151,7 @@ func New(config Config) (*Client, error) {
 		db:               db,
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
+		readyCh:          make(chan struct{}),
 	}, nil
 }
 
@@ -167,9 +169,13 @@ type Client struct {
 	bufSize          uint64
 	metaID           uint64
 	entityMetadataID uint64
+
+	readyCh chan struct{}
 }
 
 // Run runs client.
+//
+//nolint:gocyclo
 func (c *Client) Run(ctx context.Context) error {
 	defer close(c.doneCh)
 
@@ -182,6 +188,9 @@ func (c *Client) Run(ctx context.Context) error {
 	var awaitedTxsToClean []uuid.UUID
 
 	cMarshaller := c2p.NewMarshaller()
+
+	var firstHotEnd bool
+	triggerCh := make(chan struct{}, 1)
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -198,6 +207,8 @@ func (c *Client) Run(ctx context.Context) error {
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
+						defer close(triggerCh)
+
 						for {
 							m, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
@@ -262,6 +273,20 @@ func (c *Client) Run(ctx context.Context) error {
 									mu.Unlock()
 								}
 							case *gossipwire.HotEnd:
+								if !firstHotEnd {
+									firstHotEnd = true
+									close(c.readyCh)
+								}
+
+								if c.config.TriggerFunc != nil {
+									if len(triggerCh) > 0 {
+										select {
+										case <-triggerCh:
+										default:
+										}
+									}
+									triggerCh <- struct{}{}
+								}
 							default:
 								return errors.Errorf("unexpected message %T", msg)
 							}
@@ -302,6 +327,20 @@ func (c *Client) Run(ctx context.Context) error {
 							}
 						}
 					})
+					if c.config.TriggerFunc != nil {
+						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
+							for range triggerCh {
+								if err := c.config.TriggerFunc(ctx, &View{
+									tx:     c.db.Txn(false),
+									byType: c.byType,
+								}); err != nil {
+									return err
+								}
+							}
+							return errors.WithStack(ctx.Err())
+						})
+					}
+
 					return nil
 				})
 			},
@@ -311,6 +350,16 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 
 		log.Error("Connection failed", zap.Error(err))
+	}
+}
+
+// WarmUp waits until hot end is reached for the first time.
+func (c *Client) WarmUp(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.WithStack(ctx.Err())
+	case <-c.readyCh:
+		return nil
 	}
 }
 
@@ -325,20 +374,8 @@ func (c *Client) View() *View {
 // NewTransactor creates new transactor.
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
-		service:          c.config.Service,
-		txCh:             c.txCh,
-		m:                c.config.Marshaller,
-		metaM:            c.metaM,
-		byType:           c.byType,
-		db:               c.db,
-		maxMessageSize:   c.config.MaxMessageSize,
-		bufSize:          c.bufSize,
-		broadcastTimeout: c.config.BroadcastTimeout,
-		awaitTimeout:     c.config.AwaitTimeout,
-		doneCh:           c.doneCh,
-		metaID:           c.metaID,
-		entityMetadataID: c.entityMetadataID,
-		changes:          map[types.ID]reflect.Value{},
+		client:  c,
+		changes: map[types.ID]reflect.Value{},
 	}
 }
 
@@ -409,22 +446,10 @@ type tx struct {
 
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
-	service          string
-	txCh             chan tx
-	m                proton.Marshaller
-	metaM            proton.Marshaller
-	byType           map[reflect.Type]typeInfo
-	db               *memdb.MemDB
-	maxMessageSize   uint64
-	buf              []byte
-	bufSize          uint64
-	broadcastTimeout time.Duration
-	awaitTimeout     time.Duration
-	doneCh           chan struct{}
-	previousTxID     uuid.UUID
-	metaID           uint64
-	entityMetadataID uint64
-	changes          map[types.ID]reflect.Value
+	client       *Client
+	changes      map[types.ID]reflect.Value
+	previousTxID uuid.UUID
+	buf          []byte
 }
 
 // Tx creates and broadcasts transaction to the magma network.
@@ -433,8 +458,8 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 
 	pendingTx := &Tx{
 		View: &View{
-			tx:     t.db.Txn(true),
-			byType: t.byType,
+			tx:     t.client.db.Txn(true),
+			byType: t.client.byType,
 		},
 		changes: t.changes,
 	}
@@ -442,7 +467,7 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	defer pendingTx.tx.Abort()
 	defer txRecover(&retErr)
 
-	snapshot := t.db.Txn(false)
+	snapshot := t.client.db.Txn(false)
 	if err := txF(pendingTx); err != nil {
 		return err
 	}
@@ -453,8 +478,8 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		return nil
 	}
 
-	if uint64(len(t.buf)) < t.maxMessageSize {
-		t.buf = make([]byte, t.bufSize)
+	if uint64(len(t.buf)) < t.client.config.MaxMessageSize {
+		t.buf = make([]byte, t.client.bufSize)
 	}
 
 	i := uint64(varuint64.MaxSize)
@@ -466,25 +491,25 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	meta := &wire.TxMetadata{
 		ID:               txID,
 		Time:             time.Now(),
-		Service:          t.service,
-		EntityMetadataID: t.entityMetadataID,
+		Service:          t.client.config.Service,
+		EntityMetadataID: t.client.entityMetadataID,
 	}
 
-	i += varuint64.Put(t.buf[i:], t.metaID)
-	_, metaSize, err := t.metaM.Marshal(meta, t.buf[i:])
+	i += varuint64.Put(t.buf[i:], t.client.metaID)
+	_, metaSize, err := t.client.metaM.Marshal(meta, t.buf[i:])
 	if err != nil {
 		return err
 	}
 	i += metaSize
 
 	for _, v := range pendingTx.changes {
-		id, err := t.m.ID(v.Interface())
+		id, err := t.client.config.Marshaller.ID(v.Interface())
 		if err != nil {
 			return err
 		}
 
 		vv := v.Elem()
-		typeDef, exists := t.byType[vv.Type()]
+		typeDef, exists := t.client.byType[vv.Type()]
 		if !exists {
 			return errors.Errorf("unknown type %s", vv.Type())
 		}
@@ -510,20 +535,20 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 			Revision:  revision,
 			MessageID: id,
 		}
-		_, entitySize, err := t.metaM.Marshal(entityMeta, t.buf[i:])
+		_, entitySize, err := t.client.metaM.Marshal(entityMeta, t.buf[i:])
 		if err != nil {
 			return err
 		}
 		i += entitySize
 
-		_, msgSize, err := t.m.MakePatch(v.Interface(), oldV.Interface(), t.buf[i:])
+		_, msgSize, err := t.client.config.Marshaller.MakePatch(v.Interface(), oldV.Interface(), t.buf[i:])
 		if err != nil {
 			return err
 		}
 		i += msgSize
 
-		if i+1 > t.maxMessageSize {
-			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.maxMessageSize)
+		if i+1 > t.client.config.MaxMessageSize {
+			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.client.config.MaxMessageSize)
 		}
 	}
 
@@ -534,14 +559,14 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	select {
 	case <-ctx.Done():
 		return errors.WithStack(ctx.Err())
-	case <-t.doneCh:
+	case <-t.client.doneCh:
 		if ctx.Err() != nil {
 			return errors.WithStack(ctx.Err())
 		}
 		return errors.New("client closed")
-	case <-time.After(t.broadcastTimeout):
+	case <-time.After(t.client.config.BroadcastTimeout):
 		return ErrBroadcastTimeout
-	case t.txCh <- tx{
+	case t.client.txCh <- tx{
 		ID:           txID,
 		Tx:           t.buf[varuint64.MaxSize-n : i],
 		ReceivedCh:   receivedCh,
@@ -552,13 +577,13 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	select {
 	case <-ctx.Done():
 		err = errors.WithStack(ctx.Err())
-	case <-t.doneCh:
+	case <-t.client.doneCh:
 		if ctx.Err() != nil {
 			err = errors.WithStack(ctx.Err())
 		} else {
 			err = errors.New("client closed")
 		}
-	case <-time.After(t.awaitTimeout):
+	case <-time.After(t.client.config.AwaitTimeout):
 		err = ErrAwaitTimeout
 	case err = <-receivedCh:
 	}
