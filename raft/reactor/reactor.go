@@ -6,8 +6,6 @@ package reactor
 // FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 
 	"github.com/outofforest/magma/gossip/wire"
@@ -579,7 +577,6 @@ func (r *Reactor) updateFollowerCommit() {
 		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
 			r.commitInfo.CommittedCount = r.leaderCommittedCount
 		}
-		fmt.Printf(" %s: %d\n", r.serverID, r.commitInfo.CommittedCount)
 	}
 }
 
@@ -600,7 +597,6 @@ func (r *Reactor) updateLeaderCommit(candidate magmatypes.Index) bool {
 		greater++
 		if greater == r.majority {
 			r.commitInfo.CommittedCount = nextCommittedCount
-			fmt.Printf("+%s: %d\n", r.serverID, r.commitInfo.CommittedCount)
 			return true
 		}
 	}
