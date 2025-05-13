@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/outofforest/magma"
-	"github.com/outofforest/magma/client/entities"
+	"github.com/outofforest/magma/integration/entities"
 )
 
 //go:generate go run .
