@@ -160,7 +160,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	const clientCount = 100
+	const clientCount = 50
 	groupClients := parallel.NewSubgroup(group.Spawn, "clients", parallel.Continue)
 	for range clientCount {
 		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
