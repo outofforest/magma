@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -16,7 +17,39 @@ import (
 	"github.com/outofforest/parallel"
 )
 
-func TestCluster(t *testing.T) {
+func TestClusterSinglePeer(t *testing.T) {
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	p := system.NewPeer(t, "P", types.Partitions{"default": true})
+	c := system.NewClient(t, p, "client", "default", nil)
+
+	cluster := system.NewCluster(p)
+	cluster.StartPeers(ctx, p)
+	cluster.StartClients(ctx, c)
+
+	accountID := client.NewID[entities.AccountID]()
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{
+			ID:        accountID,
+			FirstName: "FirstName",
+			LastName:  "LastName",
+		})
+		return nil
+	}))
+
+	v := c.View()
+	account, exists := client.Get[entities.Account](v, accountID)
+	requireT.True(exists)
+	requireT.Equal(entities.Account{
+		ID:        accountID,
+		FirstName: "FirstName",
+		LastName:  "LastName",
+	}, account)
+}
+
+func TestCluster3Peers3Clients(t *testing.T) {
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -26,12 +59,40 @@ func TestCluster(t *testing.T) {
 		system.NewPeer(t, "P3", types.Partitions{"default": true}),
 	}
 
-	clients := make([]*system.Client, 0, len(peers))
 	ids := make([]entities.AccountID, 0, len(peers))
+	results := make(chan map[entities.AccountID]entities.Account, 3)
+	triggerFunc := func() func(ctx context.Context, v *client.View) error {
+		var found bool
+		return func(ctx context.Context, v *client.View) error {
+			if found {
+				return nil
+			}
+
+			accounts := map[entities.AccountID]entities.Account{}
+			for _, id := range ids {
+				acc, exists := client.Get[entities.Account](v, id)
+				if !exists {
+					return nil
+				}
+				accounts[id] = acc
+			}
+
+			found = true
+
+			select {
+			case <-ctx.Done():
+				return errors.WithStack(ctx.Err())
+			case results <- accounts:
+				return nil
+			}
+		}
+	}
+
+	clients := make([]*system.Client, 0, len(peers))
 	idCh := make(chan entities.AccountID, len(peers))
 	for i, peer := range peers {
 		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), "default",
-			nil))
+			triggerFunc()))
 		id := client.NewID[entities.AccountID]()
 		ids = append(ids, id)
 		idCh <- id
@@ -42,11 +103,9 @@ func TestCluster(t *testing.T) {
 	cluster.StartClients(ctx, clients...)
 
 	clientGroup := parallel.NewGroup(ctx)
-	groupClients := parallel.NewSubgroup(clientGroup.Spawn, "clients", parallel.Continue)
 	for _, c := range clients {
-		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
-			tr := c.NewTransactor()
-			err := tr.Tx(ctx, func(tx *client.Tx) error {
+		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
+			return c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 				tx.Set(entities.Account{
 					ID:        <-idCh,
 					FirstName: "FirstName",
@@ -54,28 +113,27 @@ func TestCluster(t *testing.T) {
 				})
 				return nil
 			})
-			if err != nil {
-				return err
-			}
-
-			return nil
 		})
 	}
-	if err := groupClients.Wait(); err != nil {
+	if err := clientGroup.Wait(); err != nil {
 		logger.Get(ctx).Error("Error", zap.Error(err))
 		return
 	}
 
-	for _, c := range clients {
-		view := c.View()
-		for _, id := range ids {
-			acc, exists := client.Get[entities.Account](view, id)
-			requireT.True(exists)
-			requireT.Equal(entities.Account{
-				ID:        id,
-				FirstName: "FirstName",
-				LastName:  "LastName",
-			}, acc)
+	for range clients {
+		select {
+		case <-ctx.Done():
+			requireT.NoError(ctx.Err())
+		case accounts := <-results:
+			for _, id := range ids {
+				acc, exists := accounts[id]
+				requireT.True(exists)
+				requireT.Equal(entities.Account{
+					ID:        id,
+					FirstName: "FirstName",
+					LastName:  "LastName",
+				}, acc)
+			}
 		}
 	}
 }
