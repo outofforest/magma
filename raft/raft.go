@@ -134,7 +134,8 @@ func runReactor(
 		}
 
 		if res.Channel != reactor.ChannelNone || res.LeaderID != leaderID ||
-			res.CommitInfo.CommittedCount > commitInfo.CommittedCount || res.Force {
+			res.CommitInfo.CommittedCount > commitInfo.CommittedCount ||
+			res.CommitInfo.HotEndIndex > commitInfo.HotEndIndex || res.Force {
 			commitInfo = res.CommitInfo
 			leaderID = res.LeaderID
 			resultCh <- res

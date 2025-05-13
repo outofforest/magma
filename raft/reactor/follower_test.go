@@ -74,7 +74,7 @@ func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
 	requireT.NoError(err)
 
 	tp := repository.NewTailProvider()
-	tp.SetTail(magmatypes.Index(len(expectedLog)))
+	tp.SetTail(magmatypes.Index(len(expectedLog)), 0)
 
 	it := repo.Iterator(tp, 0)
 	defer it.Close()

@@ -40,7 +40,7 @@ func appendLog(requireT *require.Assertions, s *State, data ...byte) {
 
 func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 	tp := repository.NewTailProvider()
-	tp.SetTail(types.Index(len(expectedLog)))
+	tp.SetTail(types.Index(len(expectedLog)), 0)
 
 	it := s.repo.Iterator(tp, 0)
 	defer it.Close()
@@ -1383,7 +1383,7 @@ func TestAppendManyFiles(t *testing.T) {
 	}
 
 	tp := repository.NewTailProvider()
-	tp.SetTail(828632)
+	tp.SetTail(828632, 0)
 	it := s.repo.Iterator(tp, 0)
 	defer it.Close()
 
@@ -1432,7 +1432,7 @@ func TestAppendManyTerms(t *testing.T) {
 	}
 
 	tp := repository.NewTailProvider()
-	tp.SetTail(1200)
+	tp.SetTail(1200, 0)
 	it := s.repo.Iterator(tp, 0)
 	defer it.Close()
 

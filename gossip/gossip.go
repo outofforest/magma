@@ -317,10 +317,11 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				}
 			}
 			if res.CommitInfo.NextLogIndex != commitInfo.NextLogIndex && leaderID == g.serverID {
-				pState.providerPeers.SetTail(res.CommitInfo.NextLogIndex)
+				pState.providerPeers.SetTail(res.CommitInfo.NextLogIndex, 0)
 			}
-			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount {
-				pState.providerClients.SetTail(res.CommitInfo.CommittedCount)
+			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount ||
+				res.CommitInfo.HotEndIndex > commitInfo.HotEndIndex {
+				pState.providerClients.SetTail(res.CommitInfo.CommittedCount, commitInfo.HotEndIndex)
 			}
 			commitInfo = res.CommitInfo
 		case p, ok := <-pState.PeerP2PCh:
@@ -763,6 +764,15 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 				if err != nil {
 					return err
 				}
+
+				if r == nil {
+					if err := c.SendProton(&wire.HotEnd{}, g.c2pMarshaller); err != nil {
+						return err
+					}
+
+					continue
+				}
+
 				if err := c.SendProton(&wire.StartLogStream{
 					Length: length,
 				}, g.c2pMarshaller); err != nil {

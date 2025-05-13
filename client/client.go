@@ -204,65 +204,66 @@ func (c *Client) Run(ctx context.Context) error {
 								return err
 							}
 
-							msg, ok := m.(*gossipwire.StartLogStream)
-							if !ok {
-								return errors.Errorf("unexpected message %T", msg)
-							}
+							switch msg := m.(type) {
+							case *gossipwire.StartLogStream:
+								var length uint64
+								for length < msg.Length {
+									txRaw, err := conn.ReceiveRawBytes()
+									if err != nil {
+										return err
+									}
 
-							var length uint64
-							for length < msg.Length {
-								txRaw, err := conn.ReceiveRawBytes()
-								if err != nil {
-									return err
-								}
+									length += uint64(len(txRaw))
 
-								length += uint64(len(txRaw))
+									txTotalLen := types.Index(len(txRaw))
+									txLen, n := varuint64.Parse(txRaw)
 
-								txTotalLen := types.Index(len(txRaw))
-								txLen, n := varuint64.Parse(txRaw)
+									if txLen < format.ChecksumSize {
+										return errors.New("unexpected tx size")
+									}
 
-								if txLen < format.ChecksumSize {
-									return errors.New("unexpected tx size")
-								}
+									i := len(txRaw) - format.ChecksumSize
+									checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
+									if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
+										return errors.New("tx checksum mismatch")
+									}
 
-								i := len(txRaw) - format.ChecksumSize
-								checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
-								if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-									return errors.New("tx checksum mismatch")
-								}
+									txLen -= format.ChecksumSize
+									txRaw = txRaw[n : n+txLen]
 
-								txLen -= format.ChecksumSize
-								txRaw = txRaw[n : n+txLen]
+									if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
+										// This is a term mark. Ignore.
+										previousChecksum = checksum
+										nextLogIndex += txTotalLen
+										continue
+									}
 
-								if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
-									// This is a term mark. Ignore.
+									metaID, n := varuint64.Parse(txRaw)
+									metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
+									if err != nil {
+										return err
+									}
+									meta := metaAny.(*wire.TxMetadata)
+
+									err = c.applyTx(meta.EntityMetadataID, txRaw[n+metaSize:])
+									if err != nil && !errors.Is(err, ErrOutdatedTx) {
+										return err
+									}
+
 									previousChecksum = checksum
 									nextLogIndex += txTotalLen
-									continue
-								}
 
-								metaID, n := varuint64.Parse(txRaw)
-								metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
-								if err != nil {
-									return err
+									mu.Lock()
+									receivedCh := awaitedTxs[meta.ID]
+									if receivedCh != nil {
+										delete(awaitedTxs, meta.ID)
+										receivedCh <- err
+									}
+									mu.Unlock()
 								}
-								meta := metaAny.(*wire.TxMetadata)
-
-								err = c.applyTx(meta.EntityMetadataID, txRaw[n+metaSize:])
-								if err != nil && !errors.Is(err, ErrOutdatedTx) {
-									return err
-								}
-
-								previousChecksum = checksum
-								nextLogIndex += txTotalLen
-
-								mu.Lock()
-								receivedCh := awaitedTxs[meta.ID]
-								if receivedCh != nil {
-									delete(awaitedTxs, meta.ID)
-									receivedCh <- err
-								}
-								mu.Unlock()
+							case *gossipwire.HotEnd:
+							default:
+								return errors.Errorf("unexpected message %T", msg)
 							}
 						}
 					})

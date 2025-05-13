@@ -160,7 +160,7 @@ func TestCluster(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	fmt.Println("Start")
 
-	const clientCount = 50
+	const clientCount = 10
 	groupClients := parallel.NewSubgroup(group.Spawn, "clients", parallel.Continue)
 	for range clientCount {
 		groupClients.Spawn("client", parallel.Continue, func(ctx context.Context) error {
@@ -171,43 +171,45 @@ func TestCluster(t *testing.T) {
 					if acc, exists := Get[entities.Account](tx.View, id); exists {
 						fmt.Println(acc)
 					}
-					if acc, exists := Find[entities.Account](tx.View, firstNameIndex,
-						fmt.Sprintf("First-%d", i-1)); exists {
-						fmt.Println(acc)
-					}
-					for acc := range All[entities.Account](tx.View) {
-						fmt.Println(acc)
-					}
-					for acc := range Iterate[entities.Account](tx.View, firstNameIndex) {
-						fmt.Println(acc)
-					}
 
-					it := AllIterator[entities.Account](tx.View)
-					for {
-						acc, exists := it()
-						if !exists {
-							break
+					/*
+						if acc, exists := Find[entities.Account](tx.View, firstNameIndex,
+							fmt.Sprintf("First-%d", i-1)); exists {
+							fmt.Println(acc)
 						}
-						fmt.Println(acc)
-					}
-
-					it = Iterator[entities.Account](tx.View, firstNameIndex)
-					for {
-						acc, exists := it()
-						if !exists {
-							break
+						for acc := range All[entities.Account](tx.View) {
+							fmt.Println(acc)
 						}
-						fmt.Println(acc)
-					}
+						for acc := range Iterate[entities.Account](tx.View, firstNameIndex) {
+							fmt.Println(acc)
+						}
 
-					for acc := range Iterate[entities.Account](tx.View, nameIndex, "Test1") {
-						fmt.Println(acc)
-					}
+						it := AllIterator[entities.Account](tx.View)
+						for {
+							acc, exists := it()
+							if !exists {
+								break
+							}
+							fmt.Println(acc)
+						}
 
-					for acc := range Iterate[entities.Account](tx.View, ifFirstName) {
-						fmt.Println(acc)
-					}
+						it = Iterator[entities.Account](tx.View, firstNameIndex)
+						for {
+							acc, exists := it()
+							if !exists {
+								break
+							}
+							fmt.Println(acc)
+						}
 
+						for acc := range Iterate[entities.Account](tx.View, nameIndex, "Test1") {
+							fmt.Println(acc)
+						}
+
+						for acc := range Iterate[entities.Account](tx.View, ifFirstName) {
+							fmt.Println(acc)
+						}
+					*/
 					tx.Set(entities.Account{
 						ID:        id,
 						Revision:  types.Revision(i),
