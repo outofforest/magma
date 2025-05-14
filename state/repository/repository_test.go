@@ -23,6 +23,8 @@ func newRepo(t *testing.T, dir string) (*Repository, string) {
 }
 
 func TestOpenFailsIfPageSizeIsInvalid(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	repo, err := Open(t.TempDir(), pageSize-1)
@@ -31,6 +33,8 @@ func TestOpenFailsIfPageSizeIsInvalid(t *testing.T) {
 }
 
 func TestOpenFailsIfPageSizeIsZero(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	repo, err := Open(t.TempDir(), 0)
@@ -39,6 +43,8 @@ func TestOpenFailsIfPageSizeIsZero(t *testing.T) {
 }
 
 func TestOpenFailsIfPageSizeIsTooSmall(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	repo, err := Open(t.TempDir(), maxHeaderSize)
@@ -47,6 +53,8 @@ func TestOpenFailsIfPageSizeIsTooSmall(t *testing.T) {
 }
 
 func TestPageCapacity(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -54,6 +62,8 @@ func TestPageCapacity(t *testing.T) {
 }
 
 func TestCreateFailsIfTermIsZero(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -63,6 +73,8 @@ func TestCreateFailsIfTermIsZero(t *testing.T) {
 }
 
 func TestCreateFirstTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, dir := newRepo(t, "")
 
@@ -99,6 +111,8 @@ func TestCreateFirstTerm(t *testing.T) {
 }
 
 func TestCreateFollowingTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, dir := newRepo(t, "")
 
@@ -165,6 +179,8 @@ func TestCreateFollowingTerm(t *testing.T) {
 }
 
 func TestCreateFailsOnPastTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -179,6 +195,8 @@ func TestCreateFailsOnPastTerm(t *testing.T) {
 }
 
 func TestCreateHeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -209,6 +227,7 @@ func TestCreateHeader(t *testing.T) {
 }
 
 func TestRevertToEqual(t *testing.T) {
+	t.Parallel()
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 

@@ -10,6 +10,8 @@ import (
 )
 
 func TestCandidateSetup(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -80,6 +82,8 @@ func TestCandidateSetup(t *testing.T) {
 }
 
 func TestCandidateApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -133,6 +137,8 @@ func TestCandidateApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing
 }
 
 func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -179,6 +185,8 @@ func TestCandidateApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 }
 
 func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -211,6 +219,8 @@ func TestCandidateApplyVoteResponseTransitionToFollowerOnFutureTerm(t *testing.T
 }
 
 func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -245,6 +255,8 @@ func TestCandidateApplyVoteResponseIgnoreVoteFromPastTerm(t *testing.T) {
 }
 
 func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -275,6 +287,8 @@ func TestCandidateApplyVoteResponseNotGranted(t *testing.T) {
 }
 
 func TestCandidateApplyVoteResponseGranted(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -305,6 +319,8 @@ func TestCandidateApplyVoteResponseGranted(t *testing.T) {
 }
 
 func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -356,6 +372,8 @@ func TestCandidateApplyVoteResponseGrantedInNextTerm(t *testing.T) {
 }
 
 func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))

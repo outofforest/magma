@@ -13,6 +13,8 @@ const (
 )
 
 func TestMultiIndexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -43,6 +45,8 @@ func TestMultiIndexer(t *testing.T) {
 }
 
 func TestMultiIndexerNotAllArguments(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -65,6 +69,8 @@ func TestMultiIndexerNotAllArguments(t *testing.T) {
 }
 
 func TestMultiIndexerWithMultiSubIndexer3Arguments(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -99,6 +105,8 @@ func TestMultiIndexerWithMultiSubIndexer3Arguments(t *testing.T) {
 }
 
 func TestMultiIndexerWithMultiSubIndexer2Arguments(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -126,6 +134,8 @@ func TestMultiIndexerWithMultiSubIndexer2Arguments(t *testing.T) {
 }
 
 func TestMultiIndexerWithMultiSubIndexer1Argument(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -153,6 +163,8 @@ func TestMultiIndexerWithMultiSubIndexer1Argument(t *testing.T) {
 }
 
 func TestMultiIndexerWithIfSubindex(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -207,6 +219,8 @@ func TestMultiIndexerWithIfSubindex(t *testing.T) {
 }
 
 func TestMultiErrorIfNoSubIndices(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	index, err := NewMultiIndex()

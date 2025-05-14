@@ -8,6 +8,8 @@ import (
 )
 
 func TestTicker(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tc := newTicker()

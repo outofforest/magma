@@ -45,6 +45,8 @@ type subO2 struct {
 }
 
 func TestFieldIndexOffset(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	v := o{
 		Value1: 1,
@@ -157,6 +159,8 @@ func TestFieldIndexOffset(t *testing.T) {
 }
 
 func TestIndexerOffset0(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v subO2
 
@@ -186,6 +190,8 @@ func TestIndexerOffset0(t *testing.T) {
 }
 
 func TestBoolIndexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -215,6 +221,8 @@ func TestBoolIndexer(t *testing.T) {
 }
 
 func TestStringIndexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -244,6 +252,8 @@ func TestStringIndexer(t *testing.T) {
 }
 
 func TestTimeIndexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -283,6 +293,8 @@ func TestTimeIndexer(t *testing.T) {
 }
 
 func TestInt8Indexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -322,6 +334,8 @@ func TestInt8Indexer(t *testing.T) {
 }
 
 func TestInt16Indexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -361,6 +375,8 @@ func TestInt16Indexer(t *testing.T) {
 }
 
 func TestInt32Indexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -400,6 +416,8 @@ func TestInt32Indexer(t *testing.T) {
 }
 
 func TestInt64Indexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -439,6 +457,8 @@ func TestInt64Indexer(t *testing.T) {
 }
 
 func TestUInt8Indexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 

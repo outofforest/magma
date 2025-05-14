@@ -8,6 +8,8 @@ import (
 )
 
 func TestIterator(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -61,6 +63,8 @@ func TestIterator(t *testing.T) {
 }
 
 func TestIteratorWithOffset2(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -114,6 +118,8 @@ func TestIteratorWithOffset2(t *testing.T) {
 }
 
 func TestIteratorWithOffset3(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -160,6 +166,8 @@ func TestIteratorWithOffset3(t *testing.T) {
 }
 
 func TestIteratorWithOffset5(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -199,6 +207,8 @@ func TestIteratorWithOffset5(t *testing.T) {
 }
 
 func TestIteratorWithOffsetAtTheTail(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -232,6 +242,8 @@ func TestIteratorWithOffsetAtTheTail(t *testing.T) {
 }
 
 func TestIteratorWithTail(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -294,6 +306,8 @@ func TestIteratorWithTail(t *testing.T) {
 }
 
 func TestIteratorNonBlocking(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")
@@ -324,6 +338,8 @@ func TestIteratorNonBlocking(t *testing.T) {
 }
 
 func TestIteratorHotEnd(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	r, _ := newRepo(t, "")

@@ -10,6 +10,8 @@ import (
 )
 
 func TestLeaderSetup(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -96,6 +98,8 @@ func TestLeaderSetup(t *testing.T) {
 }
 
 func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -149,6 +153,8 @@ func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 }
 
 func TestLeaderApplyLogSyncRequestErrorIfThereIsAnotherLeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -176,6 +182,8 @@ func TestLeaderApplyLogSyncRequestErrorIfThereIsAnotherLeader(t *testing.T) {
 }
 
 func TestLeaderApplyLogSyncResponseTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -203,6 +211,8 @@ func TestLeaderApplyLogSyncResponseTransitionToFollowerOnFutureTerm(t *testing.T
 }
 
 func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -231,6 +241,8 @@ func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKErrorIfReportedIndexIsGreater(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -251,6 +263,8 @@ func TestLeaderApplyLogACKErrorIfReportedIndexIsGreater(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKErrorIfSyncIndexIsGreater(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -271,6 +285,8 @@ func TestLeaderApplyLogACKErrorIfSyncIndexIsGreater(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -310,6 +326,8 @@ func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -349,6 +367,8 @@ func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -390,6 +410,8 @@ func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -431,6 +453,8 @@ func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -496,6 +520,8 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -567,6 +593,8 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 }
 
 func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
