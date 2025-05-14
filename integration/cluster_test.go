@@ -17,7 +17,12 @@ import (
 	"github.com/outofforest/parallel"
 )
 
-const partitionDefault types.PartitionID = "default"
+const (
+	partitionDefault types.PartitionID = "default"
+	partition1       types.PartitionID = "partition1"
+	partition2       types.PartitionID = "partition2"
+	partition3       types.PartitionID = "partition3"
+)
 
 func TestSinglePeer(t *testing.T) {
 	t.Parallel()
@@ -368,5 +373,123 @@ func TestSync(t *testing.T) {
 	case acc := <-accCh2:
 		acc.Revision = 0
 		requireT.Equal(accs[5], acc)
+	}
+}
+
+func TestPartitions(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partition1: true, partition2: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partition2: true, partition3: true})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partition3: true, partition1: true})
+
+	c1 := system.NewClient(t, peer1, "client1", partition1, nil)
+	c2 := system.NewClient(t, peer2, "client2", partition2, nil)
+	c3 := system.NewClient(t, peer3, "client3", partition3, nil)
+
+	cluster := system.NewCluster(peer1, peer2, peer3)
+	cluster.StartPeers(ctx, peer1, peer2, peer3)
+	cluster.StartClients(ctx, c1, c2, c3)
+
+	accs := [][]entities.Account{
+		{
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P1FirstName0",
+				LastName:  "P1LastName0",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P1FirstName1",
+				LastName:  "P1LastName1",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P1FirstName2",
+				LastName:  "P1LastName2",
+			},
+		},
+		{
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P2FirstName0",
+				LastName:  "P2LastName0",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P2FirstName1",
+				LastName:  "P2LastName1",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P2FirstName2",
+				LastName:  "P2LastName2",
+			},
+		},
+		{
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P3FirstName0",
+				LastName:  "P3LastName0",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P3FirstName1",
+				LastName:  "P3LastName1",
+			},
+			{
+				ID:        client.NewID[entities.AccountID](),
+				FirstName: "P3FirstName2",
+				LastName:  "P3LastName2",
+			},
+		},
+	}
+
+	clientGroup := parallel.NewGroup(ctx)
+	for i, c := range []*system.Client{c1, c2, c3} {
+		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
+			tr := c.NewTransactor()
+			for _, acc := range accs[i] {
+				err := tr.Tx(ctx, func(tx *client.Tx) error {
+					tx.Set(acc)
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	if err := clientGroup.Wait(); err != nil {
+		logger.Get(ctx).Error("Error", zap.Error(err))
+		return
+	}
+
+	cluster.StopClients(c1, c2, c3)
+
+	c1 = system.NewClient(t, peer3, "client1", partition1, nil)
+	c2 = system.NewClient(t, peer1, "client2", partition2, nil)
+	c3 = system.NewClient(t, peer2, "client3", partition3, nil)
+
+	cluster.StartClients(ctx, c1, c2, c3)
+
+	for i, c := range []*system.Client{c1, c2, c3} {
+		v := c.View()
+		for j, accs := range accs {
+			for _, acc := range accs {
+				acc2, exists := client.Get[entities.Account](v, acc.ID)
+				if i == j {
+					requireT.True(exists)
+					acc2.Revision = 0
+					requireT.Equal(acc, acc2)
+				} else {
+					requireT.False(exists)
+				}
+			}
+		}
 	}
 }
