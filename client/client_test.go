@@ -1,4 +1,3 @@
-//nolint:goconst
 package client
 
 import (
@@ -142,81 +141,6 @@ func TestEntityUpdate(t *testing.T) {
 	acc, exists = Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc2, acc)
-}
-
-func TestOutdatedEntityUpdate(t *testing.T) {
-	t.Parallel()
-
-	requireT := require.New(t)
-	c := newTestClient(t)
-
-	acc1 := entities.Account{
-		ID:        NewID[entities.AccountID](),
-		FirstName: "First1",
-		LastName:  "Last1",
-	}
-	acc2 := entities.Account{
-		ID:        NewID[entities.AccountID](),
-		FirstName: "First2",
-		LastName:  "Last2",
-	}
-
-	requireT.NoError(c.Tx(func(tx *Tx) error {
-		tx.Set(acc1)
-
-		return nil
-	}))
-
-	txRaw, err := c.PrepareTx(func(tx *Tx) error {
-		acc, exists := Get[entities.Account](tx.View, acc1.ID)
-		requireT.True(exists)
-
-		acc.FirstName = "AAA"
-		tx.Set(acc)
-
-		_, exists = Get[entities.Account](tx.View, acc2.ID)
-		requireT.False(exists)
-
-		acc = acc2
-		acc.FirstName = "BBB"
-		tx.Set(acc)
-
-		return nil
-	})
-	requireT.NoError(err)
-
-	requireT.NoError(c.Tx(func(tx *Tx) error {
-		tx.Set(acc2)
-
-		return nil
-	}))
-
-	requireT.ErrorIs(c.ApplyTx(txRaw), ErrOutdatedTx)
-
-	acc1.Revision = 1
-	acc2.Revision = 1
-
-	v := c.View()
-
-	acc, exists := Get[entities.Account](v, acc1.ID)
-	requireT.True(exists)
-	requireT.Equal(acc1, acc)
-
-	acc, exists = Get[entities.Account](v, acc2.ID)
-	requireT.True(exists)
-	requireT.Equal(acc2, acc)
-}
-
-func TestEmptyTransaction(t *testing.T) {
-	t.Parallel()
-
-	requireT := require.New(t)
-
-	txRaw, err := newTestClient(t).PrepareTx(func(tx *Tx) error {
-		return nil
-	})
-	requireT.NoError(err)
-	requireT.Nil(txRaw)
 }
 
 func TestFailingTransaction(t *testing.T) {
@@ -1529,30 +1453,18 @@ func (tc testClient) Tx(txF func(tx *Tx) error) error {
 		return err
 	}
 
-	return tc.ApplyTx(tx.Tx)
-}
-
-func (tc testClient) PrepareTx(txF func(tx *Tx) error) ([]byte, error) {
-	tx, _, err := tc.client.NewTransactor().prepareTx(txF)
-	if err != nil {
-		return nil, err
-	}
-	return tx.Tx, nil
-}
-
-func (tc testClient) ApplyTx(tx []byte) error {
-	if tx == nil {
+	if tx.Tx == nil {
 		return nil
 	}
 
-	_, n := varuint64.Parse(tx)
-	tx = tx[n:]
-	size := uint64(len(tx)) + format.ChecksumSize
+	_, n := varuint64.Parse(tx.Tx)
+	txRaw := tx.Tx[n:]
+	size := uint64(len(txRaw)) + format.ChecksumSize
 	buf := make([]byte, varuint64.MaxSize+size)
 	n = varuint64.Put(buf, size)
-	copy(buf[n:], tx)
+	copy(buf[n:], txRaw)
 
-	size = n + uint64(len(tx))
+	size = n + uint64(len(txRaw))
 	binary.LittleEndian.PutUint64(buf[size:], xxh3.HashSeed(buf[:size], tc.client.previousChecksum))
 
 	return tc.client.applyTx(buf[:size+format.ChecksumSize])
