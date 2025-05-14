@@ -479,8 +479,10 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	for _, p := range r.activePeers {
+	for _, p := range r.peers {
 		r.nextIndex[p] = r.commitInfo.NextLogIndex
+	}
+	for _, p := range r.activePeers {
 		r.matchIndex[p] = 0
 	}
 
@@ -565,7 +567,7 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 		return r.resultEmpty()
 	}
 
-	return r.resultBroadcastMessage(r.activePeers, ChannelP2P, &types.Heartbeat{
+	return r.resultBroadcastMessage(r.peers, ChannelP2P, &types.Heartbeat{
 		Term:         r.state.CurrentTerm(),
 		LeaderCommit: r.commitInfo.CommittedCount,
 	})

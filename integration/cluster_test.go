@@ -17,12 +17,14 @@ import (
 	"github.com/outofforest/parallel"
 )
 
+const partitionDefault types.PartitionID = "default"
+
 func TestSinglePeer(t *testing.T) {
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
-	p := system.NewPeer(t, "P", types.Partitions{"default": true})
-	c := system.NewClient(t, p, "client", "default", nil)
+	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
+	c := system.NewClient(t, p, "client", partitionDefault, nil)
 
 	cluster := system.NewCluster(p)
 	cluster.StartPeers(ctx, p)
@@ -54,9 +56,9 @@ func Test3Peers3Clients(t *testing.T) {
 	ctx := system.NewContext(t)
 
 	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{"default": true}),
-		system.NewPeer(t, "P2", types.Partitions{"default": true}),
-		system.NewPeer(t, "P3", types.Partitions{"default": true}),
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
 	}
 
 	ids := make([]entities.AccountID, 0, len(peers))
@@ -91,7 +93,7 @@ func Test3Peers3Clients(t *testing.T) {
 	clients := make([]*system.Client, 0, len(peers))
 	idCh := make(chan entities.AccountID, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), "default",
+		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), partitionDefault,
 			triggerFunc()))
 		id := client.NewID[entities.AccountID]()
 		ids = append(ids, id)
@@ -143,14 +145,14 @@ func TestPeerRestart(t *testing.T) {
 	ctx := system.NewContext(t)
 
 	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{"default": true}),
-		system.NewPeer(t, "P2", types.Partitions{"default": true}),
-		system.NewPeer(t, "P3", types.Partitions{"default": true}),
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
 	}
 
 	clients := make([]*system.Client, 0, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), "default",
+		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), partitionDefault,
 			nil))
 	}
 
@@ -189,5 +191,59 @@ func TestPeerRestart(t *testing.T) {
 		}
 
 		cluster.StartPeers(ctx, peers[pI])
+	}
+}
+
+func TestPassivePeer(t *testing.T) {
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peerObserver := system.NewPeer(t, "PO", types.Partitions{partitionDefault: false})
+
+	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+
+	cluster := system.NewCluster(peer1, peer2, peerObserver)
+	cluster.StartPeers(ctx, peer1, peer2)
+	cluster.StartClients(ctx, c)
+
+	accs := []entities.Account{
+		{
+			ID:        client.NewID[entities.AccountID](),
+			FirstName: "FirstName1",
+			LastName:  "LastName1",
+		},
+		{
+			ID:        client.NewID[entities.AccountID](),
+			FirstName: "FirstName2",
+			LastName:  "LastName2",
+		},
+		{
+			ID:        client.NewID[entities.AccountID](),
+			FirstName: "FirstName3",
+			LastName:  "LastName3",
+		},
+	}
+
+	tr := c.NewTransactor()
+	for _, acc := range accs {
+		requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(acc)
+			return nil
+		}))
+	}
+
+	cluster.StopClients(c)
+
+	c = system.NewClient(t, peerObserver, "client", partitionDefault, nil)
+	cluster.StartPeers(ctx, peerObserver)
+	cluster.StartClients(ctx, c)
+
+	v := c.View()
+	for _, acc := range accs {
+		acc2, exists := client.Get[entities.Account](v, acc.ID)
+		requireT.True(exists)
+		requireT.Equal(acc, acc2)
 	}
 }

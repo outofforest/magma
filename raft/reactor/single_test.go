@@ -14,7 +14,7 @@ func newReactorSingleMode(s *state.State) *Reactor {
 	return New(serverID, nil, []magmatypes.ServerID{passivePeerID}, s)
 }
 
-func TestSingleModeApplyElectionTimeoutTransitionToLeader(t *testing.T) {
+func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	r := newReactorSingleMode(s)
@@ -97,7 +97,7 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	))
 }
 
-func TestSingleModeApplyHeartbeatTimeoutDoNothing(t *testing.T) {
+func TestSingleModeApplyHeartbeatTickDoNothing(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
