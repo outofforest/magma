@@ -388,7 +388,7 @@ func (c *Client) applyTx(txRaw []byte) error {
 	}
 	c.mu.Unlock()
 
-	return nil
+	return err
 }
 
 func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {

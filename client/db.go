@@ -73,7 +73,6 @@ func find[T any](v *View, index string, args ...any) (T, bool) {
 	if o == nil {
 		return t, false
 	}
-
 	return o.(reflect.Value).Elem().Interface().(T), true
 }
 
