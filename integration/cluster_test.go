@@ -496,3 +496,42 @@ func TestPartitions(t *testing.T) {
 		}
 	}
 }
+
+func TestTimeouts(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+
+	cluster := system.NewCluster(peer1, peer2)
+	cluster.StartPeers(ctx, peer1, peer2)
+	cluster.StartClients(ctx, c)
+	cluster.StopPeers(peer2)
+
+	accountID := client.NewID[entities.AccountID]()
+
+	tr := c.NewTransactor()
+	requireT.ErrorIs(tr.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{
+			ID:        accountID,
+			FirstName: "FirstName",
+			LastName:  "LastName",
+		})
+		return nil
+	}), client.ErrAwaitTimeout)
+
+	cluster.StopPeers(peer1)
+
+	requireT.ErrorIs(tr.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{
+			ID:        accountID,
+			FirstName: "FirstName",
+			LastName:  "LastName",
+		})
+		return nil
+	}), client.ErrBroadcastTimeout)
+}
