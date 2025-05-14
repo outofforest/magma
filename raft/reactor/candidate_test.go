@@ -413,10 +413,11 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		},
 	}, result)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
-		peer1ID: 10,
-		peer2ID: 10,
-		peer3ID: 10,
-		peer4ID: 10,
+		peer1ID:       10,
+		peer2ID:       10,
+		peer3ID:       10,
+		peer4ID:       10,
+		passivePeerID: 10,
 	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 0,
@@ -438,7 +439,7 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 	logEqual(requireT, dir, txb(0x02))
 }
 
-func TestCandidateApplyHeartbeatTimeoutDoesNothing(t *testing.T) {
+func TestCandidateApplyHeartbeatTickDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	r := newReactor(s)

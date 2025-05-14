@@ -1310,7 +1310,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT.EqualValues(2, s.CurrentTerm())
 }
 
-func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
+func TestFollowerApplyElectionTickAfterElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	r := newReactor(s)
@@ -1352,7 +1352,7 @@ func TestFollowerApplyElectionTimeoutAfterElectionTime(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestFollowerApplyElectionTimeoutBeforeElectionTime(t *testing.T) {
+func TestFollowerApplyElectionTickBeforeElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	r := newReactor(s)
@@ -1411,7 +1411,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT.Empty(r.matchIndex)
 }
 
-func TestFollowerApplyHeartbeatTimeoutCommitToLeaderCommit(t *testing.T) {
+func TestFollowerApplyHeartbeatTickCommitToLeaderCommit(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1453,7 +1453,7 @@ func TestFollowerApplyHeartbeatTimeoutCommitToLeaderCommit(t *testing.T) {
 	requireT.EqualValues(20, r.heartbeatTick)
 }
 
-func TestFollowerApplyHeartbeatTimeoutCommitToNextLog(t *testing.T) {
+func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1494,7 +1494,7 @@ func TestFollowerApplyHeartbeatTimeoutCommitToNextLog(t *testing.T) {
 	requireT.EqualValues(20, r.heartbeatTick)
 }
 
-func TestFollowerApplyHeartbeatTimeoutNoLeader(t *testing.T) {
+func TestFollowerApplyHeartbeatTickNoLeader(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))

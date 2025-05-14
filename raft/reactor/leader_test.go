@@ -70,10 +70,11 @@ func TestLeaderSetup(t *testing.T) {
 	}, result)
 	requireT.EqualValues(43, r.indexTermStarted)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
-		peer1ID: 53,
-		peer2ID: 53,
-		peer3ID: 53,
-		peer4ID: 53,
+		peer1ID:       53,
+		peer2ID:       53,
+		peer3ID:       53,
+		peer4ID:       53,
+		passivePeerID: 53,
 	}, r.nextIndex)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 0,
@@ -1055,7 +1056,7 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
+func TestLeaderApplyHeartbeatTickAfterHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1096,6 +1097,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 			peer2ID,
 			peer3ID,
 			peer4ID,
+			passivePeerID,
 		},
 		Message: &types.Heartbeat{
 			Term:         5,
@@ -1106,7 +1108,7 @@ func TestLeaderApplyHeartbeatTimeoutAfterHeartbeatTime(t *testing.T) {
 	requireT.EqualValues(20, r.heartbeatTick)
 }
 
-func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
+func TestLeaderApplyHeartbeatTickBeforeHeartbeatTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1147,7 +1149,7 @@ func TestLeaderApplyHeartbeatTimeoutBeforeHeartbeatTime(t *testing.T) {
 	requireT.EqualValues(20, r.heartbeatTick)
 }
 
-func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
+func TestLeaderApplyHeartbeatTickCommit(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1192,6 +1194,7 @@ func TestLeaderApplyHeartbeatTimeoutCommit(t *testing.T) {
 			peer2ID,
 			peer3ID,
 			peer4ID,
+			passivePeerID,
 		},
 		Message: &types.Heartbeat{
 			Term:         5,
