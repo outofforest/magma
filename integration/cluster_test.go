@@ -535,3 +535,77 @@ func TestTimeouts(t *testing.T) {
 		return nil
 	}), client.ErrBroadcastTimeout)
 }
+
+func TestOutdatedTx(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
+	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
+
+	cluster := system.NewCluster(peer1, peer2)
+	cluster.StartPeers(ctx, peer1, peer2)
+	cluster.StartClients(ctx, c1, c2)
+
+	accountID := client.NewID[entities.AccountID]()
+
+	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{
+			ID:        accountID,
+			FirstName: "FirstName1",
+			LastName:  "LastName1",
+		})
+
+		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(entities.Account{
+				ID:        accountID,
+				FirstName: "FirstName2",
+				LastName:  "LastName2",
+			})
+			return nil
+		}))
+
+		return nil
+	}), client.ErrOutdatedTx)
+
+	acc, exists := client.Get[entities.Account](c1.View(), accountID)
+	requireT.True(exists)
+	requireT.Equal(entities.Account{
+		ID:        accountID,
+		Revision:  1,
+		FirstName: "FirstName2",
+		LastName:  "LastName2",
+	}, acc)
+
+	acc, exists = client.Get[entities.Account](c2.View(), accountID)
+	requireT.True(exists)
+	requireT.Equal(entities.Account{
+		ID:        accountID,
+		Revision:  1,
+		FirstName: "FirstName2",
+		LastName:  "LastName2",
+	}, acc)
+}
+
+func TestEmptyTx(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
+	c := system.NewClient(t, p, "client", partitionDefault, nil)
+
+	cluster := system.NewCluster(p)
+	cluster.StartPeers(ctx, p)
+	cluster.StartClients(ctx, c)
+	cluster.StopPeers(p)
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		return nil
+	}))
+}
