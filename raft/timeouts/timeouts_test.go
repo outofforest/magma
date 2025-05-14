@@ -10,6 +10,8 @@ import (
 )
 
 func TestTickersStoppedOnStartup(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -18,6 +20,8 @@ func TestTickersStoppedOnStartup(t *testing.T) {
 }
 
 func TestApplyMajorityWhenFollower(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -48,6 +52,8 @@ func TestApplyMajorityWhenFollower(t *testing.T) {
 }
 
 func TestApplyMajorityWhenPassive(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRolePassive, nil, nil)
@@ -78,6 +84,8 @@ func TestApplyMajorityWhenPassive(t *testing.T) {
 }
 
 func TestApplyMajorityWhenCandidate(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -109,6 +117,8 @@ func TestApplyMajorityWhenCandidate(t *testing.T) {
 }
 
 func TestApplyMajorityWhenLeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -140,6 +150,8 @@ func TestApplyMajorityWhenLeader(t *testing.T) {
 }
 
 func TestApplyRoleFollower(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -158,6 +170,8 @@ func TestApplyRoleFollower(t *testing.T) {
 }
 
 func TestApplyRoleFollowerWhenPassive(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRolePassive, nil, nil)
@@ -176,6 +190,8 @@ func TestApplyRoleFollowerWhenPassive(t *testing.T) {
 }
 
 func TestApplyRoleCandidate(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)
@@ -194,6 +210,8 @@ func TestApplyRoleCandidate(t *testing.T) {
 }
 
 func TestApplyRoleLeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	tm := New(magmatypes.PartitionRoleActive, nil, nil)

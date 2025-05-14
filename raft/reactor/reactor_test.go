@@ -9,6 +9,8 @@ import (
 )
 
 func TestUnknownCommand(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	activePeers := make([]magmatypes.ServerID, 0, len(config.Servers))

@@ -15,6 +15,8 @@ func newReactorSingleMode(s *state.State) *Reactor {
 }
 
 func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	r := newReactorSingleMode(s)
@@ -52,6 +54,8 @@ func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {
 }
 
 func TestSingleModeApplyClientRequestAppend(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
@@ -98,6 +102,8 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 }
 
 func TestSingleModeApplyHeartbeatTickDoNothing(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))

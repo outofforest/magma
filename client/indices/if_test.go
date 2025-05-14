@@ -19,6 +19,8 @@ func ifFunc[T comparable](values ...T) func(o *T) bool {
 }
 
 func TestIfIndexer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -66,6 +68,8 @@ func TestIfIndexer(t *testing.T) {
 }
 
 func TestIfIndexerMulti(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -120,6 +124,8 @@ func TestIfIndexerMulti(t *testing.T) {
 }
 
 func TestIfIndexerMultiPrefix(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 
@@ -155,6 +161,8 @@ func TestIfIndexerMultiPrefix(t *testing.T) {
 }
 
 func TestIfIndexerErrorOnTypeMismatch(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	var v o
 

@@ -29,6 +29,8 @@ func newManager(t *testing.T, dir string) (*Store, string) {
 }
 
 func TestEmptyState(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
 
@@ -36,6 +38,8 @@ func TestEmptyState(t *testing.T) {
 }
 
 func TestTermSet(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, dir := newManager(t, "")
 
@@ -72,6 +76,8 @@ func TestTermSet(t *testing.T) {
 }
 
 func TestTermTwoFiles(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, dir := newManager(t, "")
 
@@ -118,6 +124,8 @@ func TestTermTwoFiles(t *testing.T) {
 }
 
 func TestTermFailsIfZero(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
 
@@ -126,6 +134,8 @@ func TestTermFailsIfZero(t *testing.T) {
 }
 
 func TestTermFailsIfLower(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
 
@@ -137,6 +147,8 @@ func TestTermFailsIfLower(t *testing.T) {
 }
 
 func TestTermFailsIfSame(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
 
@@ -148,6 +160,8 @@ func TestTermFailsIfSame(t *testing.T) {
 }
 
 func TestVoteSet(t *testing.T) {
+	t.Parallel()
+
 	candidate1 := magmatypes.ServerID("C1")
 	candidate2 := magmatypes.ServerID("C2")
 
@@ -203,6 +217,8 @@ func TestVoteSet(t *testing.T) {
 }
 
 func TestVoteIsZeroedOnNewTerm(t *testing.T) {
+	t.Parallel()
+
 	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
@@ -223,6 +239,8 @@ func TestVoteIsZeroedOnNewTerm(t *testing.T) {
 }
 
 func TestVoteFailsIfNoTerm(t *testing.T) {
+	t.Parallel()
+
 	candidate := magmatypes.ServerID("C")
 
 	requireT := require.New(t)
@@ -233,6 +251,8 @@ func TestVoteFailsIfNoTerm(t *testing.T) {
 }
 
 func TestVoteFailsIfCandidateIsInvalid(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	m, _ := newManager(t, "")
 
@@ -244,6 +264,8 @@ func TestVoteFailsIfCandidateIsInvalid(t *testing.T) {
 }
 
 func TestVoteFailsIfVotedTwiceOnDifferentCandidates(t *testing.T) {
+	t.Parallel()
+
 	candidate1 := magmatypes.ServerID("C1")
 	candidate2 := magmatypes.ServerID("C2")
 

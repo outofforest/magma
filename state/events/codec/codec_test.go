@@ -11,6 +11,8 @@ import (
 )
 
 func TestEncoderDecoder(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	buf := bytes.NewBuffer(nil)
@@ -58,6 +60,8 @@ func TestEncoderDecoder(t *testing.T) {
 }
 
 func TestInvalidChecksum(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	buf := bytes.NewBuffer(nil)
@@ -84,6 +88,8 @@ func TestInvalidChecksum(t *testing.T) {
 }
 
 func TestInvalidEncoderChecksum(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	buf := bytes.NewBuffer(nil)

@@ -115,6 +115,8 @@ func txs(txs ...[]byte) []byte {
 }
 
 func TestFollowerInitialRole(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	r := newReactor(s)
@@ -125,6 +127,8 @@ func TestFollowerInitialRole(t *testing.T) {
 }
 
 func TestFollowerSetup(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	r := newReactor(s)
@@ -165,6 +169,8 @@ func TestFollowerSetup(t *testing.T) {
 }
 
 func TestFollowerAppendTxAppendToEmptyLog(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -194,6 +200,8 @@ func TestFollowerAppendTxAppendToEmptyLog(t *testing.T) {
 }
 
 func TestFollowerAppendTxAppendToNonEmptyLog(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -233,6 +241,8 @@ func TestFollowerAppendTxAppendToNonEmptyLog(t *testing.T) {
 }
 
 func TestFollowerAppendTxDoesNothingIfNotFromLeader(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -260,6 +270,8 @@ func TestFollowerAppendTxDoesNothingIfNotFromLeader(t *testing.T) {
 }
 
 func TestFollowerAppendTxFailsIfTxDoesNotContainChecksum(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -275,6 +287,8 @@ func TestFollowerAppendTxFailsIfTxDoesNotContainChecksum(t *testing.T) {
 }
 
 func TestFollowerLogACKDoesNothing(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
@@ -312,6 +326,8 @@ func TestFollowerLogACKDoesNothing(t *testing.T) {
 }
 
 func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -362,6 +378,8 @@ func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 }
 
 func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))
@@ -414,6 +432,8 @@ func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 }
 
 func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(3))

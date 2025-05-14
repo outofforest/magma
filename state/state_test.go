@@ -56,6 +56,8 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 }
 
 func TestCurrentTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -79,6 +81,8 @@ func TestCurrentTerm(t *testing.T) {
 }
 
 func TestVoteFor(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -118,6 +122,8 @@ func TestVoteFor(t *testing.T) {
 }
 
 func TestLastLogTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -134,6 +140,8 @@ func TestLastLogTerm(t *testing.T) {
 }
 
 func TestNextLogIndex(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -151,6 +159,8 @@ func TestNextLogIndex(t *testing.T) {
 }
 
 func TestPreviousTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -175,6 +185,8 @@ func TestPreviousTerm(t *testing.T) {
 }
 
 func TestValidateErrorOnZeroNextLogIndex(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -189,6 +201,8 @@ func TestValidateErrorOnZeroNextLogIndex(t *testing.T) {
 }
 
 func TestValidateErrorOnZeroLastLogTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -203,6 +217,8 @@ func TestValidateErrorOnZeroLastLogTerm(t *testing.T) {
 }
 
 func TestValidateErrorIfCurrentTermNotSet(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
@@ -215,6 +231,8 @@ func TestValidateErrorIfCurrentTermNotSet(t *testing.T) {
 }
 
 func TestValidateErrorIfOverwrittenInTheMiddleOfTheTerm(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")

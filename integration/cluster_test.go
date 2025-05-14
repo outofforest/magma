@@ -20,6 +20,8 @@ import (
 const partitionDefault types.PartitionID = "default"
 
 func TestSinglePeer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -52,6 +54,8 @@ func TestSinglePeer(t *testing.T) {
 }
 
 func Test3Peers3Clients(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -141,6 +145,8 @@ func Test3Peers3Clients(t *testing.T) {
 }
 
 func TestPeerRestart(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -195,6 +201,8 @@ func TestPeerRestart(t *testing.T) {
 }
 
 func TestPassivePeer(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -245,5 +253,120 @@ func TestPassivePeer(t *testing.T) {
 		acc2, exists := client.Get[entities.Account](v, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
+	}
+}
+
+func TestSync(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+
+	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+
+	cluster := system.NewCluster(peer1, peer2, peer3)
+	cluster.StartPeers(ctx, peer1, peer2)
+	cluster.StartClients(ctx, c)
+
+	accID := client.NewID[entities.AccountID]()
+	accs := []entities.Account{
+		{
+			ID:        accID,
+			FirstName: "FirstName0",
+			LastName:  "LastName0",
+		},
+		{
+			ID:        accID,
+			FirstName: "FirstName1",
+			LastName:  "LastName1",
+		},
+		{
+			ID:        accID,
+			FirstName: "FirstName2",
+			LastName:  "LastName2",
+		},
+		{
+			ID:        accID,
+			FirstName: "FirstName3",
+			LastName:  "LastName3",
+		},
+		{
+			ID:        accID,
+			FirstName: "FirstName4",
+			LastName:  "LastName4",
+		},
+		{
+			ID:        accID,
+			FirstName: "FirstName5",
+			LastName:  "LastName5",
+		},
+	}
+
+	tr := c.NewTransactor()
+	for _, acc := range accs[:3] {
+		requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(acc)
+			return nil
+		}))
+	}
+
+	accCh1 := make(chan entities.Account, 1)
+	accCh2 := make(chan entities.Account, 1)
+	triggerFunc := func(accCh chan<- entities.Account) func(ctx context.Context, v *client.View) error {
+		return func(ctx context.Context, v *client.View) error {
+			a, exists := client.Get[entities.Account](v, accID)
+			if exists {
+				accCh <- a
+			}
+			return nil
+		}
+	}
+
+	c2 := system.NewClient(t, peer3, "client2", partitionDefault, triggerFunc(accCh1))
+	c3 := system.NewClient(t, peer3, "client3", partitionDefault, triggerFunc(accCh2))
+	cluster.StartPeers(ctx, peer3)
+	cluster.StartClients(ctx, c2, c3)
+	cluster.StopClients(c2)
+	cluster.StopPeers(peer3)
+
+	requireT.NotEmpty(accCh1)
+	acc := <-accCh1
+	acc.Revision = 0
+	requireT.Equal(accs[2], acc)
+
+	requireT.NotEmpty(accCh2)
+	acc = <-accCh2
+	acc.Revision = 0
+	requireT.Equal(accs[2], acc)
+
+	for _, acc := range accs[3:] {
+		requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(acc)
+			return nil
+		}))
+	}
+
+	c2 = system.NewClient(t, peer3, "client2", partitionDefault, triggerFunc(accCh1))
+
+	cluster.StartPeers(ctx, peer3)
+	cluster.StartClients(ctx, c2)
+	cluster.StopClients(c2)
+	cluster.StopPeers(peer3)
+
+	requireT.NotEmpty(accCh1)
+	acc = <-accCh1
+	acc.Revision = 0
+	requireT.Equal(accs[5], acc)
+
+	select {
+	case <-ctx.Done():
+		requireT.NoError(ctx.Err())
+	case acc := <-accCh2:
+		acc.Revision = 0
+		requireT.Equal(accs[5], acc)
 	}
 }
