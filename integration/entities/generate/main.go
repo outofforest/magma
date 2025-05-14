@@ -10,5 +10,6 @@ import (
 func main() {
 	magma.Generate("../entities.proton.go",
 		entities.Account{},
+		entities.Fields{},
 	)
 }
