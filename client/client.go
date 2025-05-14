@@ -142,7 +142,7 @@ func New(config Config) (*Client, error) {
 
 	return &Client{
 		config:           config,
-		txCh:             make(chan tx, 1),
+		txCh:             make(chan txEnvelope, 1),
 		metaM:            metaM,
 		doneCh:           make(chan struct{}),
 		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
@@ -152,13 +152,14 @@ func New(config Config) (*Client, error) {
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
 		readyCh:          make(chan struct{}),
+		awaitedTxs:       map[uuid.UUID]chan<- error{},
 	}, nil
 }
 
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
 	config Config
-	txCh   chan tx
+	txCh   chan txEnvelope
 	metaM  proton.Marshaller
 	doneCh chan struct{}
 
@@ -170,26 +171,24 @@ type Client struct {
 	metaID           uint64
 	entityMetadataID uint64
 
-	readyCh chan struct{}
+	previousChecksum uint64
+	nextLogIndex     types.Index
+	readyCh          chan struct{}
+	firstHotEnd      bool
+
+	mu         sync.Mutex
+	awaitedTxs map[uuid.UUID]chan<- error
 }
 
 // Run runs client.
-//
-//nolint:gocyclo
 func (c *Client) Run(ctx context.Context) error {
 	defer close(c.doneCh)
 
 	log := logger.Get(ctx)
-	var previousChecksum uint64
-	var nextLogIndex types.Index
 
-	var mu sync.Mutex
-	awaitedTxs := map[uuid.UUID]chan<- error{}
 	var awaitedTxsToClean []uuid.UUID
 
 	cMarshaller := c2p.NewMarshaller()
-
-	var firstHotEnd bool
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -199,7 +198,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 				if err := conn.SendProton(&c2p.Init{
 					PartitionID:  c.config.PartitionID,
-					NextLogIndex: nextLogIndex,
+					NextLogIndex: c.nextLogIndex,
 				}, cMarshaller); err != nil {
 					return errors.WithStack(err)
 				}
@@ -227,67 +226,12 @@ func (c *Client) Run(ctx context.Context) error {
 
 									length += uint64(len(txRaw))
 
-									txTotalLen := types.Index(len(txRaw))
-									txLen, n := varuint64.Parse(txRaw)
-
-									if txLen < format.ChecksumSize {
-										return errors.New("unexpected tx size")
-									}
-
-									i := len(txRaw) - format.ChecksumSize
-									checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
-									if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-										return errors.New("tx checksum mismatch")
-									}
-
-									txLen -= format.ChecksumSize
-									txRaw = txRaw[n : n+txLen]
-
-									if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
-										// This is a term mark. Ignore.
-										previousChecksum = checksum
-										nextLogIndex += txTotalLen
-										continue
-									}
-
-									metaID, n := varuint64.Parse(txRaw)
-									metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
-									if err != nil {
+									if err := c.applyTx(txRaw); err != nil {
 										return err
 									}
-									meta := metaAny.(*wire.TxMetadata)
-
-									err = c.applyTx(meta.EntityMetadataID, txRaw[n+metaSize:])
-									if err != nil && !errors.Is(err, ErrOutdatedTx) {
-										return err
-									}
-
-									previousChecksum = checksum
-									nextLogIndex += txTotalLen
-
-									mu.Lock()
-									receivedCh := awaitedTxs[meta.ID]
-									if receivedCh != nil {
-										delete(awaitedTxs, meta.ID)
-										receivedCh <- err
-									}
-									mu.Unlock()
 								}
 							case *gossipwire.HotEnd:
-								if !firstHotEnd {
-									firstHotEnd = true
-									close(c.readyCh)
-								}
-
-								if c.config.TriggerFunc != nil {
-									if len(triggerCh) > 0 {
-										select {
-										case <-triggerCh:
-										default:
-										}
-									}
-									triggerCh <- struct{}{}
-								}
+								c.applyHotEnd(triggerCh)
 							default:
 								return errors.Errorf("unexpected message %T", msg)
 							}
@@ -299,10 +243,10 @@ func (c *Client) Run(ctx context.Context) error {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case tx := <-c.txCh:
-								mu.Lock()
-								delete(awaitedTxs, tx.PreviousTxID)
-								awaitedTxs[tx.ID] = tx.ReceivedCh
-								mu.Unlock()
+								c.mu.Lock()
+								delete(c.awaitedTxs, tx.PreviousTxID)
+								c.awaitedTxs[tx.ID] = tx.ReceivedCh
+								c.mu.Unlock()
 
 								if err := conn.SendRawBytes(tx.Tx); err != nil {
 									return errors.WithStack(err)
@@ -316,15 +260,15 @@ func (c *Client) Run(ctx context.Context) error {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
 							case <-time.After(2 * c.config.AwaitTimeout):
-								mu.Lock()
+								c.mu.Lock()
 								for _, id := range awaitedTxsToClean {
-									delete(awaitedTxs, id)
+									delete(c.awaitedTxs, id)
 								}
-								awaitedTxsToClean = make([]uuid.UUID, 0, len(awaitedTxs))
-								for id := range awaitedTxs {
+								awaitedTxsToClean = make([]uuid.UUID, 0, len(c.awaitedTxs))
+								for id := range c.awaitedTxs {
 									awaitedTxsToClean = append(awaitedTxsToClean, id)
 								}
-								mu.Unlock()
+								c.mu.Unlock()
 							}
 						}
 					})
@@ -380,7 +324,74 @@ func (c *Client) NewTransactor() *Transactor {
 	}
 }
 
-func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
+func (c *Client) applyHotEnd(triggerCh chan struct{}) {
+	if !c.firstHotEnd {
+		c.firstHotEnd = true
+		close(c.readyCh)
+	}
+
+	if c.config.TriggerFunc != nil {
+		if len(triggerCh) > 0 {
+			select {
+			case <-triggerCh:
+			default:
+			}
+		}
+		triggerCh <- struct{}{}
+	}
+}
+
+func (c *Client) applyTx(txRaw []byte) error {
+	txTotalLen := types.Index(len(txRaw))
+	txLen, n := varuint64.Parse(txRaw)
+
+	if txLen < format.ChecksumSize {
+		return errors.New("unexpected tx size")
+	}
+
+	i := len(txRaw) - format.ChecksumSize
+	checksum := xxh3.HashSeed(txRaw[:i], c.previousChecksum)
+	if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
+		return errors.New("tx checksum mismatch")
+	}
+
+	txLen -= format.ChecksumSize
+	txRaw = txRaw[n : n+txLen]
+
+	if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
+		// This is a term mark. Ignore.
+		c.previousChecksum = checksum
+		c.nextLogIndex += txTotalLen
+		return nil
+	}
+
+	metaID, n := varuint64.Parse(txRaw)
+	metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
+	if err != nil {
+		return err
+	}
+	meta := metaAny.(*wire.TxMetadata)
+
+	err = c.storeTx(meta.EntityMetadataID, txRaw[n+metaSize:])
+	if err != nil && !errors.Is(err, ErrOutdatedTx) {
+		return err
+	}
+
+	c.previousChecksum = checksum
+	c.nextLogIndex += txTotalLen
+
+	c.mu.Lock()
+	receivedCh := c.awaitedTxs[meta.ID]
+	if receivedCh != nil {
+		delete(c.awaitedTxs, meta.ID)
+		receivedCh <- err
+	}
+	c.mu.Unlock()
+
+	return nil
+}
+
+func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 	tx := c.db.Txn(true)
 	defer func() {
 		if retErr != nil {
@@ -438,10 +449,10 @@ func (c *Client) applyTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 	return nil
 }
 
-type tx struct {
+type txEnvelope struct {
 	ID           uuid.UUID
 	Tx           []byte
-	ReceivedCh   chan<- error
+	ReceivedCh   chan error
 	PreviousTxID uuid.UUID
 }
 
@@ -454,7 +465,23 @@ type Transactor struct {
 }
 
 // Tx creates and broadcasts transaction to the magma network.
-func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr error) {
+func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
+	tx, i, err := t.prepareTx(txF)
+	if err != nil {
+		return err
+	}
+	if tx.Tx == nil {
+		return nil
+	}
+
+	err = t.broadcastAndAwaitTx(ctx, tx)
+	if err != nil {
+		t.buf = t.buf[i:]
+	}
+	return err
+}
+
+func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64, retErr error) {
 	defer clear(t.changes)
 
 	pendingTx := &Tx{
@@ -470,20 +497,20 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 
 	snapshot := t.client.db.Txn(false)
 	if err := txF(pendingTx); err != nil {
-		return err
+		return txEnvelope{}, 0, err
 	}
 
 	pendingTx.tx.Abort()
 
 	if len(pendingTx.changes) == 0 {
-		return nil
+		return txEnvelope{}, 0, nil
 	}
 
 	if uint64(len(t.buf)) < t.client.config.MaxMessageSize {
 		t.buf = make([]byte, t.client.bufSize)
 	}
 
-	i := uint64(varuint64.MaxSize)
+	i = uint64(varuint64.MaxSize)
 
 	txID := uuid.New()
 	previousTxID := t.previousTxID
@@ -499,26 +526,26 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 	i += varuint64.Put(t.buf[i:], t.client.metaID)
 	_, metaSize, err := t.client.metaM.Marshal(meta, t.buf[i:])
 	if err != nil {
-		return err
+		return txEnvelope{}, 0, err
 	}
 	i += metaSize
 
 	for _, v := range pendingTx.changes {
 		id, err := t.client.config.Marshaller.ID(v.Interface())
 		if err != nil {
-			return err
+			return txEnvelope{}, 0, err
 		}
 
 		vv := v.Elem()
 		typeDef, exists := t.client.byType[vv.Type()]
 		if !exists {
-			return errors.Errorf("unknown type %s", vv.Type())
+			return txEnvelope{}, 0, errors.Errorf("unknown type %s", vv.Type())
 		}
 
 		idF := vv.Field(typeDef.IDIndex)
 		old, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
 		if err != nil {
-			return errors.WithStack(err)
+			return txEnvelope{}, 0, errors.WithStack(err)
 		}
 
 		var oldV reflect.Value
@@ -527,9 +554,9 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 			oldV = reflect.New(typeDef.Type)
 		} else {
 			oldV = old.(reflect.Value)
-			revisionF := oldV.Elem().Field(typeDef.RevisionIndex)
-			revision = types.Revision(revisionF.Uint() + 1)
 		}
+		revisionF := oldV.Elem().Field(typeDef.RevisionIndex)
+		revision = types.Revision(revisionF.Uint() + 1)
 
 		entityMeta := &wire.EntityMetadata{
 			ID:        idF.Convert(idType).Interface().(types.ID),
@@ -538,25 +565,34 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		}
 		_, entitySize, err := t.client.metaM.Marshal(entityMeta, t.buf[i:])
 		if err != nil {
-			return err
+			return txEnvelope{}, 0, err
 		}
 		i += entitySize
 
 		_, msgSize, err := t.client.config.Marshaller.MakePatch(v.Interface(), oldV.Interface(), t.buf[i:])
 		if err != nil {
-			return err
+			return txEnvelope{}, 0, err
 		}
 		i += msgSize
 
 		if i+1 > t.client.config.MaxMessageSize {
-			return errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.client.config.MaxMessageSize)
+			return txEnvelope{}, 0,
+				errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.client.config.MaxMessageSize)
 		}
 	}
 
 	n := varuint64.Size(i - varuint64.MaxSize)
 	varuint64.Put(t.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
 
-	receivedCh := make(chan error, 1)
+	return txEnvelope{
+		ID:           txID,
+		Tx:           t.buf[varuint64.MaxSize-n : i],
+		ReceivedCh:   make(chan error, 1),
+		PreviousTxID: previousTxID,
+	}, 0, nil
+}
+
+func (t *Transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) error {
 	select {
 	case <-ctx.Done():
 		return errors.WithStack(ctx.Err())
@@ -567,33 +603,22 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) (retErr err
 		return errors.New("client closed")
 	case <-time.After(t.client.config.BroadcastTimeout):
 		return ErrBroadcastTimeout
-	case t.client.txCh <- tx{
-		ID:           txID,
-		Tx:           t.buf[varuint64.MaxSize-n : i],
-		ReceivedCh:   receivedCh,
-		PreviousTxID: previousTxID,
-	}:
+	case t.client.txCh <- tx:
 	}
 
 	select {
 	case <-ctx.Done():
-		err = errors.WithStack(ctx.Err())
+		return errors.WithStack(ctx.Err())
 	case <-t.client.doneCh:
 		if ctx.Err() != nil {
-			err = errors.WithStack(ctx.Err())
-		} else {
-			err = errors.New("client closed")
+			return errors.WithStack(ctx.Err())
 		}
+		return errors.New("client closed")
 	case <-time.After(t.client.config.AwaitTimeout):
-		err = ErrAwaitTimeout
-	case err = <-receivedCh:
+		return ErrAwaitTimeout
+	case err := <-tx.ReceivedCh:
+		return err
 	}
-
-	if err != nil {
-		t.buf = t.buf[i:]
-	}
-
-	return err
 }
 
 func txRecover(err *error) {

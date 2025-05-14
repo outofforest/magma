@@ -53,6 +53,7 @@ func TestSinglePeer(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
+		Revision:  1,
 		FirstName: "FirstName",
 		LastName:  "LastName",
 	}, account)
@@ -141,6 +142,7 @@ func Test3Peers3Clients(t *testing.T) {
 				requireT.True(exists)
 				requireT.Equal(entities.Account{
 					ID:        id,
+					Revision:  1,
 					FirstName: "FirstName",
 					LastName:  "LastName",
 				}, acc)
@@ -255,6 +257,7 @@ func TestPassivePeer(t *testing.T) {
 
 	v := c.View()
 	for _, acc := range accs {
+		acc.Revision = 1
 		acc2, exists := client.Get[entities.Account](v, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)

@@ -161,7 +161,7 @@ func (c *Client) stop() {
 	}
 }
 
-const maxMsgSize = 1024 * 1024
+const maxMsgSize = 4 * 1024
 
 // NewCluster creates new cluster.
 func NewCluster(peers ...*Peer) Cluster {
