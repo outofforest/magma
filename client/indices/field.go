@@ -12,45 +12,45 @@ import (
 )
 
 // NewFieldIndex defines new field index.
-func NewFieldIndex(name string, ePtr, fieldPtr any) (*FieldIndex, error) {
+func NewFieldIndex(name string, ePtr, fieldPtr any) *FieldIndex {
 	ePtrType := reflect.TypeOf(ePtr)
 	if ePtrType.Kind() != reflect.Ptr {
-		return nil, errors.New("ePtr is not a pointer")
+		panic(errors.New("ePtr is not a pointer"))
 	}
 	if ePtrType.Elem().Kind() != reflect.Struct {
-		return nil, errors.New("*ePtr is not a struct")
+		panic(errors.New("*ePtr is not a struct"))
 	}
 
 	fieldPtrType := reflect.TypeOf(fieldPtr)
 	if fieldPtrType.Kind() != reflect.Ptr {
-		return nil, errors.New("fieldPtr is not a pointer")
+		panic(errors.New("fieldPtr is not a pointer"))
 	}
 	if fieldPtrType.Elem().Kind() == reflect.Ptr {
-		return nil, errors.New("field is a pointer")
+		panic(errors.New("field is a pointer"))
 	}
 
 	eStart := reflect.ValueOf(ePtr).Pointer()
 	eSize := ePtrType.Elem().Size()
 	fieldStart := reflect.ValueOf(fieldPtr).Pointer()
 	if fieldStart < eStart || fieldStart >= eStart+eSize {
-		return nil, errors.Errorf("field does not belong to entity")
+		panic(errors.Errorf("field does not belong to entity"))
 	}
 
 	offset := fieldStart - eStart
 	fieldType := findField(ePtrType.Elem(), offset)
 	indexer, err := indexerForType(fieldType, offset)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	if fieldType != fieldPtrType.Elem() {
-		return nil, errors.Errorf("unexpected field type %s, expected %s", fieldType, fieldPtrType.Elem())
+		panic(errors.Errorf("unexpected field type %s, expected %s", fieldType, fieldPtrType.Elem()))
 	}
 
 	return &FieldIndex{
 		name:       name,
 		entityType: ePtrType.Elem(),
 		indexer:    indexer,
-	}, nil
+	}
 }
 
 // FieldIndex defines index indexing entities by struct field.
