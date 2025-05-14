@@ -13,7 +13,9 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
-func TestNewEntities(t *testing.T) {
+func TestCreateEntities(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	c := newTestClient(t)
 
