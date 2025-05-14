@@ -17,7 +17,7 @@ import (
 	"github.com/outofforest/parallel"
 )
 
-func TestClusterSinglePeer(t *testing.T) {
+func TestSinglePeer(t *testing.T) {
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -49,7 +49,7 @@ func TestClusterSinglePeer(t *testing.T) {
 	}, account)
 }
 
-func TestCluster3Peers3Clients(t *testing.T) {
+func Test3Peers3Clients(t *testing.T) {
 	requireT := require.New(t)
 	ctx := system.NewContext(t)
 
@@ -135,5 +135,59 @@ func TestCluster3Peers3Clients(t *testing.T) {
 				}, acc)
 			}
 		}
+	}
+}
+
+func TestPeerRestart(t *testing.T) {
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peers := []*system.Peer{
+		system.NewPeer(t, "P1", types.Partitions{"default": true}),
+		system.NewPeer(t, "P2", types.Partitions{"default": true}),
+		system.NewPeer(t, "P3", types.Partitions{"default": true}),
+	}
+
+	clients := make([]*system.Client, 0, len(peers))
+	for i, peer := range peers {
+		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), "default",
+			nil))
+	}
+
+	cluster := system.NewCluster(peers...)
+	cluster.StartPeers(ctx, peers...)
+	cluster.StartClients(ctx, clients...)
+
+	for i := range 3 * len(peers) {
+		pI := i % len(peers)
+		cI := (i + 1) % len(clients)
+
+		cluster.StopPeers(peers[pI])
+
+	loop:
+		for j := range 5 {
+			err := clients[cI].NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+				tx.Set(entities.Account{
+					ID:        client.NewID[entities.AccountID](),
+					FirstName: "FirstName",
+					LastName:  "LastName",
+				})
+				return nil
+			})
+			switch {
+			case err == nil:
+				break loop
+			case errors.Is(err, client.ErrBroadcastTimeout):
+			case errors.Is(err, client.ErrAwaitTimeout):
+			default:
+				requireT.NoError(err)
+			}
+
+			if j == 4 {
+				requireT.Fail("sending transaction failed")
+			}
+		}
+
+		cluster.StartPeers(ctx, peers[pI])
 	}
 }

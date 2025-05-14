@@ -190,7 +190,6 @@ func (c *Client) Run(ctx context.Context) error {
 	cMarshaller := c2p.NewMarshaller()
 
 	var firstHotEnd bool
-	triggerCh := make(chan struct{}, 1)
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -206,6 +205,8 @@ func (c *Client) Run(ctx context.Context) error {
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+					triggerCh := make(chan struct{}, 1)
+
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
 

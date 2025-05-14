@@ -198,6 +198,39 @@ func TestIteratorWithOffset5(t *testing.T) {
 	requireT.NoError(it.Close())
 }
 
+func TestIteratorWithOffsetAtTheTail(t *testing.T) {
+	requireT := require.New(t)
+
+	r, _ := newRepo(t, "")
+	file, err := r.Create(1, 0, 0)
+	requireT.NoError(err)
+	data, err := file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x01, 0x02, 0x03})
+	requireT.NoError(file.Close())
+
+	tp := NewTailProvider()
+	it := r.Iterator(tp, 3)
+
+	file, err = r.Create(2, 3, 0)
+	requireT.NoError(err)
+	data, err = file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x04, 0x05})
+	requireT.NoError(file.Close())
+
+	tp.SetTail(5, 0)
+
+	reader, size, err := it.Reader(true)
+	requireT.NoError(err)
+	data, err = io.ReadAll(reader)
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x04, 0x05}, data)
+	requireT.EqualValues(2, size)
+
+	requireT.NoError(it.Close())
+}
+
 func TestIteratorWithTail(t *testing.T) {
 	requireT := require.New(t)
 
