@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	id2 uint64 = iota + 1
+	id3 uint64 = iota + 1
+	id2
 	id1
 	id0
 )
@@ -30,7 +31,8 @@ type Marshaller struct {
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
 	return []any {
-		Init{},
+		InitRequest{},
+		InitResponse{},
 		wire.StartLogStream{},
 		wire.HotEnd{},
 	}
@@ -39,7 +41,9 @@ func (m Marshaller) Messages() []any {
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
-	case *Init:
+	case *InitRequest:
+		return id3, nil
+	case *InitResponse:
 		return id2, nil
 	case *wire.StartLogStream:
 		return id1, nil
@@ -53,7 +57,9 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
-	case *Init:
+	case *InitRequest:
+		return size3(msg2), nil
+	case *InitResponse:
 		return size2(msg2), nil
 	case *wire.StartLogStream:
 		return size1(msg2), nil
@@ -69,7 +75,9 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
-	case *Init:
+	case *InitRequest:
+		return id3, marshal3(msg2, buf), nil
+	case *InitResponse:
 		return id2, marshal2(msg2, buf), nil
 	case *wire.StartLogStream:
 		return id1, marshal1(msg2, buf), nil
@@ -85,8 +93,11 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
+	case id3:
+		msg := &InitRequest{}
+		return msg, unmarshal3(msg, buf), nil
 	case id2:
-		msg := &Init{}
+		msg := &InitResponse{}
 		return msg, unmarshal2(msg, buf), nil
 	case id1:
 		msg := &wire.StartLogStream{}
@@ -104,8 +115,10 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 	defer helpers.RecoverMakePatch(&retErr)
 
 	switch msg2 := msgDst.(type) {
-	case *Init:
-		return id2, makePatch2(msg2, msgSrc.(*Init), buf), nil
+	case *InitRequest:
+		return id3, makePatch3(msg2, msgSrc.(*InitRequest), buf), nil
+	case *InitResponse:
+		return id2, makePatch2(msg2, msgSrc.(*InitResponse), buf), nil
 	case *wire.StartLogStream:
 		return id1, makePatch1(msg2, msgSrc.(*wire.StartLogStream), buf), nil
 	case *wire.HotEnd:
@@ -120,7 +133,9 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch msg2 := msg.(type) {
-	case *Init:
+	case *InitRequest:
+		return applyPatch3(msg2, buf), nil
+	case *InitResponse:
 		return applyPatch2(msg2, buf), nil
 	case *wire.StartLogStream:
 		return applyPatch1(msg2, buf), nil
@@ -221,7 +236,36 @@ func applyPatch1(m *wire.StartLogStream, b []byte) uint64 {
 	return o
 }
 
-func size2(m *Init) uint64 {
+func size2(m *InitResponse) uint64 {
+	var n uint64
+	return n
+}
+
+func marshal2(m *InitResponse, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func unmarshal2(m *InitResponse, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func makePatch2(m, mSrc *InitResponse, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func applyPatch2(m *InitResponse, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func size3(m *InitRequest) uint64 {
 	var n uint64 = 2
 	{
 		// PartitionID
@@ -240,7 +284,7 @@ func size2(m *Init) uint64 {
 	return n
 }
 
-func marshal2(m *Init, b []byte) uint64 {
+func marshal3(m *InitRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// PartitionID
@@ -261,7 +305,7 @@ func marshal2(m *Init, b []byte) uint64 {
 	return o
 }
 
-func unmarshal2(m *Init, b []byte) uint64 {
+func unmarshal3(m *InitRequest, b []byte) uint64 {
 	var o uint64
 	{
 		// PartitionID
@@ -284,7 +328,7 @@ func unmarshal2(m *Init, b []byte) uint64 {
 	return o
 }
 
-func makePatch2(m, mSrc *Init, b []byte) uint64 {
+func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// PartitionID
@@ -315,7 +359,7 @@ func makePatch2(m, mSrc *Init, b []byte) uint64 {
 	return o
 }
 
-func applyPatch2(m *Init, b []byte) uint64 {
+func applyPatch3(m *InitRequest, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// PartitionID

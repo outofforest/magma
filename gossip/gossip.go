@@ -704,14 +704,18 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		return err
 	}
 
-	msgInit, ok := msg.(*c2p.Init)
+	msgInit, ok := msg.(*c2p.InitRequest)
 	if !ok {
-		return errors.New("expected init")
+		return errors.Errorf("expected init request, got: %T", msg)
 	}
 
 	pState, exists := g.partitions[msgInit.PartitionID]
 	if !exists {
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
+	}
+
+	if err := c.SendProton(&c2p.InitResponse{}, g.c2pMarshaller); err != nil {
+		return err
 	}
 
 	it := pState.Repo.Iterator(pState.providerClients, msgInit.NextLogIndex)

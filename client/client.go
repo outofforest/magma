@@ -142,7 +142,7 @@ func New(config Config) (*Client, error) {
 
 	return &Client{
 		config:           config,
-		txCh:             make(chan txEnvelope, 1),
+		txCh:             make(chan txEnvelope),
 		metaM:            metaM,
 		doneCh:           make(chan struct{}),
 		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
@@ -196,11 +196,19 @@ func (c *Client) Run(ctx context.Context) error {
 				conn.BufferReads()
 				conn.BufferWrites()
 
-				if err := conn.SendProton(&c2p.Init{
+				if err := conn.SendProton(&c2p.InitRequest{
 					PartitionID:  c.config.PartitionID,
 					NextLogIndex: c.nextLogIndex,
 				}, cMarshaller); err != nil {
 					return errors.WithStack(err)
+				}
+
+				msg, err := conn.ReceiveProton(cMarshaller)
+				if err != nil {
+					return err
+				}
+				if _, ok := msg.(*c2p.InitResponse); !ok {
+					return errors.Errorf("expected init response, got: %T", msg)
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
