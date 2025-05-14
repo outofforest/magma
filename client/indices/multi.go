@@ -8,9 +8,9 @@ import (
 )
 
 // NewMultiIndex creates new multiindex.
-func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
+func NewMultiIndex(subIndices ...Index) *MultiIndex {
 	if len(subIndices) == 0 {
-		return nil, errors.Errorf("no subindices has been provided")
+		panic(errors.Errorf("no subindices has been provided"))
 	}
 
 	t := subIndices[0].Type()
@@ -23,7 +23,7 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 	prefixSubIndexers := make([]memdb.PrefixIndexer, 0, len(subIndices))
 	for _, si := range subIndices {
 		if si.Type() != t {
-			return nil, errors.Errorf("wrong type, expected: %s, got: %s", t, si.Type())
+			panic(errors.Errorf("wrong type, expected: %s, got: %s", t, si.Type()))
 		}
 		numOfArgs += si.NumOfArgs()
 
@@ -54,7 +54,7 @@ func NewMultiIndex(subIndices ...Index) (*MultiIndex, error) {
 			singleSubIndexers: singleSubIndexers,
 			prefixSubIndexers: prefixSubIndexers,
 		},
-	}, nil
+	}
 }
 
 // MultiIndex compiles many indices into a single one.

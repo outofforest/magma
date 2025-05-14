@@ -24,11 +24,9 @@ func TestIfIndexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	subIndex, err := NewFieldIndex("index", &v, &v.Value1)
-	requireT.NoError(err)
+	subIndex := NewFieldIndex("index", &v, &v.Value1)
 
-	index, err := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1}, o{Value1: 2}))
-	requireT.NoError(err)
+	index := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1}, o{Value1: 2}))
 	requireT.Equal("index,if", index.Name())
 	requireT.EqualValues(1, index.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), index.Type())
@@ -73,16 +71,12 @@ func TestIfIndexerMulti(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index1, err := NewFieldIndex("index1", &v, &v.Value1)
-	requireT.NoError(err)
-	index2, err := NewFieldIndex("index2", &v, &v.Value4)
-	requireT.NoError(err)
+	index1 := NewFieldIndex("index1", &v, &v.Value1)
+	index2 := NewFieldIndex("index2", &v, &v.Value4)
 
-	subIndex, err := NewMultiIndex(index1, index2)
-	requireT.NoError(err)
+	subIndex := NewMultiIndex(index1, index2)
 
-	index, err := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 1, Value4: def}))
-	requireT.NoError(err)
+	index := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 1, Value4: def}))
 	requireT.Equal("index1,index2,if", index.Name())
 	requireT.EqualValues(2, index.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), index.Type())
@@ -129,16 +123,12 @@ func TestIfIndexerMultiPrefix(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index1, err := NewFieldIndex("index1", &v, &v.Value1)
-	requireT.NoError(err)
-	index2, err := NewFieldIndex("index2", &v, &v.Value4)
-	requireT.NoError(err)
+	index1 := NewFieldIndex("index1", &v, &v.Value1)
+	index2 := NewFieldIndex("index2", &v, &v.Value4)
 
-	subIndex, err := NewMultiIndex(index1, index2)
-	requireT.NoError(err)
+	subIndex := NewMultiIndex(index1, index2)
 
-	index, err := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 1, Value4: def}))
-	requireT.NoError(err)
+	index := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 1, Value4: def}))
 	requireT.Equal("index1,index2,if", index.Name())
 	requireT.EqualValues(2, index.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), index.Type())
@@ -166,10 +156,9 @@ func TestIfIndexerErrorOnTypeMismatch(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	subIndex, err := NewFieldIndex("index", &v, &v.Value1)
-	requireT.NoError(err)
+	subIndex := NewFieldIndex("index", &v, &v.Value1)
 
-	index, err := NewIfIndex("if", subIndex, ifFunc[subO1](subO1{Value1: 1}, subO1{Value1: 2}))
-	requireT.Error(err)
-	requireT.Nil(index)
+	requireT.Panics(func() {
+		NewIfIndex("if", subIndex, ifFunc[subO1](subO1{Value1: 1}, subO1{Value1: 2}))
+	})
 }

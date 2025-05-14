@@ -69,22 +69,25 @@ func TestFieldIndexOffset(t *testing.T) {
 
 	var v2 o
 
-	_, err := NewFieldIndex("index", &v, &v2)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v2)
+	})
 
 	v3 := &v2
-	_, err = NewFieldIndex("index", &v, &v3)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v3)
+	})
 
-	_, err = NewFieldIndex("index", &v, &v)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v)
+	})
 
 	f := &v.Value1
-	_, err = NewFieldIndex("index", &v, &f)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &f)
+	})
 
-	i, err := NewFieldIndex("index", &v, &v.Value1)
-	requireT.NoError(err)
+	i := NewFieldIndex("index", &v, &v.Value1)
 	requireT.Equal("index", i.Name())
 	requireT.EqualValues(1, i.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), i.Type())
@@ -94,65 +97,59 @@ func TestFieldIndexOffset(t *testing.T) {
 		offset: 0x00,
 	}, i.Schema().Indexer)
 
-	_, err = NewFieldIndex("index", &v, &v.Value2)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v.Value2)
+	})
 
-	i, err = NewFieldIndex("index", &v, &v.Value2.Value1)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value2.Value1)
 	requireT.Equal(uint64Indexer{
 		offset: 0x08,
 	}, i.Schema().Indexer)
 
-	_, err = NewFieldIndex("index", &v, &v.Value2.Value2)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v.Value2.Value2)
+	})
 
-	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value1)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value2.Value2.Value1)
 	requireT.Equal(stringIndexer{
 		offset: 0x60,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value2)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value2.Value2.Value2)
 	requireT.Equal(int16Indexer{
 		offset: 0x70,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value2.Value2.Value3)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value2.Value2.Value3)
 	requireT.Equal(uint8Indexer{
 		offset: 0x72,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value2.Value3)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value2.Value3)
 	requireT.Equal(stringIndexer{
 		offset: 0x78,
 	}, i.Schema().Indexer)
 
-	_, err = NewFieldIndex("index", &v, &v.Value3)
-	requireT.Error(err)
+	requireT.Panics(func() {
+		NewFieldIndex("index", &v, &v.Value3)
+	})
 
-	i, err = NewFieldIndex("index", &v, &v.Value3.Value1)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value3.Value1)
 	requireT.Equal(stringIndexer{
 		offset: 0xd8,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value3.Value2)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value3.Value2)
 	requireT.Equal(int16Indexer{
 		offset: 0xe8,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value3.Value3)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value3.Value3)
 	requireT.Equal(uint8Indexer{
 		offset: 0xea,
 	}, i.Schema().Indexer)
 
-	i, err = NewFieldIndex("index", &v, &v.Value4)
-	requireT.NoError(err)
+	i = NewFieldIndex("index", &v, &v.Value4)
 	requireT.Equal(stringIndexer{
 		offset: 0xf0,
 	}, i.Schema().Indexer)
@@ -164,8 +161,7 @@ func TestIndexerOffset0(t *testing.T) {
 	requireT := require.New(t)
 	var v subO2
 
-	index, err := NewFieldIndex("index", &v, &v.ValueBool)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.ValueBool)
 	indexer := index.Schema().Indexer.(boolIndexer)
 
 	v.ValueBool = false
@@ -195,8 +191,7 @@ func TestBoolIndexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueBool)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueBool)
 	indexer := index.Schema().Indexer.(boolIndexer)
 
 	v.Value2.Value2.ValueBool = false
@@ -226,8 +221,7 @@ func TestStringIndexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueString)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueString)
 	indexer := index.Schema().Indexer.(stringIndexer)
 
 	v.Value2.Value2.ValueString = ""
@@ -257,8 +251,7 @@ func TestTimeIndexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueTime)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueTime)
 	indexer := index.Schema().Indexer.(timeIndexer)
 
 	v.Value2.Value2.ValueTime = time.Time{}
@@ -298,8 +291,7 @@ func TestInt8Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt8)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt8)
 	indexer := index.Schema().Indexer.(int8Indexer)
 
 	v.Value2.Value2.ValueInt8 = 0
@@ -339,8 +331,7 @@ func TestInt16Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt16)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt16)
 	indexer := index.Schema().Indexer.(int16Indexer)
 
 	v.Value2.Value2.ValueInt16 = 0
@@ -380,8 +371,7 @@ func TestInt32Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt32)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt32)
 	indexer := index.Schema().Indexer.(int32Indexer)
 
 	v.Value2.Value2.ValueInt32 = 0
@@ -421,8 +411,7 @@ func TestInt64Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt64)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueInt64)
 	indexer := index.Schema().Indexer.(int64Indexer)
 
 	v.Value2.Value2.ValueInt64 = 0
@@ -462,8 +451,7 @@ func TestUInt8Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint8)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint8)
 	indexer := index.Schema().Indexer.(uint8Indexer)
 
 	v.Value2.Value2.ValueUint8 = 0
@@ -491,8 +479,7 @@ func TestUInt16Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint16)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint16)
 	indexer := index.Schema().Indexer.(uint16Indexer)
 
 	v.Value2.Value2.ValueUint16 = 0
@@ -520,8 +507,7 @@ func TestUInt32Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint32)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint32)
 	indexer := index.Schema().Indexer.(uint32Indexer)
 
 	v.Value2.Value2.ValueUint32 = 0
@@ -549,8 +535,7 @@ func TestUInt64Indexer(t *testing.T) {
 	requireT := require.New(t)
 	var v o
 
-	index, err := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint64)
-	requireT.NoError(err)
+	index := NewFieldIndex("index", &v, &v.Value2.Value2.ValueUint64)
 	indexer := index.Schema().Indexer.(uint64Indexer)
 
 	v.Value2.Value2.ValueUint64 = 0

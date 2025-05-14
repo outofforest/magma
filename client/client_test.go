@@ -71,6 +71,110 @@ func TestCreateEntities(t *testing.T) {
 	requireT.Equal(acc, acc2)
 }
 
+func TestEmptyTransaction(t *testing.T) {
+	t.Parallel()
+
+	newTestClient(t).Tx(func(tx *Tx) error {
+		return nil
+	})
+}
+
+func TestFieldIndex(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	var acc entities.Account
+	indexLastName := indices.NewFieldIndex("lastName", &acc, &acc.LastName)
+
+	c := newTestClient(t, indexLastName)
+
+	accs := []entities.Account{
+		{
+			ID:        NewID[entities.AccountID](),
+			FirstName: "First2",
+			LastName:  "Last2",
+		},
+		{
+			ID:        NewID[entities.AccountID](),
+			FirstName: "First1",
+			LastName:  "Last1",
+		},
+	}
+
+	c.Tx(func(tx *Tx) error {
+		for _, acc := range accs {
+			tx.Set(acc)
+		}
+		return nil
+	})
+
+	for i := range accs {
+		accs[i].Revision = 1
+	}
+
+	v := c.View()
+	acc, exists := Find[entities.Account](v, indexLastName)
+	requireT.True(exists)
+	requireT.Equal(accs[1], acc)
+
+	acc, exists = Find[entities.Account](v, indexLastName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	_, exists = Find[entities.Account](v, indexLastName, "Missing")
+	requireT.False(exists)
+
+	i := 0
+	for acc := range Iterate[entities.Account](v, indexLastName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		case 1:
+			requireT.Equal(accs[0], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	i = 0
+	for acc := range Iterate[entities.Account](v, indexLastName, "Last1") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	it := Iterator[entities.Account](v, indexLastName)
+	acc, ok := it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	_, ok = it()
+	requireT.False(ok)
+}
+
 const maxMsgSize = 4 * 1024
 
 func newTestClient(t *testing.T, indices ...indices.Index) testClient {

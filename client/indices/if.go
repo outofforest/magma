@@ -8,17 +8,17 @@ import (
 )
 
 // NewIfIndex creates new conditional index.
-func NewIfIndex[T any](name string, subIndex Index, f func(o *T) bool) (*IfIndex[T], error) {
+func NewIfIndex[T any](name string, subIndex Index, f func(o *T) bool) *IfIndex[T] {
 	var v T
 	if t := reflect.TypeOf(v); t != subIndex.Type() {
-		return nil, errors.Errorf("subindex type mismatch, expected: %s, got: %s", t, subIndex.Type())
+		panic(errors.Errorf("subindex type mismatch, expected: %s, got: %s", t, subIndex.Type()))
 	}
 
 	return &IfIndex[T]{
 		name:     subIndex.Name() + "," + name,
 		subIndex: subIndex,
 		indexer:  newSubIndexer(subIndex, f),
-	}, nil
+	}
 }
 
 func newSubIndexer[T any](subIndex Index, f func(o *T) bool) memdb.Indexer {
