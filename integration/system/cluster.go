@@ -141,6 +141,16 @@ func (c *Client) start(ctx context.Context) {
 	}
 }
 
+func (c *Client) warmUp(ctx context.Context) {
+	if c.group == nil {
+		c.requireT.Fail("client is not running")
+	}
+
+	if err := c.client.WarmUp(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		c.requireT.NoError(err)
+	}
+}
+
 func (c *Client) stop() {
 	if c.group != nil {
 		c.group.Exit(nil)
@@ -195,6 +205,9 @@ func (c Cluster) StopPeers(peers ...*Peer) {
 func (c Cluster) StartClients(ctx context.Context, clients ...*Client) {
 	for _, c := range clients {
 		c.start(ctx)
+	}
+	for _, c := range clients {
+		c.warmUp(ctx)
 	}
 }
 
