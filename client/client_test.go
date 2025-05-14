@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/state/repository/format"
+	"github.com/outofforest/magma/types"
 	"github.com/outofforest/varuint64"
 )
 
@@ -320,6 +322,818 @@ func TestFieldIndexString(t *testing.T) {
 	requireT.False(ok)
 
 	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexBool(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Bool)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:   NewID[types.ID](),
+			Bool: true,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Bool: false,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[1], e)
+
+	e, exists = Find[entities.Fields](v, index, true)
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = Find[entities.Fields](v, index, false)
+	requireT.True(exists)
+	requireT.Equal(es[1], e)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, true)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexTime(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Time)
+
+	c := newTestClient(t, index)
+
+	time0 := time.Unix(100, 10)
+	time1 := time.Unix(10, 20)
+	time2 := time.Unix(10, 10)
+	time3 := time.Unix(0, 10)
+	time4 := time.Unix(-10, 20)
+	time5 := time.Unix(-10, 10)
+	time6 := time.Unix(-100, 20)
+
+	es := []entities.Fields{
+		{
+			ID:   NewID[types.ID](),
+			Time: time0,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time1,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time2,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time3,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time4,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time5,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Time: time6,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[6], e)
+
+	e, exists = Find[entities.Fields](v, index, time4)
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, time1)
+	requireT.True(exists)
+	requireT.Equal(es[1], e)
+
+	_, exists = Find[entities.Fields](v, index, time.Time{})
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[6], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[5], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, time3)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexInt8(t *testing.T) {
+	t.Parallel()
+
+	type intType = int8
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Int8)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:   NewID[types.ID](),
+			Int8: 100,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Int8: 10,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Int8: 0,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Int8: -10,
+		},
+		{
+			ID:   NewID[types.ID](),
+			Int8: -100,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexInt16(t *testing.T) {
+	t.Parallel()
+
+	type intType = int16
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Int16)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:    NewID[types.ID](),
+			Int16: 100,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int16: 10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int16: 0,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int16: -10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int16: -100,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexInt32(t *testing.T) {
+	t.Parallel()
+
+	type intType = int32
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Int32)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:    NewID[types.ID](),
+			Int32: 100,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int32: 10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int32: 0,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int32: -10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int32: -100,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexInt64(t *testing.T) {
+	t.Parallel()
+
+	type intType = int64
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Int64)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:    NewID[types.ID](),
+			Int64: 100,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int64: 10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int64: 0,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int64: -10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Int64: -100,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexUInt8(t *testing.T) {
+	t.Parallel()
+
+	type intType = uint8
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Uint8)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:    NewID[types.ID](),
+			Uint8: 100,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Uint8: 10,
+		},
+		{
+			ID:    NewID[types.ID](),
+			Uint8: 0,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[2], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexUInt16(t *testing.T) {
+	t.Parallel()
+
+	type intType = uint16
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Uint16)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:     NewID[types.ID](),
+			Uint16: 100,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint16: 10,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint16: 0,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[2], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexUInt32(t *testing.T) {
+	t.Parallel()
+
+	type intType = uint32
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Uint32)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:     NewID[types.ID](),
+			Uint32: 100,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint32: 10,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint32: 0,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[2], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
+func TestFieldIndexUInt64(t *testing.T) {
+	t.Parallel()
+
+	type intType = uint64
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex("index", &e, &e.Uint64)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:     NewID[types.ID](),
+			Uint64: 100,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint64: 10,
+		},
+		{
+			ID:     NewID[types.ID](),
+			Uint64: 0,
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := Find[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[2], e)
+
+	e, exists = Find[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = Find[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := Iterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
 	_, ok = it()
 	requireT.False(ok)
 }
