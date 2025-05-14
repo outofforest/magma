@@ -137,8 +137,7 @@ func (s *State) AppendTerm() (rafttypes.Term, types.Index, error) {
 	n2 := varuint64.Size(n)
 	varuint64.Put(termEntry[varuint64.MaxSize-n2:], n)
 
-	entry := termEntry[varuint64.MaxSize-n2 : varuint64.MaxSize+n]
-	return s.appendTx(entry, false, true)
+	return s.appendTx(termEntry[varuint64.MaxSize-n2:varuint64.MaxSize+n], false, true)
 }
 
 // Validate validates the common point in log.

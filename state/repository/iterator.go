@@ -142,6 +142,7 @@ func (i *Iterator) file(current, tail magmatypes.Index) (*File, magmatypes.Index
 	lastFileIndex := uint64(len(i.r.files)) - 1
 	if i.fileIndex < lastFileIndex && current == i.r.files[i.fileIndex+1].Header.NextLogIndex {
 		i.fileIndex++
+		i.offset = 0
 		if file := i.currentFile; file != nil {
 			i.currentFile = nil
 			if err := file.Close(); err != nil {
@@ -156,7 +157,6 @@ func (i *Iterator) file(current, tail magmatypes.Index) (*File, magmatypes.Index
 		if err != nil {
 			return nil, 0, err
 		}
-		i.offset = 0
 	}
 
 	if i.fileIndex < lastFileIndex && i.r.files[i.fileIndex+1].Header.NextLogIndex < tail {

@@ -215,7 +215,7 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 	fileOffset := offset
 	for i := len(r.files) - 1; i >= 0; i-- {
 		file := r.files[i]
-		if fileOffset >= file.Header.NextLogIndex {
+		if offset >= file.Header.NextLogIndex {
 			fileIndex = uint64(i)
 			fileOffset -= file.Header.NextLogIndex
 			break
