@@ -13,3 +13,8 @@ type Index interface {
 	NumOfArgs() uint64
 	Schema() *memdb.IndexSchema
 }
+
+type indexer interface {
+	memdb.Indexer
+	memdb.SingleIndexer
+}
