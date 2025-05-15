@@ -20,7 +20,7 @@ type View struct {
 
 // Get returns the object.
 func Get[T any](v *View, id any) (T, bool) {
-	return find[T](v, idIndex, id)
+	return find[T](v, idIndexName, id)
 }
 
 // Find returns the first object matching indexed values.
@@ -33,7 +33,7 @@ func Find[T any](v *View, index indices.Index, args ...any) (T, bool) {
 
 // All iterates over all entities using ID index.
 func All[T any](v *View) func(func(T) bool) {
-	return iterate[T](v, idIndex)
+	return iterate[T](v, idIndexName)
 }
 
 // Iterate iterates over entities using provided index.
@@ -46,7 +46,7 @@ func Iterate[T any](v *View, index indices.Index, args ...any) func(func(T) bool
 
 // AllIterator returns iterator iterating over all entities using ID index.
 func AllIterator[T any](v *View) func() (T, bool) {
-	return iterator[T](v, idIndex)
+	return iterator[T](v, idIndexName)
 }
 
 // Iterator returns iterator iterating over all entities using provided index.
@@ -139,13 +139,13 @@ func (tx *Tx) Set(o any) {
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
 	}
-	id := oValue.Field(typeDef.IDIndex).Convert(idType).Interface().(types.ID)
-	if id == emptyID {
-		panic(errors.Errorf("id is empty"))
-	}
 
 	oPtrValue := reflect.New(oType)
 	oPtrValue.Elem().Set(oValue)
+	id := types.ID(unsafeIDFromEntity(oPtrValue))
+	if id == emptyID {
+		panic(errors.Errorf("id is empty"))
+	}
 	if err := tx.tx.Insert(typeDef.Table, oPtrValue); err != nil {
 		panic(errors.WithStack(err))
 	}

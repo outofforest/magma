@@ -77,6 +77,9 @@ func New(config Config) (*Client, error) {
 		if !idF.Type.ConvertibleTo(idType) {
 			return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
 		}
+		if idF.Index[0] != 0 || idF.Offset != 0 {
+			return nil, errors.Errorf("id must be the first field in type %s", t)
+		}
 		revisionF, exists := t.FieldByName("Revision")
 		if !exists {
 			return nil, errors.Errorf("object %s has no Revision field", t)
@@ -96,10 +99,8 @@ func New(config Config) (*Client, error) {
 
 		tableName := typeName(t)
 		info := typeInfo{
-			IDIndex:       idF.Index[0],
 			RevisionIndex: revisionF.Index[0],
 			Type:          t,
-			IDType:        idF.Type,
 			Table:         tableName,
 		}
 		byID[mID] = info
@@ -108,10 +109,10 @@ func New(config Config) (*Client, error) {
 		table := &memdb.TableSchema{
 			Name: tableName,
 			Indexes: map[string]*memdb.IndexSchema{
-				idIndex: {
-					Name:    idIndex,
+				idIndexName: {
+					Name:    idIndexName,
 					Unique:  true,
-					Indexer: &idIndexer{index: idF.Index[0]},
+					Indexer: idIndexer{},
 				},
 			},
 		}
@@ -420,7 +421,7 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			return errors.Errorf("unknown type %s", typeDef.Type)
 		}
 
-		o, err := tx.First(typeDef.Table, idIndex, entityMeta.ID)
+		o, err := tx.First(typeDef.Table, idIndexName, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -442,8 +443,7 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 		}
 
 		if o == nil {
-			idF := oV.Elem().Field(typeDef.IDIndex)
-			idF.Set(reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType))
+			setIDInEntity(&entityMeta.ID, oV)
 		}
 		oV.Elem().Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
 
@@ -550,8 +550,8 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 			return txEnvelope{}, 0, errors.Errorf("unknown type %s", vv.Type())
 		}
 
-		idF := vv.Field(typeDef.IDIndex)
-		old, err := snapshot.First(typeDef.Table, idIndex, idF.Interface())
+		unsafeID := unsafeIDFromEntity(v)
+		old, err := snapshot.First(typeDef.Table, idIndexName, unsafeID)
 		if err != nil {
 			return txEnvelope{}, 0, errors.WithStack(err)
 		}
@@ -567,7 +567,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		revision = types.Revision(revisionF.Uint() + 1)
 
 		entityMeta := &wire.EntityMetadata{
-			ID:        idF.Convert(idType).Interface().(types.ID),
+			ID:        types.ID(unsafeID),
 			Revision:  revision,
 			MessageID: id,
 		}
@@ -639,20 +639,6 @@ func txRecover(err *error) {
 	}
 }
 
-type idIndexer struct {
-	index int
-}
-
-func (idi *idIndexer) FromArgs(args ...any) ([]byte, error) {
-	id := reflect.ValueOf(args[0]).Convert(idType).Interface().(types.ID)
-	return id[:], nil
-}
-
-func (idi *idIndexer) FromObject(o any) (bool, []byte, error) {
-	id := o.(reflect.Value).Elem().Field(idi.index).Convert(idType).Interface().(types.ID)
-	return true, id[:], nil
-}
-
 func typeName(t reflect.Type) string {
 	pkg := t.PkgPath()
 	if pkg == "" {
@@ -662,9 +648,7 @@ func typeName(t reflect.Type) string {
 }
 
 type typeInfo struct {
-	IDIndex       int
 	RevisionIndex int
 	Type          reflect.Type
-	IDType        reflect.Type
 	Table         string
 }
