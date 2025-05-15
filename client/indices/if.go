@@ -28,6 +28,8 @@ func newSubIndexer[T any](subIndex Index, f func(o *T) bool) memdb.Indexer {
 	}
 }
 
+var _ indexer = ifIndexer[int]{}
+
 // IfIndex indexes those elements from another index for which f returns true.
 type IfIndex[T any] struct {
 	name     string
@@ -69,8 +71,29 @@ func (ii ifIndexer[T]) FromArgs(args ...any) ([]byte, error) {
 }
 
 func (ii ifIndexer[T]) FromObject(o any) (bool, []byte, error) {
-	if !ii.f(o.(reflect.Value).Interface().(*T)) {
+	size := ii.Size(o)
+	if size == 0 {
 		return false, nil, nil
 	}
-	return ii.subIndexer.FromObject(o)
+	b := make([]byte, size)
+	ii.PutValue(o, b)
+	return true, b, nil
+}
+
+func (ii ifIndexer[T]) IsSizeConstant() bool {
+	return ii.subIndexer.IsSizeConstant()
+}
+
+func (ii ifIndexer[T]) Size(o any) uint64 {
+	if !ii.f(o.(reflect.Value).Interface().(*T)) {
+		return 0
+	}
+	return ii.subIndexer.Size(o)
+}
+
+func (ii ifIndexer[T]) PutValue(o any, b []byte) uint64 {
+	if !ii.f(o.(reflect.Value).Interface().(*T)) {
+		return 0
+	}
+	return ii.subIndexer.PutValue(o, b)
 }

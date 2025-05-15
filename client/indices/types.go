@@ -17,4 +17,8 @@ type Index interface {
 type indexer interface {
 	memdb.Indexer
 	memdb.SingleIndexer
+
+	IsSizeConstant() bool
+	Size(o any) uint64
+	PutValue(o any, b []byte) uint64
 }
