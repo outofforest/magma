@@ -23,19 +23,11 @@ func NewIfIndex[T any](name string, subIndex Index, f func(o *T) bool) *IfIndex[
 
 func newSubIndexer[T any](subIndex Index, f func(o *T) bool) memdb.Indexer {
 	subIndexer := subIndex.Schema().Indexer
-	indexer := ifIndexer[T]{
+	return ifIndexer[T]{
 		subIndexer:       subIndexer,
 		singleSubIndexer: subIndexer.(memdb.SingleIndexer),
 		f:                f,
 	}
-	if prefixSubIndexer, ok := subIndexer.(memdb.PrefixIndexer); ok {
-		return prefixIfIndexer[T]{
-			ifIndexer:        indexer,
-			prefixSubIndexer: prefixSubIndexer,
-		}
-	}
-
-	return indexer
 }
 
 // IfIndex indexes those elements from another index for which f returns true.
@@ -84,13 +76,4 @@ func (ii ifIndexer[T]) FromObject(o any) (bool, []byte, error) {
 		return false, nil, nil
 	}
 	return ii.singleSubIndexer.FromObject(o)
-}
-
-type prefixIfIndexer[T any] struct {
-	ifIndexer[T]
-	prefixSubIndexer memdb.PrefixIndexer
-}
-
-func (ii *prefixIfIndexer[T]) PrefixFromArgs(args ...any) ([]byte, error) {
-	return ii.prefixSubIndexer.PrefixFromArgs(args...)
 }

@@ -81,7 +81,7 @@ func TestIfIndexerMulti(t *testing.T) {
 	requireT.EqualValues(2, index.NumOfArgs())
 	requireT.IsType(reflect.TypeOf(o{}), index.Type())
 
-	indexer := index.Schema().Indexer.(prefixIfIndexer[o])
+	indexer := index.Schema().Indexer.(ifIndexer[o])
 
 	v.Value1 = 1
 	v.Value4 = abc
@@ -115,39 +115,6 @@ func TestIfIndexerMulti(t *testing.T) {
 	requireT.NoError(err)
 	requireT.False(exists)
 	requireT.Nil(value)
-}
-
-func TestIfIndexerMultiPrefix(t *testing.T) {
-	t.Parallel()
-
-	requireT := require.New(t)
-	var v o
-
-	index1 := NewFieldIndex("index1", &v, &v.Value1)
-	index2 := NewFieldIndex("index2", &v, &v.Value4)
-
-	subIndex := NewMultiIndex(index1, index2)
-
-	index := NewIfIndex("if", subIndex, ifFunc[o](o{Value1: 1, Value4: abc}, o{Value1: 1, Value4: def}))
-	requireT.Equal("index1,index2,if", index.Name())
-	requireT.EqualValues(2, index.NumOfArgs())
-	requireT.IsType(reflect.TypeOf(o{}), index.Type())
-
-	indexer := index.Schema().Indexer.(prefixIfIndexer[o])
-
-	v.Value1 = 1
-	v.Value4 = abc
-	expected := []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1}
-	value, err := indexer.PrefixFromArgs(v.Value1)
-	requireT.NoError(err)
-	requireT.Equal(expected, value)
-
-	v.Value1 = 2
-	v.Value4 = def
-	expected = []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2}
-	value, err = indexer.PrefixFromArgs(v.Value1)
-	requireT.NoError(err)
-	requireT.Equal(expected, value)
 }
 
 func TestIfIndexerErrorOnTypeMismatch(t *testing.T) {

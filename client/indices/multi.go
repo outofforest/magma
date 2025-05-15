@@ -20,7 +20,6 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 	var allowMissingValues bool
 	subIndexers := make([]memdb.Indexer, 0, len(subIndices))
 	singleSubIndexers := make([]memdb.SingleIndexer, 0, len(subIndices))
-	prefixSubIndexers := make([]memdb.PrefixIndexer, 0, len(subIndices))
 	for _, si := range subIndices {
 		if si.Type() != t {
 			panic(errors.Errorf("wrong type, expected: %s, got: %s", t, si.Type()))
@@ -39,8 +38,6 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 		subIndexer := schema.Indexer
 		subIndexers = append(subIndexers, subIndexer)
 		singleSubIndexers = append(singleSubIndexers, subIndexer.(memdb.SingleIndexer))
-		prefixSubIndexer, _ := subIndexer.(memdb.PrefixIndexer)
-		prefixSubIndexers = append(prefixSubIndexers, prefixSubIndexer)
 	}
 
 	return &MultiIndex{
@@ -52,7 +49,6 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 			subIndices:        subIndices,
 			subIndexers:       subIndexers,
 			singleSubIndexers: singleSubIndexers,
-			prefixSubIndexers: prefixSubIndexers,
 		},
 	}
 }
@@ -94,14 +90,9 @@ type multiIndexer struct {
 	subIndices        []Index
 	subIndexers       []memdb.Indexer
 	singleSubIndexers []memdb.SingleIndexer
-	prefixSubIndexers []memdb.PrefixIndexer
 }
 
 func (mi *multiIndexer) FromArgs(args ...any) ([]byte, error) {
-	return mi.PrefixFromArgs(args...)
-}
-
-func (mi *multiIndexer) PrefixFromArgs(args ...any) ([]byte, error) {
 	var startArg uint64
 	var size int
 	subValues := make([][]byte, 0, len(mi.subIndices))
@@ -113,7 +104,7 @@ func (mi *multiIndexer) PrefixFromArgs(args ...any) ([]byte, error) {
 		var subValue []byte
 		var err error
 		if startArg+numOfArgs > uint64(len(args)) {
-			subValue, err = mi.prefixSubIndexers[i].PrefixFromArgs(args[startArg:]...)
+			subValue, err = mi.subIndexers[i].FromArgs(args[startArg:]...)
 		} else {
 			subValue, err = mi.subIndexers[i].FromArgs(args[startArg : startArg+numOfArgs]...)
 		}
