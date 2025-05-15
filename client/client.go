@@ -144,14 +144,15 @@ func New(config Config) (*Client, error) {
 	}
 
 	return &Client{
-		config:           config,
-		txCh:             make(chan txEnvelope),
-		metaM:            metaM,
-		doneCh:           make(chan struct{}),
-		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
-		byID:             byID,
-		byType:           byType,
-		db:               db,
+		config:  config,
+		txCh:    make(chan txEnvelope),
+		metaM:   metaM,
+		doneCh:  make(chan struct{}),
+		bufSize: 10 * (config.MaxMessageSize + varuint64.MaxSize),
+		byID:    byID,
+		byType:  byType,
+		// Taking snapshot is a funny way of saying that we want to disable change tracking mechanism.
+		db:               db.Snapshot(),
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
 		readyCh:          make(chan struct{}),
@@ -493,7 +494,8 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 
 	pendingTx := &Tx{
 		View: &View{
-			tx:     t.client.db.Txn(true),
+			// By taking a snapshot, we don't block the main DB from processing incoming changes.
+			tx:     t.client.db.Snapshot().Txn(true),
 			byType: t.client.byType,
 		},
 		changes: t.changes,
