@@ -79,6 +79,8 @@ func (i *MultiIndex) Schema() *memdb.IndexSchema {
 	}
 }
 
+var _ indexer = &multiIndexer{}
+
 type multiIndexer struct {
 	subIndices  []Index
 	subIndexers []indexer
@@ -115,19 +117,35 @@ func (mi *multiIndexer) FromArgs(args ...any) ([]byte, error) {
 }
 
 func (mi *multiIndexer) FromObject(o any) (bool, []byte, error) {
-	var size int
-	subValues := make([][]byte, 0, len(mi.subIndexers))
+	size := mi.Size(o)
+	if size == 0 {
+		return false, nil, nil
+	}
+	b := make([]byte, size)
+	mi.PutValue(o, b)
+	return true, b, nil
+}
+
+func (mi *multiIndexer) IsSizeConstant() bool {
+	return false
+}
+
+func (mi *multiIndexer) Size(o any) uint64 {
+	var size uint64
 	for _, si := range mi.subIndexers {
-		ok, b, err := si.FromObject(o)
-		if err != nil || !ok {
-			return ok, nil, err
+		s := si.Size(o)
+		if s == 0 {
+			return 0
 		}
-		size += len(b)
-		subValues = append(subValues, b)
+		size += s
 	}
-	value := make([]byte, 0, size)
-	for _, subValue := range subValues {
-		value = append(value, subValue...)
+	return size
+}
+
+func (mi *multiIndexer) PutValue(o any, b []byte) uint64 {
+	var n uint64
+	for _, si := range mi.subIndexers {
+		n += si.PutValue(o, b[n:])
 	}
-	return true, value, nil
+	return n
 }
