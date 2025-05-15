@@ -3,14 +3,12 @@ package wire
 import (
 	"time"
 
-	"github.com/google/uuid"
-
 	magmatypes "github.com/outofforest/magma/types"
 )
 
 // TxMetadata stores transaction metadata.
 type TxMetadata struct {
-	ID               uuid.UUID
+	ID               magmatypes.ID
 	Time             time.Time
 	Service          string
 	EntityMetadataID uint64
