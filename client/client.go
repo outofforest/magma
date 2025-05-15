@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/go-memdb"
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
@@ -156,7 +155,7 @@ func New(config Config) (*Client, error) {
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
 		readyCh:          make(chan struct{}),
-		awaitedTxs:       map[uuid.UUID]chan<- error{},
+		awaitedTxs:       map[types.ID]chan<- error{},
 	}, nil
 }
 
@@ -181,7 +180,7 @@ type Client struct {
 	firstHotEnd      bool
 
 	mu         sync.Mutex
-	awaitedTxs map[uuid.UUID]chan<- error
+	awaitedTxs map[types.ID]chan<- error
 }
 
 // Run runs client.
@@ -190,7 +189,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	log := logger.Get(ctx)
 
-	var awaitedTxsToClean []uuid.UUID
+	var awaitedTxsToClean []types.ID
 
 	cMarshaller := c2p.NewMarshaller()
 
@@ -276,7 +275,7 @@ func (c *Client) Run(ctx context.Context) error {
 								for _, id := range awaitedTxsToClean {
 									delete(c.awaitedTxs, id)
 								}
-								awaitedTxsToClean = make([]uuid.UUID, 0, len(c.awaitedTxs))
+								awaitedTxsToClean = make([]types.ID, 0, len(c.awaitedTxs))
 								for id := range c.awaitedTxs {
 									awaitedTxsToClean = append(awaitedTxsToClean, id)
 								}
@@ -458,17 +457,17 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 }
 
 type txEnvelope struct {
-	ID           uuid.UUID
+	ID           types.ID
 	Tx           []byte
 	ReceivedCh   chan error
-	PreviousTxID uuid.UUID
+	PreviousTxID types.ID
 }
 
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
 	client       *Client
 	changes      map[types.ID]reflect.Value
-	previousTxID uuid.UUID
+	previousTxID types.ID
 	buf          []byte
 }
 
@@ -520,7 +519,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 
 	i = uint64(varuint64.MaxSize)
 
-	txID := uuid.New()
+	txID := NewID[types.ID]()
 	previousTxID := t.previousTxID
 	t.previousTxID = txID
 

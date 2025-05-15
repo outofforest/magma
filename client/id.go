@@ -1,10 +1,11 @@
 package client
 
 import (
+	"crypto/rand"
 	"reflect"
 	"unsafe"
 
-	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/types"
@@ -17,12 +18,14 @@ const (
 )
 
 type idConstraint interface {
-	~[16]byte // In go it's not possible to constraint on ID, so this is the best we can do.
+	~[idLength]byte // In go it's not possible to constraint on ID, so this is the best we can do.
 }
 
 // NewID generates new ID.
 func NewID[T idConstraint]() T {
-	return T(uuid.New())
+	var id [idLength]byte
+	lo.Must(rand.Read(id[:]))
+	return id
 }
 
 type idIndexer struct{}

@@ -1,9 +1,7 @@
 package types
 
-import "github.com/google/uuid"
-
 // ID is used to define ID field in entities.
-type ID uuid.UUID
+type ID [16]byte
 
 // Revision is used to define Revision field in entities.
 type Revision uint64
