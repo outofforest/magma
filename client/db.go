@@ -20,44 +20,68 @@ type View struct {
 
 // Get returns the object.
 func Get[T any](v *View, id any) (T, bool) {
-	return find[T](v, idIndexName, id)
+	return findFirst[T](v, idIndexName, id)
 }
 
-// Find returns the first object matching indexed values.
-func Find[T any](v *View, index indices.Index, args ...any) (T, bool) {
+// FindFirst returns the first object matching indexed values.
+func FindFirst[T any](v *View, index indices.Index, args ...any) (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return find[T](v, index.Name(), args...)
+	return findFirst[T](v, index.Name(), args...)
+}
+
+// FindLast returns the first object matching indexed values.
+func FindLast[T any](v *View, index indices.Index, args ...any) (T, bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
+	return findLast[T](v, index.Name(), args...)
 }
 
 // All iterates over all entities using ID index.
 func All[T any](v *View) func(func(T) bool) {
-	return iterate[T](v, idIndexName)
+	return iterateForward[T](v, idIndexName)
 }
 
-// Iterate iterates over entities using provided index.
-func Iterate[T any](v *View, index indices.Index, args ...any) func(func(T) bool) {
+// IterateForward iterates over entities in forward direction using provided index.
+func IterateForward[T any](v *View, index indices.Index, args ...any) func(func(T) bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return iterate[T](v, index.Name(), args...)
+	return iterateForward[T](v, index.Name(), args...)
+}
+
+// IterateBackward iterates over entities in backward direction using provided index.
+func IterateBackward[T any](v *View, index indices.Index, args ...any) func(func(T) bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
+	return iterateBackward[T](v, index.Name(), args...)
 }
 
 // AllIterator returns iterator iterating over all entities using ID index.
 func AllIterator[T any](v *View) func() (T, bool) {
-	return iterator[T](v, idIndexName)
+	return forwardIterator[T](v, idIndexName)
 }
 
-// Iterator returns iterator iterating over all entities using provided index.
-func Iterator[T any](v *View, index indices.Index, args ...any) func() (T, bool) {
+// ForwardIterator returns iterator iterating over all entities in forward direction using provided index.
+func ForwardIterator[T any](v *View, index indices.Index, args ...any) func() (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return iterator[T](v, index.Name(), args...)
+	return forwardIterator[T](v, index.Name(), args...)
 }
 
-func find[T any](v *View, index string, args ...any) (T, bool) {
+// BackwardIterator returns iterator iterating over all entities in backward direction using provided index.
+func BackwardIterator[T any](v *View, index indices.Index, args ...any) func() (T, bool) {
+	if uint64(len(args)) > index.NumOfArgs() {
+		panic(errors.New("too many arguments"))
+	}
+	return backwardIterator[T](v, index.Name(), args...)
+}
+
+func findFirst[T any](v *View, index string, args ...any) (T, bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -76,7 +100,26 @@ func find[T any](v *View, index string, args ...any) (T, bool) {
 	return o.(reflect.Value).Elem().Interface().(T), true
 }
 
-func iterate[T any](v *View, index string, args ...any) func(func(T) bool) {
+func findLast[T any](v *View, index string, args ...any) (T, bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	o, err := v.tx.Last(typeDef.Table, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	if o == nil {
+		return t, false
+	}
+	return o.(reflect.Value).Elem().Interface().(T), true
+}
+
+func iterateForward[T any](v *View, index string, args ...any) func(func(T) bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -98,7 +141,29 @@ func iterate[T any](v *View, index string, args ...any) func(func(T) bool) {
 	}
 }
 
-func iterator[T any](v *View, index string, args ...any) func() (T, bool) {
+func iterateBackward[T any](v *View, index string, args ...any) func(func(T) bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	it, err := v.tx.GetReverse(typeDef.Table, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	return func(yield func(e T) bool) {
+		for e := it.Next(); e != nil; e = it.Next() {
+			if !yield(e.(reflect.Value).Elem().Interface().(T)) {
+				return
+			}
+		}
+	}
+}
+
+func forwardIterator[T any](v *View, index string, args ...any) func() (T, bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -107,6 +172,28 @@ func iterator[T any](v *View, index string, args ...any) func() (T, bool) {
 	}
 
 	it, err := v.tx.Get(typeDef.Table, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	return func() (T, bool) {
+		e := it.Next()
+		if e == nil {
+			return t, false
+		}
+		return e.(reflect.Value).Elem().Interface().(T), true
+	}
+}
+
+func backwardIterator[T any](v *View, index string, args ...any) func() (T, bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	it, err := v.tx.GetReverse(typeDef.Table, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
