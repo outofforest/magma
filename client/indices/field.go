@@ -102,15 +102,12 @@ func findField(t reflect.Type, offset uintptr) reflect.Type {
 	}
 }
 
-func valueByOffset[T any](v any, offset uintptr) T {
-	if v, ok := v.(reflect.Value); ok {
-		return *(*T)(unsafe.Pointer(uintptr(v.UnsafePointer()) + offset))
-	}
-	return v.(T)
+func valueByOffset[T any](v reflect.Value, offset uintptr) T {
+	return *(*T)(unsafe.Pointer(uintptr(v.UnsafePointer()) + offset))
 }
 
-func boolToBytes(v any, offset uintptr) []byte {
-	if valueByOffset[bool](v, offset) {
+func boolToBytes(v bool) []byte {
+	if v {
 		return []byte{1}
 	}
 	return []byte{0}
@@ -121,15 +118,17 @@ type boolIndexer struct {
 }
 
 func (i boolIndexer) FromArgs(args ...any) ([]byte, error) {
-	return boolToBytes(args[0], 0), nil
+	return boolToBytes(reflect.ValueOf(args[0]).Bool()), nil
 }
 
 func (i boolIndexer) FromObject(o any) (bool, []byte, error) {
-	return true, boolToBytes(o, i.offset), nil
+	return true, boolToBytes(valueByOffset[bool](o.(reflect.Value), i.offset)), nil
 }
 
-func stringToBytes(s any, offset uintptr) []byte {
-	return []byte(valueByOffset[string](s, offset) + "\x00")
+func stringToBytes(s string) []byte {
+	b := make([]byte, len(s)+1) // +1 for null termination
+	copy(b, s)
+	return b
 }
 
 type stringIndexer struct {
@@ -137,11 +136,11 @@ type stringIndexer struct {
 }
 
 func (i stringIndexer) FromArgs(args ...any) ([]byte, error) {
-	return stringToBytes(args[0], 0), nil
+	return stringToBytes(reflect.ValueOf(args[0]).String()), nil
 }
 
 func (i stringIndexer) FromObject(o any) (bool, []byte, error) {
-	return true, stringToBytes(o, i.offset), nil
+	return true, stringToBytes(valueByOffset[string](o.(reflect.Value), i.offset)), nil
 }
 
 var (
@@ -149,12 +148,10 @@ var (
 	timeType      = reflect.TypeOf(time.Time{})
 )
 
-func timeToBytes(t any, offset uintptr) []byte {
-	tt := valueByOffset[time.Time](t, offset)
-
+func timeToBytes(t time.Time) []byte {
 	var b [12]byte
-	binary.BigEndian.PutUint64(b[:], uint64(tt.Unix()-secondsOffset))
-	binary.BigEndian.PutUint32(b[8:], uint32(tt.Nanosecond()))
+	binary.BigEndian.PutUint64(b[:], uint64(t.Unix()-secondsOffset))
+	binary.BigEndian.PutUint32(b[8:], uint32(t.Nanosecond()))
 	b[0] ^= 0x80
 	return b[:]
 }
@@ -164,15 +161,15 @@ type timeIndexer struct {
 }
 
 func (i timeIndexer) FromArgs(args ...any) ([]byte, error) {
-	return timeToBytes(args[0], 0), nil
+	return timeToBytes(reflect.ValueOf(args[0]).Convert(timeType).Interface().(time.Time)), nil
 }
 
 func (i timeIndexer) FromObject(o any) (bool, []byte, error) {
-	return true, timeToBytes(o, i.offset), nil
+	return true, timeToBytes(valueByOffset[time.Time](o.(reflect.Value), i.offset)), nil
 }
 
-func int8ToBytes(i any, offset uintptr) []byte {
-	return []byte{uint8(valueByOffset[int8](i, offset)) ^ 0x80}
+func int8ToBytes(i int8) []byte {
+	return []byte{uint8(i) ^ 0x80}
 }
 
 type int8Indexer struct {
@@ -180,17 +177,16 @@ type int8Indexer struct {
 }
 
 func (i int8Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int8ToBytes(args[0], 0), nil
+	return int8ToBytes(int8(reflect.ValueOf(args[0]).Int())), nil
 }
 
 func (i int8Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, int8ToBytes(o, i.offset), nil
+	return true, int8ToBytes(valueByOffset[int8](o.(reflect.Value), i.offset)), nil
 }
 
-func int16ToBytes(i any, offset uintptr) []byte {
+func int16ToBytes(i int16) []byte {
 	var b [2]byte
-	binary.BigEndian.PutUint16(b[:], uint16(valueByOffset[int16](i, offset)))
-	b[0] ^= 0x80
+	binary.BigEndian.PutUint16(b[:], uint16(i)^0x8000)
 	return b[:]
 }
 
@@ -199,17 +195,16 @@ type int16Indexer struct {
 }
 
 func (i int16Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int16ToBytes(args[0], 0), nil
+	return int16ToBytes(int16(reflect.ValueOf(args[0]).Int())), nil
 }
 
 func (i int16Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, int16ToBytes(o, i.offset), nil
+	return true, int16ToBytes(valueByOffset[int16](o.(reflect.Value), i.offset)), nil
 }
 
-func int32ToBytes(i any, offset uintptr) []byte {
+func int32ToBytes(i int32) []byte {
 	var b [4]byte
-	binary.BigEndian.PutUint32(b[:], uint32(valueByOffset[int32](i, offset)))
-	b[0] ^= 0x80
+	binary.BigEndian.PutUint32(b[:], uint32(i)^0x80000000)
 	return b[:]
 }
 
@@ -218,17 +213,16 @@ type int32Indexer struct {
 }
 
 func (i int32Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int32ToBytes(args[0], 0), nil
+	return int32ToBytes(int32(reflect.ValueOf(args[0]).Int())), nil
 }
 
 func (i int32Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, int32ToBytes(o, i.offset), nil
+	return true, int32ToBytes(valueByOffset[int32](o.(reflect.Value), i.offset)), nil
 }
 
-func int64ToBytes(i any, offset uintptr) []byte {
+func int64ToBytes(i int64) []byte {
 	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], uint64(valueByOffset[int64](i, offset)))
-	b[0] ^= 0x80
+	binary.BigEndian.PutUint64(b[:], uint64(i)^0x8000000000000000)
 	return b[:]
 }
 
@@ -237,15 +231,15 @@ type int64Indexer struct {
 }
 
 func (i int64Indexer) FromArgs(args ...any) ([]byte, error) {
-	return int64ToBytes(args[0], 0), nil
+	return int64ToBytes(reflect.ValueOf(args[0]).Int()), nil
 }
 
 func (i int64Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, int64ToBytes(o, i.offset), nil
+	return true, int64ToBytes(valueByOffset[int64](o.(reflect.Value), i.offset)), nil
 }
 
-func uint8ToBytes(i any, offset uintptr) []byte {
-	return []byte{valueByOffset[uint8](i, offset)}
+func uint8ToBytes(i uint8) []byte {
+	return []byte{i}
 }
 
 type uint8Indexer struct {
@@ -253,16 +247,16 @@ type uint8Indexer struct {
 }
 
 func (i uint8Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint8ToBytes(args[0], 0), nil
+	return uint8ToBytes(uint8(reflect.ValueOf(args[0]).Uint())), nil
 }
 
 func (i uint8Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, uint8ToBytes(o, i.offset), nil
+	return true, uint8ToBytes(valueByOffset[uint8](o.(reflect.Value), i.offset)), nil
 }
 
-func uint16ToBytes(i any, offset uintptr) []byte {
+func uint16ToBytes(i uint16) []byte {
 	var b [2]byte
-	binary.BigEndian.PutUint16(b[:], valueByOffset[uint16](i, offset))
+	binary.BigEndian.PutUint16(b[:], i)
 	return b[:]
 }
 
@@ -271,16 +265,16 @@ type uint16Indexer struct {
 }
 
 func (i uint16Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint16ToBytes(args[0], 0), nil
+	return uint16ToBytes(uint16(reflect.ValueOf(args[0]).Uint())), nil
 }
 
 func (i uint16Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, uint16ToBytes(o, i.offset), nil
+	return true, uint16ToBytes(valueByOffset[uint16](o.(reflect.Value), i.offset)), nil
 }
 
-func uint32ToBytes(i any, offset uintptr) []byte {
+func uint32ToBytes(i uint32) []byte {
 	var b [4]byte
-	binary.BigEndian.PutUint32(b[:], valueByOffset[uint32](i, offset))
+	binary.BigEndian.PutUint32(b[:], i)
 	return b[:]
 }
 
@@ -289,16 +283,16 @@ type uint32Indexer struct {
 }
 
 func (i uint32Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint32ToBytes(args[0], 0), nil
+	return uint32ToBytes(uint32(reflect.ValueOf(args[0]).Uint())), nil
 }
 
 func (i uint32Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, uint32ToBytes(o, i.offset), nil
+	return true, uint32ToBytes(valueByOffset[uint32](o.(reflect.Value), i.offset)), nil
 }
 
-func uint64ToBytes(i any, offset uintptr) []byte {
+func uint64ToBytes(i uint64) []byte {
 	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], valueByOffset[uint64](i, offset))
+	binary.BigEndian.PutUint64(b[:], i)
 	return b[:]
 }
 
@@ -307,11 +301,11 @@ type uint64Indexer struct {
 }
 
 func (i uint64Indexer) FromArgs(args ...any) ([]byte, error) {
-	return uint64ToBytes(args[0], 0), nil
+	return uint64ToBytes(reflect.ValueOf(args[0]).Uint()), nil
 }
 
 func (i uint64Indexer) FromObject(o any) (bool, []byte, error) {
-	return true, uint64ToBytes(o, i.offset), nil
+	return true, uint64ToBytes(valueByOffset[uint64](o.(reflect.Value), i.offset)), nil
 }
 
 func indexerForType(t reflect.Type, offset uintptr) (indexer, error) {
