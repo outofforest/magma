@@ -1,12 +1,31 @@
 package client
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/integration/entities"
 )
+
+func TestMetaLayout(t *testing.T) {
+	requireT := require.New(t)
+	metaT := reflect.TypeOf(wire.EntityMetadata{})
+
+	idF, exists := metaT.FieldByName("ID")
+	requireT.True(exists)
+	requireT.Equal([]int{0}, idF.Index)
+	requireT.EqualValues(0, idF.Offset)
+	requireT.EqualValues(idLength, idF.Type.Size())
+
+	revisionF, exists := metaT.FieldByName("Revision")
+	requireT.True(exists)
+	requireT.Equal([]int{1}, revisionF.Index)
+	requireT.EqualValues(idLength, revisionF.Offset)
+	requireT.EqualValues(revisionLength, revisionF.Type.Size())
+}
 
 func TestIDIndex(t *testing.T) {
 	t.Parallel()

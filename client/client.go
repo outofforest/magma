@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-memdb"
@@ -87,6 +88,9 @@ func New(config Config) (*Client, error) {
 		if revisionF.Type != revisionType {
 			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
 		}
+		if revisionF.Index[0] != 1 || revisionF.Offset != idLength {
+			return nil, errors.Errorf("revision must be the second field in type %d", t)
+		}
 
 		if _, exists := byType[t]; exists {
 			return nil, errors.Errorf("double registration of object %s", t)
@@ -99,9 +103,8 @@ func New(config Config) (*Client, error) {
 
 		tableName := typeName(t)
 		info := typeInfo{
-			RevisionIndex: revisionF.Index[0],
-			Type:          t,
-			Table:         tableName,
+			Type:  t,
+			Table: tableName,
 		}
 		byID[mID] = info
 		byType[t] = info
@@ -427,25 +430,22 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 		}
 
 		oV := reflect.New(typeDef.Type)
-		if o != nil {
-			oV2 := o.(reflect.Value).Elem()
-			oldRevision := oV2.Field(typeDef.RevisionIndex).Interface().(types.Revision)
-			if entityMeta.Revision <= oldRevision {
+		if o == nil {
+			copyMetaToEntity(oV, entityMeta)
+		} else {
+			oV2 := o.(reflect.Value)
+			if entityMeta.Revision <= revisionFromEntity(oV2) {
 				tx.Abort()
 				return ErrOutdatedTx
 			}
-			oV.Elem().Set(oV2)
+			oV.Elem().Set(oV2.Elem())
+			setRevisionInEntity(oV, &entityMeta.Revision)
 		}
 
 		msgSize, err := c.config.Marshaller.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}
-
-		if o == nil {
-			setIDInEntity(&entityMeta.ID, oV)
-		}
-		oV.Elem().Field(typeDef.RevisionIndex).Set(reflect.ValueOf(entityMeta.Revision))
 
 		if err := tx.Insert(typeDef.Table, oV); err != nil {
 			return errors.WithStack(err)
@@ -557,20 +557,19 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		}
 
 		var oldV reflect.Value
-		var revision types.Revision
 		if old == nil {
 			oldV = reflect.New(typeDef.Type)
+			setIDInEntity(oldV, (*types.ID)(unsafe.Pointer(&unsafeID[0])))
 		} else {
 			oldV = old.(reflect.Value)
 		}
-		revisionF := oldV.Elem().Field(typeDef.RevisionIndex)
-		revision = types.Revision(revisionF.Uint() + 1)
 
 		entityMeta := &wire.EntityMetadata{
-			ID:        types.ID(unsafeID),
-			Revision:  revision,
 			MessageID: id,
 		}
+		copyMetaFromEntity(entityMeta, oldV)
+		entityMeta.Revision++
+
 		_, entitySize, err := t.client.metaM.Marshal(entityMeta, t.buf[i:])
 		if err != nil {
 			return txEnvelope{}, 0, err
@@ -648,7 +647,6 @@ func typeName(t reflect.Type) string {
 }
 
 type typeInfo struct {
-	RevisionIndex int
-	Type          reflect.Type
-	Table         string
+	Type  reflect.Type
+	Table string
 }

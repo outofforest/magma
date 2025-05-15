@@ -6,12 +6,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/types"
 )
 
 const (
-	idLength    = 16
-	idIndexName = "id"
+	idLength       = 16
+	revisionLength = 8
+	idIndexName    = "id"
 )
 
 type idConstraint interface {
@@ -36,10 +38,35 @@ func (idi idIndexer) FromObject(o any) (bool, []byte, error) {
 	return true, b2, nil
 }
 
-func setIDInEntity(id *types.ID, eValue reflect.Value) {
+func setIDInEntity(eValue reflect.Value, id *types.ID) {
 	copy(unsafeIDFromEntity(eValue), unsafe.Slice((*byte)(unsafe.Pointer(id)), idLength))
 }
 
 func unsafeIDFromEntity(eValue reflect.Value) []byte {
 	return unsafe.Slice((*byte)(eValue.UnsafePointer()), idLength)
+}
+
+func setRevisionInEntity(eValue reflect.Value, revision *types.Revision) {
+	copy(
+		unsafe.Slice((*byte)(unsafe.Pointer(uintptr(eValue.UnsafePointer())+idLength)), revisionLength),
+		unsafe.Slice((*byte)(unsafe.Pointer(revision)), revisionLength),
+	)
+}
+
+func revisionFromEntity(eValue reflect.Value) types.Revision {
+	return *(*types.Revision)(unsafe.Pointer(uintptr(eValue.UnsafePointer()) + idLength))
+}
+
+func copyMetaFromEntity(meta *wire.EntityMetadata, eValue reflect.Value) {
+	copy(
+		unsafe.Slice((*byte)(unsafe.Pointer(meta)), idLength+revisionLength),
+		unsafe.Slice((*byte)(eValue.UnsafePointer()), idLength+revisionLength),
+	)
+}
+
+func copyMetaToEntity(eValue reflect.Value, meta *wire.EntityMetadata) {
+	copy(
+		unsafe.Slice((*byte)(eValue.UnsafePointer()), idLength+revisionLength),
+		unsafe.Slice((*byte)(unsafe.Pointer(meta)), idLength+revisionLength),
+	)
 }
