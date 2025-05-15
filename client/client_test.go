@@ -189,19 +189,30 @@ func TestFieldIndexString(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := Find[entities.Account](v, indexLastName)
+	acc, exists := FindFirst[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	acc, exists = Find[entities.Account](v, indexLastName, "Last2")
+	acc, exists = FindLast[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = Find[entities.Account](v, indexLastName, "La")
+	acc, exists = FindFirst[entities.Account](v, indexLastName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	acc, exists = FindLast[entities.Account](v, indexLastName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	_, exists = FindFirst[entities.Account](v, indexLastName, "La")
+	requireT.False(exists)
+
+	_, exists = FindLast[entities.Account](v, indexLastName, "La")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexLastName) {
+	for acc := range IterateForward[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -214,7 +225,20 @@ func TestFieldIndexString(t *testing.T) {
 	}
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, "Last1") {
+	for acc := range IterateBackward[entities.Account](v, indexLastName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		case 1:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	i = 0
+	for acc := range IterateForward[entities.Account](v, indexLastName, "Last1") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -224,11 +248,26 @@ func TestFieldIndexString(t *testing.T) {
 		i++
 	}
 
-	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+	i = 0
+	for acc := range IterateBackward[entities.Account](v, indexLastName, "Last1") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	for range IterateForward[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexLastName)
+	for range IterateBackward[entities.Account](v, indexLastName, "Missing") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	it := ForwardIterator[entities.Account](v, indexLastName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -238,14 +277,35 @@ func TestFieldIndexString(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	it = BackwardIterator[entities.Account](v, indexLastName)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexLastName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	it = BackwardIterator[entities.Account](v, indexLastName, "Last2")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexLastName, "Missing")
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Account](v, indexLastName, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -283,19 +343,31 @@ func TestFieldIndexBool(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	e, exists = Find[entities.Fields](v, index, true)
+	e, exists = FindLast[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = Find[entities.Fields](v, index, false)
+	e, exists = FindFirst[entities.Fields](v, index, true)
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = FindLast[entities.Fields](v, index, true)
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = FindFirst[entities.Fields](v, index, false)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	it := Iterator[entities.Fields](v, index)
+	e, exists = FindLast[entities.Fields](v, index, false)
+	requireT.True(exists)
+	requireT.Equal(es[1], e)
+
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -305,7 +377,24 @@ func TestFieldIndexBool(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, true)
+	it = BackwardIterator[entities.Fields](v, index)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Fields](v, index, true)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Fields](v, index, true)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[0], e)
@@ -374,22 +463,22 @@ func TestFieldIndexTime(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[6], e)
 
-	e, exists = Find[entities.Fields](v, index, time4)
+	e, exists = FindFirst[entities.Fields](v, index, time4)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, time1)
+	e, exists = FindFirst[entities.Fields](v, index, time1)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	_, exists = Find[entities.Fields](v, index, time.Time{})
+	_, exists = FindFirst[entities.Fields](v, index, time.Time{})
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[6], e)
@@ -414,7 +503,7 @@ func TestFieldIndexTime(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, time3)
+	it = ForwardIterator[entities.Fields](v, index, time3)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[3], e)
@@ -469,22 +558,22 @@ func TestFieldIndexInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(-100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -503,7 +592,7 @@ func TestFieldIndexInt8(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -558,22 +647,22 @@ func TestFieldIndexInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(-100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -592,7 +681,7 @@ func TestFieldIndexInt16(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -647,22 +736,22 @@ func TestFieldIndexInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(-100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -681,7 +770,7 @@ func TestFieldIndexInt32(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -736,22 +825,37 @@ func TestFieldIndexInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(-100))
-	requireT.True(exists)
-	requireT.Equal(es[4], e)
-
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindLast[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = FindLast[entities.Fields](v, index, intType(-100))
+	requireT.True(exists)
+	requireT.Equal(es[4], e)
+
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = FindLast[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	_, exists = FindLast[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -770,7 +874,33 @@ func TestFieldIndexInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = BackwardIterator[entities.Fields](v, index)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[3], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[4], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -817,18 +947,18 @@ func TestFieldIndexUInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -841,7 +971,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -888,18 +1018,18 @@ func TestFieldIndexUInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -912,7 +1042,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -959,18 +1089,18 @@ func TestFieldIndexUInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -983,7 +1113,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1030,18 +1160,29 @@ func TestFieldIndexUInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := Find[entities.Fields](v, index)
+	e, exists := FindFirst[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = Find[entities.Fields](v, index, intType(100))
+	e, exists = FindLast[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = Find[entities.Fields](v, index, intType(1))
+	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = FindLast[entities.Fields](v, index, intType(100))
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = FindFirst[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	_, exists = FindLast[entities.Fields](v, index, intType(1))
+	requireT.False(exists)
+
+	it := ForwardIterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1054,7 +1195,27 @@ func TestFieldIndexUInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = BackwardIterator[entities.Fields](v, index)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Fields](v, index, intType(10))
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1107,19 +1268,19 @@ func TestIfIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := Find[entities.Account](v, indexLastName)
+	acc, exists := FindFirst[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	acc, exists = Find[entities.Account](v, indexLastName, "Last2")
+	acc, exists = FindFirst[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	_, exists = Find[entities.Account](v, indexLastName, "Missing")
+	_, exists = FindFirst[entities.Account](v, indexLastName, "Missing")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexLastName) {
+	for acc := range IterateForward[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[2], acc)
@@ -1132,7 +1293,7 @@ func TestIfIndex(t *testing.T) {
 	}
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, "Last3") {
+	for acc := range IterateForward[entities.Account](v, indexLastName, "Last3") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -1142,11 +1303,11 @@ func TestIfIndex(t *testing.T) {
 		i++
 	}
 
-	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+	for range IterateForward[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexLastName)
+	it := ForwardIterator[entities.Account](v, indexLastName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
@@ -1156,14 +1317,14 @@ func TestIfIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	it = ForwardIterator[entities.Account](v, indexLastName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	it = ForwardIterator[entities.Account](v, indexLastName, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1221,30 +1382,60 @@ func TestMultiIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := Find[entities.Account](v, indexName)
+	acc, exists := FindFirst[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	acc, exists = Find[entities.Account](v, indexName, "Last")
-	requireT.True(exists)
-	requireT.Equal(accs[3], acc)
-
-	acc, exists = Find[entities.Account](v, indexName, "La")
-	requireT.True(exists)
-	requireT.Equal(accs[4], acc)
-
-	_, exists = Find[entities.Account](v, indexName, "Las")
-	requireT.False(exists)
-
-	acc, exists = Find[entities.Account](v, indexName, "Last2", "First3")
+	acc, exists = FindLast[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = Find[entities.Account](v, indexName, "Last2", "Fir")
+	acc, exists = FindFirst[entities.Account](v, indexName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[1], acc)
+
+	acc, exists = FindLast[entities.Account](v, indexName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	acc, exists = FindFirst[entities.Account](v, indexName, "Last")
+	requireT.True(exists)
+	requireT.Equal(accs[3], acc)
+
+	acc, exists = FindLast[entities.Account](v, indexName, "Last")
+	requireT.True(exists)
+	requireT.Equal(accs[3], acc)
+
+	acc, exists = FindFirst[entities.Account](v, indexName, "La")
+	requireT.True(exists)
+	requireT.Equal(accs[4], acc)
+
+	acc, exists = FindLast[entities.Account](v, indexName, "La")
+	requireT.True(exists)
+	requireT.Equal(accs[4], acc)
+
+	_, exists = FindFirst[entities.Account](v, indexName, "Las")
+	requireT.False(exists)
+
+	_, exists = FindLast[entities.Account](v, indexName, "Las")
+	requireT.False(exists)
+
+	acc, exists = FindFirst[entities.Account](v, indexName, "Last2", "First3")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	acc, exists = FindLast[entities.Account](v, indexName, "Last2", "First3")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	_, exists = FindFirst[entities.Account](v, indexName, "Last2", "Fir")
+	requireT.False(exists)
+
+	_, exists = FindLast[entities.Account](v, indexName, "Last2", "Fir")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexName) {
+	for acc := range IterateForward[entities.Account](v, indexName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[4], acc)
@@ -1263,7 +1454,26 @@ func TestMultiIndex(t *testing.T) {
 	}
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2") {
+	for acc := range IterateBackward[entities.Account](v, indexName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		case 1:
+			requireT.Equal(accs[1], acc)
+		case 2:
+			requireT.Equal(accs[2], acc)
+		case 3:
+			requireT.Equal(accs[3], acc)
+		case 4:
+			requireT.Equal(accs[4], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	i = 0
+	for acc := range IterateForward[entities.Account](v, indexName, "Last2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -1276,7 +1486,20 @@ func TestMultiIndex(t *testing.T) {
 	}
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2", "First2") {
+	for acc := range IterateBackward[entities.Account](v, indexName, "Last2") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		case 1:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	i = 0
+	for acc := range IterateForward[entities.Account](v, indexName, "Last2", "First2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -1286,15 +1509,34 @@ func TestMultiIndex(t *testing.T) {
 		i++
 	}
 
-	for range Iterate[entities.Account](v, indexName, "Las") {
+	i = 0
+	for acc := range IterateBackward[entities.Account](v, indexName, "Last2", "First2") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	for range IterateForward[entities.Account](v, indexName, "Las") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	for range Iterate[entities.Account](v, indexName, "Last2", "Fir") {
+	for range IterateBackward[entities.Account](v, indexName, "Las") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexName)
+	for range IterateForward[entities.Account](v, indexName, "Last2", "Fir") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	for range IterateBackward[entities.Account](v, indexName, "Last2", "Fir") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	it := ForwardIterator[entities.Account](v, indexName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[4], acc)
@@ -1313,7 +1555,26 @@ func TestMultiIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2")
+	it = BackwardIterator[entities.Account](v, indexName)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[2], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[3], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[4], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -1323,14 +1584,35 @@ func TestMultiIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2", "First3")
+	it = BackwardIterator[entities.Account](v, indexName, "Last2")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexName, "Last2", "First3")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Las")
+	it = BackwardIterator[entities.Account](v, indexName, "Last2", "First3")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexName, "Las")
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Account](v, indexName, "Las")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1390,7 +1672,7 @@ func TestMultiIfIndex(t *testing.T) {
 
 	v := c.View()
 
-	it := Iterator[entities.Account](v, indexName)
+	it := ForwardIterator[entities.Account](v, indexName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
@@ -1400,25 +1682,25 @@ func TestMultiIfIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "A1", "B1")
+	it = ForwardIterator[entities.Account](v, indexName, "A1", "B1")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "A2")
+	it = ForwardIterator[entities.Account](v, indexName, "A2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[3], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "B1", "A1")
+	it = ForwardIterator[entities.Account](v, indexName, "B1", "A1")
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "B1")
+	it = ForwardIterator[entities.Account](v, indexName, "B1")
 	_, ok = it()
 	requireT.False(ok)
 }
