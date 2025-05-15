@@ -314,7 +314,7 @@ func (i uint64Indexer) FromObject(o any) (bool, []byte, error) {
 	return true, uint64ToBytes(o, i.offset), nil
 }
 
-func indexerForType(t reflect.Type, offset uintptr) (memdb.Indexer, error) {
+func indexerForType(t reflect.Type, offset uintptr) (indexer, error) {
 	if t.ConvertibleTo(timeType) {
 		return timeIndexer{offset: offset}, nil
 	}

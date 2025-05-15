@@ -18,8 +18,7 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 	var numOfArgs uint64
 	var name string
 	var allowMissingValues bool
-	subIndexers := make([]memdb.Indexer, 0, len(subIndices))
-	singleSubIndexers := make([]memdb.SingleIndexer, 0, len(subIndices))
+	subIndexers := make([]indexer, 0, len(subIndices))
 	for _, si := range subIndices {
 		if si.Type() != t {
 			panic(errors.Errorf("wrong type, expected: %s, got: %s", t, si.Type()))
@@ -30,14 +29,9 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 			name += ","
 		}
 		name += si.Name()
-
 		schema := si.Schema()
-
 		allowMissingValues = allowMissingValues || schema.AllowMissing
-
-		subIndexer := schema.Indexer
-		subIndexers = append(subIndexers, subIndexer)
-		singleSubIndexers = append(singleSubIndexers, subIndexer.(memdb.SingleIndexer))
+		subIndexers = append(subIndexers, schema.Indexer.(indexer))
 	}
 
 	return &MultiIndex{
@@ -46,9 +40,8 @@ func NewMultiIndex(subIndices ...Index) *MultiIndex {
 		entityType:         t,
 		allowMissingValues: allowMissingValues,
 		indexer: &multiIndexer{
-			subIndices:        subIndices,
-			subIndexers:       subIndexers,
-			singleSubIndexers: singleSubIndexers,
+			subIndices:  subIndices,
+			subIndexers: subIndexers,
 		},
 	}
 }
@@ -87,9 +80,8 @@ func (i *MultiIndex) Schema() *memdb.IndexSchema {
 }
 
 type multiIndexer struct {
-	subIndices        []Index
-	subIndexers       []memdb.Indexer
-	singleSubIndexers []memdb.SingleIndexer
+	subIndices  []Index
+	subIndexers []indexer
 }
 
 func (mi *multiIndexer) FromArgs(args ...any) ([]byte, error) {
@@ -125,7 +117,7 @@ func (mi *multiIndexer) FromArgs(args ...any) ([]byte, error) {
 func (mi *multiIndexer) FromObject(o any) (bool, []byte, error) {
 	var size int
 	subValues := make([][]byte, 0, len(mi.subIndexers))
-	for _, si := range mi.singleSubIndexers {
+	for _, si := range mi.subIndexers {
 		ok, b, err := si.FromObject(o)
 		if err != nil || !ok {
 			return ok, nil, err

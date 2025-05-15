@@ -22,11 +22,9 @@ func NewIfIndex[T any](name string, subIndex Index, f func(o *T) bool) *IfIndex[
 }
 
 func newSubIndexer[T any](subIndex Index, f func(o *T) bool) memdb.Indexer {
-	subIndexer := subIndex.Schema().Indexer
 	return ifIndexer[T]{
-		subIndexer:       subIndexer,
-		singleSubIndexer: subIndexer.(memdb.SingleIndexer),
-		f:                f,
+		subIndexer: subIndex.Schema().Indexer.(indexer),
+		f:          f,
 	}
 }
 
@@ -62,9 +60,8 @@ func (i *IfIndex[T]) Schema() *memdb.IndexSchema {
 }
 
 type ifIndexer[T any] struct {
-	subIndexer       memdb.Indexer
-	singleSubIndexer memdb.SingleIndexer
-	f                func(o *T) bool
+	subIndexer indexer
+	f          func(o *T) bool
 }
 
 func (ii ifIndexer[T]) FromArgs(args ...any) ([]byte, error) {
@@ -75,5 +72,5 @@ func (ii ifIndexer[T]) FromObject(o any) (bool, []byte, error) {
 	if !ii.f(o.(reflect.Value).Interface().(*T)) {
 		return false, nil, nil
 	}
-	return ii.singleSubIndexer.FromObject(o)
+	return ii.subIndexer.FromObject(o)
 }
