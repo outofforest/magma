@@ -7,10 +7,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/client"
+	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/integration/system"
 	"github.com/outofforest/magma/types"
@@ -23,6 +22,62 @@ const (
 	partition2       types.PartitionID = "partition2"
 	partition3       types.PartitionID = "partition3"
 )
+
+func TestBenchmark(t *testing.T) {
+	t.Skip()
+	t.Parallel()
+
+	const (
+		numOfClients          = 50
+		transactionsPerClient = 50
+	)
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peers := []*system.Peer{
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
+	}
+
+	var e entities.Account
+	indexLastName := indices.NewFieldIndex("lastName", &e, &e.LastName)
+	indexFirstName := indices.NewFieldIndex("firstName", &e, &e.FirstName)
+	indexName := indices.NewMultiIndex(indexLastName, indexFirstName)
+
+	clients := make([]*system.Client, 0, numOfClients)
+	for i := range numOfClients {
+		clients = append(clients, system.NewClient(t, peers[i%len(peers)], fmt.Sprintf("client-%d", i),
+			partitionDefault, nil, indexLastName, indexFirstName, indexName))
+	}
+
+	cluster := system.NewCluster(peers...)
+	cluster.StartPeers(ctx, peers...)
+	cluster.StartClients(ctx, clients...)
+
+	clientGroup := parallel.NewGroup(ctx)
+	for i, c := range clients {
+		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
+			tr := c.NewTransactor()
+			for j := range transactionsPerClient {
+				err := tr.Tx(ctx, func(tx *client.Tx) error {
+					tx.Set(entities.Account{
+						ID:        client.NewID[entities.AccountID](),
+						FirstName: fmt.Sprintf("FirstName-%d-%d", i, j),
+						LastName:  fmt.Sprintf("LastName-%d-%d", i, j),
+					})
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	requireT.NoError(clientGroup.Wait())
+}
 
 func TestSinglePeer(t *testing.T) {
 	t.Parallel()
@@ -127,10 +182,7 @@ func Test3Peers3Clients(t *testing.T) {
 			})
 		})
 	}
-	if err := clientGroup.Wait(); err != nil {
-		logger.Get(ctx).Error("Error", zap.Error(err))
-		return
-	}
+	requireT.NoError(clientGroup.Wait())
 
 	for range clients {
 		select {
@@ -467,10 +519,7 @@ func TestPartitions(t *testing.T) {
 			return nil
 		})
 	}
-	if err := clientGroup.Wait(); err != nil {
-		logger.Get(ctx).Error("Error", zap.Error(err))
-		return
-	}
+	requireT.NoError(clientGroup.Wait())
 
 	cluster.StopClients(c1, c2, c3)
 
