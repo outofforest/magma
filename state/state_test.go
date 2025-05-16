@@ -13,6 +13,7 @@ import (
 
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
+	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/varuint64"
 )
@@ -52,7 +53,19 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
 	}
-	requireT.Equal(expectedLog, buf.Bytes())
+
+	logs := buf.Bytes()
+	requireT.Equal(expectedLog, logs)
+
+	var checksum uint64
+	for len(logs) > 0 {
+		size, n := varuint64.Parse(logs)
+
+		expectedChecksum := xxh3.HashSeed(logs[:n+size-format.ChecksumSize], checksum)
+		checksum = binary.LittleEndian.Uint64(logs[n+size-format.ChecksumSize : n+size])
+		requireT.Equal(expectedChecksum, checksum)
+		logs = logs[n+size:]
+	}
 }
 
 func TestCurrentTerm(t *testing.T) {
