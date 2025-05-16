@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
@@ -160,12 +161,12 @@ func (s *State) Validate(
 		return s.validate(nextLogIndex, lastLogTerm)
 	}
 
-	lastLogTerm, nextLogIndex, err := s.repo.Revert(s.PreviousTerm(nextLogIndex) - 1)
+	var err error
+	lastLogTerm, s.nextLogIndex, s.previousChecksum, err = s.repo.Revert(s.PreviousTerm(nextLogIndex) - 1)
 	if err != nil {
 		return 0, 0, err
 	}
-	s.nextLogIndex = nextLogIndex
-	return lastLogTerm, nextLogIndex, nil
+	return lastLogTerm, s.nextLogIndex, nil
 }
 
 // Append appends data to log.
@@ -215,12 +216,11 @@ func (s *State) validate(
 			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
-		if _, _, err := s.repo.Revert(lastLogTerm); err != nil {
+		var err error
+		if _, s.nextLogIndex, s.previousChecksum, err = s.repo.Revert(lastLogTerm); err != nil {
 			return 0, 0, err
 		}
 	}
-
-	s.nextLogIndex = nextLogIndex
 
 	return lastLogTerm, s.nextLogIndex, nil
 }
@@ -312,6 +312,9 @@ func (s *State) appendTx(
 		}
 		checksum := hasher.Sum64()
 		if containsChecksum && binary.LittleEndian.Uint64(data[n1+sizeWithoutChecksum:n1+sizeWithChecksum]) != checksum {
+			fmt.Printf("\n%#v\n%#v\n\n",
+				data[n1+sizeWithoutChecksum:n1+sizeWithChecksum],
+				binary.LittleEndian.AppendUint64([]byte{}, checksum))
 			return 0, 0, errors.New("checksum mismatch")
 		}
 

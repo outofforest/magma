@@ -231,54 +231,58 @@ func TestRevertToEqual(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0, 10)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1, 0)
+	file, err = r.Create(3, 1, 11)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 2, 0)
+	file, err = r.Create(3, 2, 12)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3, 0)
+	file, err = r.Create(5, 3, 13)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4, 0)
+	file, err = r.Create(5, 4, 14)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5, 0)
+	file, err = r.Create(6, 5, 15)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
+	requireT.EqualValues(13, previousChecksum)
 
 	requireT.Equal([]fileInfo{
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				Term:             1,
+				PreviousChecksum: 10,
+				HeaderChecksum:   14468226675477782344,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           3,
-				NextLogIndex:   1,
-				HeaderChecksum: 17748549713685775268,
+				PreviousTerm:     1,
+				Term:             3,
+				NextLogIndex:     1,
+				PreviousChecksum: 11,
+				HeaderChecksum:   13316530402584890802,
 			},
 		},
 		{
 			Index: 2,
 			Header: &format.Header{
-				PreviousTerm:   3,
-				Term:           3,
-				NextLogIndex:   2,
-				HeaderChecksum: 16140727382978301460,
+				PreviousTerm:     3,
+				Term:             3,
+				NextLogIndex:     2,
+				PreviousChecksum: 12,
+				HeaderChecksum:   18214685317474956878,
 			},
 		},
 	}, r.files)
@@ -288,54 +292,58 @@ func TestRevertToLower(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0, 10)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(2, 1, 0)
+	file, err = r.Create(2, 1, 11)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(2, 2, 0)
+	file, err = r.Create(2, 2, 12)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3, 0)
+	file, err = r.Create(5, 3, 13)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4, 0)
+	file, err = r.Create(5, 4, 14)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5, 0)
+	file, err = r.Create(6, 5, 15)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
+	requireT.EqualValues(13, previousChecksum)
 
 	requireT.Equal([]fileInfo{
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				Term:             1,
+				PreviousChecksum: 10,
+				HeaderChecksum:   14468226675477782344,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           2,
-				NextLogIndex:   1,
-				HeaderChecksum: 3021202660409141445,
+				PreviousTerm:     1,
+				Term:             2,
+				NextLogIndex:     1,
+				PreviousChecksum: 11,
+				HeaderChecksum:   9024393465275879002,
 			},
 		},
 		{
 			Index: 2,
 			Header: &format.Header{
-				PreviousTerm:   2,
-				Term:           2,
-				NextLogIndex:   2,
-				HeaderChecksum: 9092622013950781100,
+				PreviousTerm:     2,
+				Term:             2,
+				NextLogIndex:     2,
+				PreviousChecksum: 12,
+				HeaderChecksum:   12509700070668475227,
 			},
 		},
 	}, r.files)
@@ -345,7 +353,7 @@ func TestRevertFailsIfEmpty(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	_, _, err := r.Revert(1)
+	_, _, _, err := r.Revert(1)
 	requireT.Error(err)
 }
 
@@ -357,7 +365,7 @@ func TestRevertFailsIfNothingToRevert(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	_, _, err = r.Revert(1)
+	_, _, _, err = r.Revert(1)
 	requireT.Error(err)
 }
 
@@ -365,24 +373,25 @@ func TestRevertAndCreate(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0, 10)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1, 0)
+	file, err = r.Create(3, 1, 11)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(4, 2, 0)
+	file, err = r.Create(4, 2, 12)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	lastTerm, nextLogIndex, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)
+	requireT.EqualValues(12, previousChecksum)
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	file, err = r.Create(5, 3, 0)
+	file, err = r.Create(5, 3, 13)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r.nextFileIndex)
@@ -391,26 +400,29 @@ func TestRevertAndCreate(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				Term:             1,
+				PreviousChecksum: 10,
+				HeaderChecksum:   14468226675477782344,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           3,
-				NextLogIndex:   1,
-				HeaderChecksum: 17748549713685775268,
+				PreviousTerm:     1,
+				Term:             3,
+				NextLogIndex:     1,
+				PreviousChecksum: 11,
+				HeaderChecksum:   13316530402584890802,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:   3,
-				Term:           5,
-				NextLogIndex:   3,
-				HeaderChecksum: 17271735597156195553,
+				PreviousTerm:     3,
+				Term:             5,
+				NextLogIndex:     3,
+				PreviousChecksum: 13,
+				HeaderChecksum:   4745458999267866986,
 			},
 		},
 	}, r.files)
@@ -420,24 +432,25 @@ func TestRevertAndOpen(t *testing.T) {
 	requireT := require.New(t)
 	r1, dir := newRepo(t, "")
 
-	file, err := r1.Create(1, 0, 0)
+	file, err := r1.Create(1, 0, 10)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(3, 1, 0)
+	file, err = r1.Create(3, 1, 11)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(4, 2, 0)
+	file, err = r1.Create(4, 2, 12)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	lastTerm, nextLogIndex, err := r1.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r1.Revert(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)
+	requireT.EqualValues(12, previousChecksum)
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	file, err = r1.Create(5, 3, 0)
+	file, err = r1.Create(5, 3, 13)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r1.nextFileIndex)
@@ -448,26 +461,29 @@ func TestRevertAndOpen(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				Term:             1,
+				PreviousChecksum: 10,
+				HeaderChecksum:   14468226675477782344,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           3,
-				NextLogIndex:   1,
-				HeaderChecksum: 17748549713685775268,
+				PreviousTerm:     1,
+				Term:             3,
+				NextLogIndex:     1,
+				PreviousChecksum: 11,
+				HeaderChecksum:   13316530402584890802,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:   3,
-				Term:           5,
-				NextLogIndex:   3,
-				HeaderChecksum: 17271735597156195553,
+				PreviousTerm:     3,
+				Term:             5,
+				NextLogIndex:     3,
+				PreviousChecksum: 13,
+				HeaderChecksum:   4745458999267866986,
 			},
 		},
 	}, r2.files)
@@ -476,26 +492,29 @@ func TestRevertAndOpen(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				Term:             1,
+				PreviousChecksum: 10,
+				HeaderChecksum:   14468226675477782344,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           3,
-				NextLogIndex:   1,
-				HeaderChecksum: 17748549713685775268,
+				PreviousTerm:     1,
+				Term:             3,
+				NextLogIndex:     1,
+				PreviousChecksum: 11,
+				HeaderChecksum:   13316530402584890802,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:   3,
-				Term:           5,
-				NextLogIndex:   3,
-				HeaderChecksum: 17271735597156195553,
+				PreviousTerm:     3,
+				Term:             5,
+				NextLogIndex:     3,
+				PreviousChecksum: 13,
+				HeaderChecksum:   4745458999267866986,
 			},
 		},
 	}, r2.files)

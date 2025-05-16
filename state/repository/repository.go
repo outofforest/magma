@@ -232,27 +232,27 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 }
 
 // Revert reverts repository to previous term.
-func (r *Repository) Revert(term types.Term) (types.Term, magmatypes.Index, error) {
+func (r *Repository) Revert(term types.Term) (types.Term, magmatypes.Index, uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if len(r.files) == 0 {
-		return 0, 0, errors.New("nothing to revert")
+		return 0, 0, 0, errors.New("nothing to revert")
 	}
 
 	if term >= r.files[len(r.files)-1].Header.Term {
-		return 0, 0, errors.New("nothing to revert")
+		return 0, 0, 0, errors.New("nothing to revert")
 	}
 
 	for i := len(r.files) - 1; i >= 0; i-- {
 		header := r.files[i].Header
 		if header.PreviousTerm <= term {
 			r.files = r.files[:i]
-			return header.PreviousTerm, header.NextLogIndex, nil
+			return header.PreviousTerm, header.NextLogIndex, header.PreviousChecksum, nil
 		}
 	}
 
-	return 0, 0, errors.New("nothing to revert")
+	return 0, 0, 0, errors.New("nothing to revert")
 }
 
 // LastTerm returns last stored term.
