@@ -149,7 +149,7 @@ func (m *Mesh) handleConn(conn net.Conn, pair *Pair) {
 	pair.Group.Spawn("conn", parallel.Continue, func(ctx context.Context) error {
 		conn2, err := net.Dial("tcp", pair.DstListener.Addr().String())
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr
 		}
 
 		return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
