@@ -226,7 +226,7 @@ func TestCreateHeader(t *testing.T) {
 	requireT.NoError(file.Close())
 }
 
-func TestRevertToEqual(t *testing.T) {
+func TestRevertTermsToEqual(t *testing.T) {
 	t.Parallel()
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
@@ -250,7 +250,7 @@ func TestRevertToEqual(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
@@ -288,7 +288,7 @@ func TestRevertToEqual(t *testing.T) {
 	}, r.files)
 }
 
-func TestRevertToLower(t *testing.T) {
+func TestRevertTermsToLower(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -311,7 +311,7 @@ func TestRevertToLower(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
@@ -349,15 +349,15 @@ func TestRevertToLower(t *testing.T) {
 	}, r.files)
 }
 
-func TestRevertFailsIfEmpty(t *testing.T) {
+func TestRevertTermsFailsIfEmpty(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	_, _, _, err := r.Revert(1)
+	_, _, _, err := r.RevertTerms(1)
 	requireT.Error(err)
 }
 
-func TestRevertFailsIfNothingToRevert(t *testing.T) {
+func TestRevertTermsFailsIfNothingToRevert(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -365,11 +365,11 @@ func TestRevertFailsIfNothingToRevert(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	_, _, _, err = r.Revert(1)
+	_, _, _, err = r.RevertTerms(1)
 	requireT.Error(err)
 }
 
-func TestRevertAndCreate(t *testing.T) {
+func TestRevertTermsAndCreate(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
@@ -384,7 +384,7 @@ func TestRevertAndCreate(t *testing.T) {
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)
@@ -428,7 +428,7 @@ func TestRevertAndCreate(t *testing.T) {
 	}, r.files)
 }
 
-func TestRevertAndOpen(t *testing.T) {
+func TestRevertTermsAndOpen(t *testing.T) {
 	requireT := require.New(t)
 	r1, dir := newRepo(t, "")
 
@@ -443,7 +443,7 @@ func TestRevertAndOpen(t *testing.T) {
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	lastTerm, nextLogIndex, previousChecksum, err := r1.Revert(3)
+	lastTerm, nextLogIndex, previousChecksum, err := r1.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)

@@ -206,6 +206,24 @@ func (r *Repository) OpenCurrent() (*File, error) {
 	return r.open(uint64(len(r.files)-1), 0)
 }
 
+// OpenByIndex returns a file corresponding to the provided index and seeks to this position.
+func (r *Repository) OpenByIndex(index magmatypes.Index) (*File, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for i := len(r.files) - 1; i >= 0; i-- {
+		if f := r.files[i]; f.Header.NextLogIndex <= index {
+			offset := uint64(f.Header.NextLogIndex - index)
+			if offset >= r.pageSize-maxHeaderSize {
+				return nil, errors.New("index does not exist")
+			}
+			return r.open(uint64(i), offset)
+		}
+	}
+
+	return nil, errors.New("index does not exist")
+}
+
 // Iterator returns file iterator.
 func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *Iterator {
 	r.mu.RLock()
@@ -231,24 +249,17 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 	}
 }
 
-// Revert reverts repository to previous term.
-func (r *Repository) Revert(term types.Term) (types.Term, magmatypes.Index, uint64, error) {
+// RevertTerms reverts repository to previous term.
+func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index, uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.files) == 0 {
-		return 0, 0, 0, errors.New("nothing to revert")
-	}
-
-	if term >= r.files[len(r.files)-1].Header.Term {
-		return 0, 0, 0, errors.New("nothing to revert")
-	}
-
-	for i := len(r.files) - 1; i >= 0; i-- {
-		header := r.files[i].Header
-		if header.PreviousTerm <= term {
-			r.files = r.files[:i]
-			return header.PreviousTerm, header.NextLogIndex, header.PreviousChecksum, nil
+	if len(r.files) > 0 && term < r.files[len(r.files)-1].Header.Term {
+		for i := len(r.files) - 1; i >= 0; i-- {
+			if h := r.files[i].Header; h.PreviousTerm <= term {
+				r.files = r.files[:i]
+				return h.PreviousTerm, h.NextLogIndex, h.PreviousChecksum, nil
+			}
 		}
 	}
 
@@ -273,9 +284,8 @@ func (r *Repository) PreviousTerm(index magmatypes.Index) types.Term {
 	defer r.mu.RUnlock()
 
 	for i := len(r.files) - 1; i >= 0; i-- {
-		header := r.files[i].Header
-		if header.NextLogIndex < index {
-			return header.Term
+		if h := r.files[i].Header; h.NextLogIndex < index {
+			return h.Term
 		}
 	}
 
