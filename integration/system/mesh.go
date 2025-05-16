@@ -193,14 +193,14 @@ func (m *Mesh) handleConn(conn net.Conn, lnk link, pair *Pair) {
 
 			spawn("copy1", parallel.Exit, func(ctx context.Context) error {
 				if !isP2PChannel {
-					_, err = io.Copy(conn2, conn)
+					_, err := io.Copy(conn2, conn)
 					return err
 				}
 				return m.interceptVoteRequests(c2, c1, lnk.SrcPeer)
 			})
 			spawn("copy2", parallel.Exit, func(ctx context.Context) error {
 				if !isP2PChannel {
-					_, err = io.Copy(conn, conn2)
+					_, err := io.Copy(conn, conn2)
 					return err
 				}
 				return m.interceptVoteRequests(c1, c2, lnk.DstPeer)
