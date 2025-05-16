@@ -9,8 +9,15 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
+	"github.com/outofforest/magma/gossip/wire"
+	"github.com/outofforest/magma/gossip/wire/hello"
+	"github.com/outofforest/magma/gossip/wire/p2p"
+	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
+	"github.com/outofforest/resonance"
 )
 
 type link struct {
@@ -34,6 +41,8 @@ func NewMesh(ctx context.Context, t *testing.T) *Mesh {
 		listeners: map[*Peer]net.Listener{},
 		links:     map[link]*Pair{},
 		group:     parallel.NewGroup(ctx),
+		mHello:    hello.NewMarshaller(),
+		mP2P:      p2p.NewMarshaller(),
 	}
 	t.Cleanup(m.close)
 	return m
@@ -45,6 +54,11 @@ type Mesh struct {
 	listeners map[*Peer]net.Listener
 	links     map[link]*Pair
 	group     *parallel.Group
+	mHello    hello.Marshaller
+	mP2P      p2p.Marshaller
+
+	mu           sync.RWMutex
+	forcedLeader *Peer
 }
 
 // Listener returns listener for peer.
@@ -52,7 +66,7 @@ func (m *Mesh) Listener(peer *Peer) net.Listener {
 	l, exists := m.listeners[peer]
 	if !exists {
 		var err error
-		l, err = net.Listen("tcp", ":0")
+		l, err = net.Listen("tcp", "localhost:0")
 		m.requireT.NoError(err)
 		m.listeners[peer] = l
 	}
@@ -65,7 +79,7 @@ func (m *Mesh) Pair(srcPeer, dstPeer *Peer) *Pair {
 	pair, exists := m.links[lnk]
 	if !exists {
 		dstL := m.Listener(dstPeer)
-		srcL, err := net.Listen("tcp", ":0")
+		srcL, err := net.Listen("tcp", "localhost:0")
 		m.requireT.NoError(err)
 		pair = &Pair{
 			SrcListener: srcL,
@@ -74,14 +88,22 @@ func (m *Mesh) Pair(srcPeer, dstPeer *Peer) *Pair {
 		}
 		m.links[lnk] = pair
 
-		m.startForwarder(pair)
+		m.startForwarder(lnk, pair)
 	}
 
 	return pair
 }
 
-// Enable enables pair connection.
-func (m *Mesh) Enable(srcPeer, dstPeer *Peer) {
+// ForceLeader sets the peer which should be a leader after next voting.
+func (m *Mesh) ForceLeader(peer *Peer) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.forcedLeader = peer
+}
+
+// EnableLink enables pair connection.
+func (m *Mesh) EnableLink(srcPeer, dstPeer *Peer) {
 	pair := m.Pair(srcPeer, dstPeer)
 
 	pair.Mu.Lock()
@@ -94,8 +116,8 @@ func (m *Mesh) Enable(srcPeer, dstPeer *Peer) {
 	pair.Group = parallel.NewSubgroup(m.group.Spawn, "clients", parallel.Continue)
 }
 
-// Disable disables pair connection.
-func (m *Mesh) Disable(srcPeer, dstPeer *Peer) {
+// DisableLink disables pair connection.
+func (m *Mesh) DisableLink(srcPeer, dstPeer *Peer) {
 	pair := m.Pair(srcPeer, dstPeer)
 
 	pair.Mu.Lock()
@@ -110,19 +132,22 @@ func (m *Mesh) Disable(srcPeer, dstPeer *Peer) {
 	pair.Group = nil
 }
 
-func (m *Mesh) startForwarder(pair *Pair) {
+func (m *Mesh) startForwarder(lnk link, pair *Pair) {
 	m.group.Spawn("forwarder", parallel.Fail, func(ctx context.Context) error {
-		return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+		err := parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			spawn("listener", parallel.Fail, func(ctx context.Context) error {
 				for {
 					conn, err := pair.SrcListener.Accept()
-					if err != nil {
-						if ctx.Err() != nil {
-							return errors.WithStack(ctx.Err())
+					if ctx.Err() != nil {
+						if err == nil {
+							_ = conn.Close()
 						}
-						continue
+						return errors.WithStack(ctx.Err())
 					}
-					m.handleConn(conn, pair)
+					if err != nil {
+						return err
+					}
+					m.handleConn(conn, lnk, pair)
 				}
 			})
 			spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
@@ -134,10 +159,14 @@ func (m *Mesh) startForwarder(pair *Pair) {
 
 			return nil
 		})
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Get(ctx).Error("Listener failed", zap.Error(err))
+		}
+		return err
 	})
 }
 
-func (m *Mesh) handleConn(conn net.Conn, pair *Pair) {
+func (m *Mesh) handleConn(conn net.Conn, lnk link, pair *Pair) {
 	pair.Mu.Lock()
 	defer pair.Mu.Unlock()
 
@@ -147,19 +176,43 @@ func (m *Mesh) handleConn(conn net.Conn, pair *Pair) {
 	}
 
 	pair.Group.Spawn("conn", parallel.Continue, func(ctx context.Context) error {
-		conn2, err := net.Dial("tcp", pair.DstListener.Addr().String())
-		if err != nil {
-			return nil //nolint:nilerr
-		}
+		_ = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+			conn2, err := net.Dial("tcp", pair.DstListener.Addr().String())
+			if err != nil {
+				return err
+			}
 
-		return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+			config := resonance.Config{
+				MaxMessageSize: maxMsgSize,
+			}
+			c1 := resonance.NewConnection(conn, config)
+			c2 := resonance.NewConnection(conn2, config)
+
+			helloMsg1, err := m.interceptHello(c2, c1)
+			if err != nil {
+				return err
+			}
+
+			helloMsg2, err := m.interceptHello(c1, c2)
+			if err != nil {
+				return err
+			}
+
+			isP2PChannel := helloMsg1.Channel == wire.ChannelP2P || helloMsg2.Channel == wire.ChannelP2P
+
 			spawn("copy1", parallel.Exit, func(ctx context.Context) error {
-				_, _ = io.Copy(conn2, conn)
-				return nil
+				if !isP2PChannel {
+					_, err := io.Copy(conn2, conn)
+					return err
+				}
+				return m.interceptVoteRequests(c2, c1, lnk.SrcPeer)
 			})
 			spawn("copy2", parallel.Exit, func(ctx context.Context) error {
-				_, _ = io.Copy(conn, conn2)
-				return nil
+				if !isP2PChannel {
+					_, err := io.Copy(conn, conn2)
+					return err
+				}
+				return m.interceptVoteRequests(c1, c2, lnk.DstPeer)
 			})
 			spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
 				defer conn.Close()
@@ -170,7 +223,51 @@ func (m *Mesh) handleConn(conn net.Conn, pair *Pair) {
 			})
 			return nil
 		})
+
+		return nil
 	})
+}
+
+func (m *Mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *Peer) error {
+	for {
+		msg, err := srcC.ReceiveProton(m.mP2P)
+		if err != nil {
+			return err
+		}
+
+		if _, ok := msg.(*types.VoteRequest); ok && m.isVoteRequestBlocked(srcPeer) {
+			continue
+		}
+
+		if err := dstC.SendProton(msg, m.mP2P); err != nil {
+			return err
+		}
+	}
+}
+
+func (m *Mesh) isVoteRequestBlocked(srcPeer *Peer) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.forcedLeader != nil && m.forcedLeader != srcPeer
+}
+
+func (m *Mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, error) {
+	msg, err := srcC.ReceiveProton(m.mHello)
+	if err != nil {
+		return nil, err
+	}
+
+	helloMsg, ok := msg.(*wire.Hello)
+	if !ok {
+		return nil, errors.Errorf("hello expected, got: %T", msg)
+	}
+
+	if err := dstC.SendProton(helloMsg, m.mHello); err != nil {
+		return nil, err
+	}
+
+	return helloMsg, nil
 }
 
 func (m *Mesh) close() {

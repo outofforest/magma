@@ -9,7 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client"
 	"github.com/outofforest/magma/client/indices"
@@ -52,7 +54,11 @@ func (p *Peer) start(ctx context.Context, config types.Config, p2pListener net.L
 
 	p.group = parallel.NewGroup(ctx)
 	p.group.Spawn(string(p.id), parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, config, p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
+		err := magma.Run(ctx, config, p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Get(ctx).Error("Peer failed", zap.Error(err))
+		}
+		return err
 	})
 }
 
@@ -129,7 +135,13 @@ func (c *Client) start(ctx context.Context) {
 	}
 
 	c.group = parallel.NewGroup(ctx)
-	c.group.Spawn(c.name, parallel.Fail, c.client.Run)
+	c.group.Spawn(c.name, parallel.Fail, func(ctx context.Context) error {
+		err := c.client.Run(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Get(ctx).Error("Client failed", zap.Error(err))
+		}
+		return err
+	})
 }
 
 func (c *Client) warmUp(ctx context.Context) {
@@ -200,16 +212,21 @@ func (c Cluster) StopClients(clients ...*Client) {
 	}
 }
 
+// ForceLeader sets the peer which should be a leader after next voting.
+func (c Cluster) ForceLeader(peer *Peer) {
+	c.mesh.ForceLeader(peer)
+}
+
 // EnableLink enables link between peers.
 func (c Cluster) EnableLink(peer1, peer2 *Peer) {
-	c.mesh.Enable(peer1, peer2)
-	c.mesh.Enable(peer2, peer1)
+	c.mesh.EnableLink(peer1, peer2)
+	c.mesh.EnableLink(peer2, peer1)
 }
 
 // DisableLink disables link between peers.
 func (c Cluster) DisableLink(peer1, peer2 *Peer) {
-	c.mesh.Disable(peer1, peer2)
-	c.mesh.Disable(peer2, peer1)
+	c.mesh.DisableLink(peer1, peer2)
+	c.mesh.DisableLink(peer2, peer1)
 }
 
 func (c Cluster) newConfig(peer *Peer) types.Config {
