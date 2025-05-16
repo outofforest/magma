@@ -180,37 +180,41 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				return err
 			}
 
-			config := resonance.Config{
-				MaxMessageSize: maxMsgSize,
-			}
-			c1 := resonance.NewConnection(conn, config)
-			c2 := resonance.NewConnection(conn2, config)
+			spawn("handshake", parallel.Continue, func(ctx context.Context) error {
+				config := resonance.Config{
+					MaxMessageSize: maxMsgSize,
+				}
+				c1 := resonance.NewConnection(conn, config)
+				c2 := resonance.NewConnection(conn2, config)
 
-			helloMsg1, err := m.interceptHello(c2, c1)
-			if err != nil {
-				return err
-			}
-
-			helloMsg2, err := m.interceptHello(c1, c2)
-			if err != nil {
-				return err
-			}
-
-			isP2PChannel := helloMsg1.Channel == wire.ChannelP2P || helloMsg2.Channel == wire.ChannelP2P
-
-			spawn("copy1", parallel.Exit, func(ctx context.Context) error {
-				if !isP2PChannel {
-					_, err := io.Copy(conn2, conn)
+				helloMsg1, err := m.interceptHello(c2, c1)
+				if err != nil {
 					return err
 				}
-				return m.interceptVoteRequests(c2, c1, lnk.SrcPeer)
-			})
-			spawn("copy2", parallel.Exit, func(ctx context.Context) error {
-				if !isP2PChannel {
-					_, err := io.Copy(conn, conn2)
+
+				helloMsg2, err := m.interceptHello(c1, c2)
+				if err != nil {
 					return err
 				}
-				return m.interceptVoteRequests(c1, c2, lnk.DstPeer)
+
+				isP2PChannel := helloMsg1.Channel == wire.ChannelP2P || helloMsg2.Channel == wire.ChannelP2P
+
+				spawn("copy1", parallel.Exit, func(ctx context.Context) error {
+					if !isP2PChannel {
+						_, err := io.Copy(conn2, conn)
+						return err
+					}
+					return m.interceptVoteRequests(c2, c1, lnk.SrcPeer)
+				})
+				spawn("copy2", parallel.Exit, func(ctx context.Context) error {
+					if !isP2PChannel {
+						_, err := io.Copy(conn, conn2)
+						return err
+					}
+					return m.interceptVoteRequests(c1, c2, lnk.DstPeer)
+				})
+
+				return nil
 			})
 			spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
 				defer conn.Close()
