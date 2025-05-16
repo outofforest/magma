@@ -2,7 +2,6 @@ package state
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
@@ -312,9 +311,6 @@ func (s *State) appendTx(
 		}
 		checksum := hasher.Sum64()
 		if containsChecksum && binary.LittleEndian.Uint64(data[n1+sizeWithoutChecksum:n1+sizeWithChecksum]) != checksum {
-			fmt.Printf("\n%#v\n%#v\n\n",
-				data[n1+sizeWithoutChecksum:n1+sizeWithChecksum],
-				binary.LittleEndian.AppendUint64([]byte{}, checksum))
 			return 0, 0, errors.New("checksum mismatch")
 		}
 
