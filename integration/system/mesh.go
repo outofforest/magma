@@ -9,7 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/hello"
 	"github.com/outofforest/magma/gossip/wire/p2p"
@@ -132,15 +134,18 @@ func (m *Mesh) DisableLink(srcPeer, dstPeer *Peer) {
 
 func (m *Mesh) startForwarder(lnk link, pair *Pair) {
 	m.group.Spawn("forwarder", parallel.Fail, func(ctx context.Context) error {
-		return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+		err := parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			spawn("listener", parallel.Fail, func(ctx context.Context) error {
 				for {
 					conn, err := pair.SrcListener.Accept()
-					if err != nil {
-						if ctx.Err() != nil {
-							return errors.WithStack(ctx.Err())
+					if ctx.Err() != nil {
+						if err == nil {
+							_ = conn.Close()
 						}
-						continue
+						return errors.WithStack(ctx.Err())
+					}
+					if err != nil {
+						return err
 					}
 					m.handleConn(conn, lnk, pair)
 				}
@@ -154,6 +159,10 @@ func (m *Mesh) startForwarder(lnk link, pair *Pair) {
 
 			return nil
 		})
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Get(ctx).Error("Listener failed", zap.Error(err))
+		}
+		return err
 	})
 }
 
