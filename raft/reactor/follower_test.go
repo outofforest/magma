@@ -812,7 +812,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 	))
 }
 
-func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommitedCount(t *testing.T) {
+func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedCount(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
@@ -866,7 +866,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommitedCo
 	))
 }
 
-func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommitedCount(t *testing.T) {
+func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommittedCount(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(4))
