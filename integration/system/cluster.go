@@ -200,16 +200,21 @@ func (c Cluster) StopClients(clients ...*Client) {
 	}
 }
 
+// ForceLeader sets the peer which should be a leader after next voting.
+func (c Cluster) ForceLeader(peer *Peer) {
+	c.mesh.ForceLeader(peer)
+}
+
 // EnableLink enables link between peers.
 func (c Cluster) EnableLink(peer1, peer2 *Peer) {
-	c.mesh.Enable(peer1, peer2)
-	c.mesh.Enable(peer2, peer1)
+	c.mesh.EnableLink(peer1, peer2)
+	c.mesh.EnableLink(peer2, peer1)
 }
 
 // DisableLink disables link between peers.
 func (c Cluster) DisableLink(peer1, peer2 *Peer) {
-	c.mesh.Disable(peer1, peer2)
-	c.mesh.Disable(peer2, peer1)
+	c.mesh.DisableLink(peer1, peer2)
+	c.mesh.DisableLink(peer2, peer1)
 }
 
 func (c Cluster) newConfig(peer *Peer) types.Config {
