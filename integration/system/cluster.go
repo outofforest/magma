@@ -22,16 +22,12 @@ import (
 func NewPeer(t *testing.T, peerID types.ServerID, partitions types.Partitions) *Peer {
 	requireT := require.New(t)
 
-	p2pListener, err := net.Listen("tcp", "localhost:0")
-	requireT.NoError(err)
-
 	c2pListener, err := net.Listen("tcp", "localhost:0")
 	requireT.NoError(err)
 
 	p := &Peer{
 		id:          peerID,
 		dir:         t.TempDir(),
-		p2pListener: p2pListener.(*net.TCPListener),
 		c2pListener: c2pListener.(*net.TCPListener),
 		partitions:  partitions,
 	}
@@ -44,22 +40,19 @@ type Peer struct {
 	id          types.ServerID
 	partitions  types.Partitions
 	dir         string
-	p2pListener *net.TCPListener
 	c2pListener *net.TCPListener
 	requireT    *require.Assertions
 	group       *parallel.Group
 }
 
-func (p *Peer) start(ctx context.Context, config types.Config) {
+func (p *Peer) start(ctx context.Context, config types.Config, p2pListener net.Listener) {
 	if p.group != nil {
 		p.requireT.Fail("peer is already running")
 	}
 
-	config.ServerID = p.id
-
 	p.group = parallel.NewGroup(ctx)
 	p.group.Spawn(string(p.id), parallel.Fail, func(ctx context.Context) error {
-		return magma.Run(ctx, config, p.p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
+		return magma.Run(ctx, config, p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
 	})
 }
 
@@ -76,7 +69,6 @@ func (p *Peer) stop() {
 func (p *Peer) close() {
 	p.stop()
 
-	_ = p.p2pListener.Close()
 	_ = p.c2pListener.Close()
 }
 
@@ -104,11 +96,13 @@ func NewClient(
 	})
 	requireT.NoError(err)
 
-	return &Client{
+	cl := &Client{
 		name:     name,
 		client:   c,
 		requireT: requireT,
 	}
+	t.Cleanup(cl.stop)
+	return cl
 }
 
 // Client is used tor un clients.
@@ -136,9 +130,6 @@ func (c *Client) start(ctx context.Context) {
 
 	c.group = parallel.NewGroup(ctx)
 	c.group.Spawn(c.name, parallel.Fail, c.client.Run)
-	if err := c.client.WarmUp(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		c.requireT.NoError(err)
-	}
 }
 
 func (c *Client) warmUp(ctx context.Context) {
@@ -157,40 +148,31 @@ func (c *Client) stop() {
 		if err := c.group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 			c.requireT.NoError(err)
 		}
-		c.group = nil
 	}
 }
 
 const maxMsgSize = 4 * 1024
 
 // NewCluster creates new cluster.
-func NewCluster(peers ...*Peer) Cluster {
-	config := types.Config{
-		MaxMessageSize: maxMsgSize,
-	}
-
-	for _, p := range peers {
-		config.Servers = append(config.Servers, types.ServerConfig{
-			ID:         p.id,
-			P2PAddress: p.p2pListener.Addr().String(),
-			Partitions: p.partitions,
-		})
-	}
-
+func NewCluster(ctx context.Context, t *testing.T, peers ...*Peer) Cluster {
 	return Cluster{
-		config: config,
+		ctx:   ctx,
+		mesh:  NewMesh(ctx, t),
+		peers: peers,
 	}
 }
 
 // Cluster runs peers and clients.
 type Cluster struct {
-	config types.Config
+	ctx   context.Context //nolint:containedctx
+	mesh  *Mesh
+	peers []*Peer
 }
 
 // StartPeers starts peers.
-func (c Cluster) StartPeers(ctx context.Context, peers ...*Peer) {
+func (c Cluster) StartPeers(peers ...*Peer) {
 	for _, p := range peers {
-		p.start(ctx, c.config)
+		p.start(c.ctx, c.newConfig(p), c.mesh.Listener(p))
 	}
 }
 
@@ -202,12 +184,12 @@ func (c Cluster) StopPeers(peers ...*Peer) {
 }
 
 // StartClients starts clients.
-func (c Cluster) StartClients(ctx context.Context, clients ...*Client) {
-	for _, c := range clients {
-		c.start(ctx)
+func (c Cluster) StartClients(clients ...*Client) {
+	for _, cl := range clients {
+		cl.start(c.ctx)
 	}
-	for _, c := range clients {
-		c.warmUp(ctx)
+	for _, cl := range clients {
+		cl.warmUp(c.ctx)
 	}
 }
 
@@ -216,4 +198,38 @@ func (c Cluster) StopClients(clients ...*Client) {
 	for _, c := range clients {
 		c.stop()
 	}
+}
+
+// EnableLink enables link between peers.
+func (c Cluster) EnableLink(peer1, peer2 *Peer) {
+	c.mesh.Enable(peer1, peer2)
+	c.mesh.Enable(peer2, peer1)
+}
+
+// DisableLink disables link between peers.
+func (c Cluster) DisableLink(peer1, peer2 *Peer) {
+	c.mesh.Disable(peer1, peer2)
+	c.mesh.Disable(peer2, peer1)
+}
+
+func (c Cluster) newConfig(peer *Peer) types.Config {
+	config := types.Config{
+		ServerID:       peer.id,
+		MaxMessageSize: maxMsgSize,
+	}
+
+	for _, p := range c.peers {
+		var p2pAddress string
+		if p != peer {
+			p2pAddress = c.mesh.Pair(peer, p).SrcListener.Addr().String()
+		}
+
+		config.Servers = append(config.Servers, types.ServerConfig{
+			ID:         p.id,
+			P2PAddress: p2pAddress,
+			Partitions: p.partitions,
+		})
+	}
+
+	return config
 }
