@@ -245,6 +245,7 @@ func (r *Reactor) applyLogSyncResponse(
 
 func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
 	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
+		// FIXME (wojciech): This is not tested.
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
@@ -326,6 +327,7 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 	if r.commitInfo.NextLogIndex < r.syncedCount {
+		// FIXME (wojciech): This is not tested.
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
@@ -339,6 +341,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 			return r.resultError(err)
 		}
 		if r.syncedCount < r.commitInfo.CommittedCount {
+			// FIXME (wojciech): This is not tested.
 			return r.resultError(errors.New("bug in protocol"))
 		}
 
@@ -437,6 +440,7 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 		return r.resultError(err)
 	}
 	if !granted {
+		// FIXME (wojciech): This is not tested.
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
@@ -501,10 +505,6 @@ func (r *Reactor) handleLogSyncRequest(
 	peerID magmatypes.ServerID,
 	req *types.LogSyncRequest,
 ) (*types.LogSyncResponse, error) {
-	if req.NextLogIndex < r.commitInfo.CommittedCount {
-		return nil, errors.New("bug in protocol")
-	}
-
 	resp := &types.LogSyncResponse{
 		Term:         r.state.CurrentTerm(),
 		NextLogIndex: r.commitInfo.NextLogIndex,
@@ -512,6 +512,9 @@ func (r *Reactor) handleLogSyncRequest(
 	}
 	if req.Term < r.state.CurrentTerm() {
 		return resp, nil
+	}
+	if req.NextLogIndex < r.commitInfo.CommittedCount {
+		return nil, errors.New("bug in protocol")
 	}
 
 	var err error

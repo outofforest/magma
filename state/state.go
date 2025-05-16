@@ -195,19 +195,24 @@ func (s *State) validate(
 		return 0, 0, errors.New("bug in protocol")
 	}
 	if nextLogIndex > s.nextLogIndex {
+		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
 	if nextLogIndex == 0 && lastLogTerm != 0 {
+		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
 	if nextLogIndex != 0 && lastLogTerm == 0 {
+		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
 	if s.PreviousTerm(nextLogIndex) != lastLogTerm {
+		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
 	if nextLogIndex < s.nextLogIndex {
 		if s.PreviousTerm(nextLogIndex+1) == lastLogTerm {
+			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
 		if _, _, err := s.repo.Revert(lastLogTerm); err != nil {
@@ -226,6 +231,7 @@ func (s *State) appendTx(
 	allowTermMark bool,
 ) (_ rafttypes.Term, _ types.Index, retErr error) {
 	if s.evState.Term == 0 {
+		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
 
@@ -234,9 +240,11 @@ func (s *State) appendTx(
 	for len(data) > 0 {
 		size, n1 := varuint64.Parse(data)
 		if size == 0 {
+			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
 		if size > uint64(len(data[n1:])) {
+			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
 
@@ -288,6 +296,7 @@ func (s *State) appendTx(
 			s.nextLogIndexInFile = 0
 			s.highestTermSeen = rafttypes.Term(term)
 		case s.highestTermSeen == 0:
+			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
 

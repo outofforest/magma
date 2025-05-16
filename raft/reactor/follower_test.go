@@ -812,6 +812,96 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 	))
 }
 
+func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedCount(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(4))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		NextLogIndex:   43,
+		CommittedCount: 43,
+		HotEndIndex:    43,
+	}
+
+	result, err := r.Apply(peer2ID, &types.LogSyncRequest{
+		Term:         3,
+		NextLogIndex: 40,
+		LastLogTerm:  2,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: magmatypes.ZeroServerID,
+		CommitInfo: types.CommitInfo{
+			NextLogIndex:   43,
+			CommittedCount: 43,
+			HotEndIndex:    43,
+		},
+		Channel: ChannelL2P,
+		Recipients: []magmatypes.ServerID{
+			peer2ID,
+		},
+		Message: &types.LogSyncResponse{
+			Term:         4,
+			NextLogIndex: 43,
+		},
+	}, result)
+	requireT.Zero(r.ignoreElectionTick)
+
+	requireT.EqualValues(4, s.CurrentTerm())
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+	))
+}
+
+func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommittedCount(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(4))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+
+	r.commitInfo = types.CommitInfo{
+		NextLogIndex:   43,
+		CommittedCount: 43,
+		HotEndIndex:    43,
+	}
+
+	_, err = r.Apply(peer2ID, &types.LogSyncRequest{
+		Term:         5,
+		NextLogIndex: 40,
+		LastLogTerm:  2,
+	})
+	requireT.Error(err)
+	requireT.Equal(types.RoleFollower, r.role)
+
+	requireT.EqualValues(5, s.CurrentTerm())
+
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x00),
+		txb(0x02), txb(0x02, 0x00, 0x00),
+	))
+}
+
 func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
