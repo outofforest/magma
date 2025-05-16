@@ -494,7 +494,10 @@ func TestSyncAfterRestart(t *testing.T) {
 		return func(ctx context.Context, v *client.View) error {
 			a, exists := client.Get[entities.Account](v, accID)
 			if exists {
-				accCh <- a
+				select {
+				case accCh <- a:
+				default:
+				}
 			}
 			return nil
 		}
@@ -504,6 +507,16 @@ func TestSyncAfterRestart(t *testing.T) {
 	c3 := system.NewClient(t, peer3, "client3", partitionDefault, triggerFunc(accCh2))
 	cluster.StartPeers(peer3)
 	cluster.StartClients(c2, c3)
+
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		return nil
+	}))
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		return nil
+	}))
+
 	cluster.StopClients(c2)
 	cluster.StopPeers(peer3)
 
@@ -528,6 +541,16 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	cluster.StartPeers(peer3)
 	cluster.StartClients(c2)
+
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		return nil
+	}))
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		return nil
+	}))
+
 	cluster.StopClients(c2)
 	cluster.StopPeers(peer3)
 
@@ -536,13 +559,10 @@ func TestSyncAfterRestart(t *testing.T) {
 	acc.Revision = 0
 	requireT.Equal(accs[5], acc)
 
-	select {
-	case <-ctx.Done():
-		requireT.NoError(ctx.Err())
-	case acc := <-accCh2:
-		acc.Revision = 0
-		requireT.Equal(accs[5], acc)
-	}
+	requireT.NotEmpty(accCh2)
+	acc = <-accCh2
+	acc.Revision = 0
+	requireT.Equal(accs[5], acc)
 }
 
 func TestPartitions(t *testing.T) {
