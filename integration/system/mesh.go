@@ -35,17 +35,15 @@ type Pair struct {
 }
 
 // NewMesh creates new mesh.
-func NewMesh(ctx context.Context, t *testing.T) *Mesh {
-	m := &Mesh{
+func NewMesh(t *testing.T, group *parallel.Group) *Mesh {
+	return &Mesh{
 		requireT:  require.New(t),
 		listeners: map[*Peer]net.Listener{},
 		links:     map[link]*Pair{},
-		group:     parallel.NewGroup(ctx),
+		group:     group,
 		mHello:    hello.NewMarshaller(),
 		mP2P:      p2p.NewMarshaller(),
 	}
-	t.Cleanup(m.close)
-	return m
 }
 
 // Mesh maintains connection mesh between peers.
@@ -268,11 +266,4 @@ func (m *Mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, er
 	}
 
 	return helloMsg, nil
-}
-
-func (m *Mesh) close() {
-	m.group.Exit(nil)
-	if err := m.group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-		m.requireT.NoError(err)
-	}
 }

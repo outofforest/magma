@@ -33,7 +33,6 @@ func TestBenchmark(t *testing.T) {
 	)
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peers := []*system.Peer{
 		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
@@ -52,7 +51,7 @@ func TestBenchmark(t *testing.T) {
 			partitionDefault, nil, indexLastName, indexFirstName, indexName))
 	}
 
-	cluster := system.NewCluster(ctx, t, peers...)
+	cluster, ctx := system.NewCluster(t, peers...)
 	cluster.StartPeers(peers...)
 	cluster.StartClients(clients...)
 
@@ -83,12 +82,11 @@ func TestSinglePeer(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
 	c := system.NewClient(t, p, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, p)
+	cluster, ctx := system.NewCluster(t, p)
 	cluster.StartPeers(p)
 	cluster.StartClients(c)
 
@@ -118,7 +116,6 @@ func Test3Peers3Clients(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peers := []*system.Peer{
 		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
@@ -165,7 +162,7 @@ func Test3Peers3Clients(t *testing.T) {
 		idCh <- id
 	}
 
-	cluster := system.NewCluster(ctx, t, peers...)
+	cluster, ctx := system.NewCluster(t, peers...)
 	cluster.StartPeers(peers...)
 	cluster.StartClients(clients...)
 
@@ -207,7 +204,6 @@ func TestPeerRestart(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peers := []*system.Peer{
 		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
@@ -221,7 +217,7 @@ func TestPeerRestart(t *testing.T) {
 			nil))
 	}
 
-	cluster := system.NewCluster(ctx, t, peers...)
+	cluster, ctx := system.NewCluster(t, peers...)
 	cluster.StartPeers(peers...)
 	cluster.StartClients(clients...)
 
@@ -263,7 +259,6 @@ func TestPassivePeer(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
@@ -271,7 +266,7 @@ func TestPassivePeer(t *testing.T) {
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2, peerObserver)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peerObserver)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
@@ -320,7 +315,6 @@ func TestSyncWhileRunning(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
@@ -328,7 +322,7 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2, peer3)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
@@ -441,7 +435,6 @@ func TestSyncAfterRestart(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
@@ -449,7 +442,7 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2, peer3)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
@@ -556,7 +549,6 @@ func TestPartitions(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partition1: true, partition2: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partition2: true, partition3: true})
@@ -566,7 +558,7 @@ func TestPartitions(t *testing.T) {
 	c2 := system.NewClient(t, peer2, "client2", partition2, nil)
 	c3 := system.NewClient(t, peer3, "client3", partition3, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2, peer3)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
 	cluster.StartPeers(peer1, peer2, peer3)
 	cluster.StartClients(c1, c2, c3)
 
@@ -671,13 +663,12 @@ func TestTimeouts(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2)
+	cluster, ctx := system.NewCluster(t, peer1, peer2)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 	cluster.StopPeers(peer2)
@@ -710,14 +701,13 @@ func TestOutdatedTx(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
 	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
 	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2)
+	cluster, ctx := system.NewCluster(t, peer1, peer2)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c1, c2)
 
@@ -765,12 +755,11 @@ func TestEmptyTx(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
 	c := system.NewClient(t, p, "client", partitionDefault, nil)
 
-	cluster := system.NewCluster(ctx, t, p)
+	cluster, ctx := system.NewCluster(t, p)
 	cluster.StartPeers(p)
 	cluster.StartClients(c)
 	cluster.StopPeers(p)
@@ -785,13 +774,12 @@ func TestSplitAndResync(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
-	ctx := system.NewContext(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
 	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
 
-	cluster := system.NewCluster(ctx, t, peer1, peer2, peer3)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
 	cluster.ForceLeader(peer3)
 
 	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)

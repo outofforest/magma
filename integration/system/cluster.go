@@ -48,34 +48,33 @@ type Peer struct {
 	group       *parallel.Group
 }
 
-func (p *Peer) start(ctx context.Context, config types.Config, p2pListener net.Listener) {
+func (p *Peer) start(group *parallel.Group, config types.Config, p2pListener net.Listener) {
 	if p.group != nil {
 		p.requireT.Fail("peer is already running")
 	}
 
-	p.group = parallel.NewGroup(ctx)
-	p.group.Spawn(string(p.id), parallel.Fail, func(ctx context.Context) error {
+	p.group = parallel.NewSubgroup(group.Spawn, string(p.id), parallel.Continue)
+	p.group.Spawn("peer", parallel.Exit, func(ctx context.Context) error {
 		err := magma.Run(ctx, config, p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.Get(ctx).Error("Peer failed", zap.Error(err))
 		}
-		return err
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return err
+		}
+		return nil
 	})
 }
 
 func (p *Peer) stop() {
 	if p.group != nil {
 		p.group.Exit(nil)
-		if err := p.group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			p.requireT.NoError(err)
-		}
+		p.requireT.NoError(p.group.Wait())
 		p.group = nil
 	}
 }
 
 func (p *Peer) close() {
-	p.stop()
-
 	_ = p.c2pListener.Close()
 }
 
@@ -103,13 +102,11 @@ func NewClient(
 	})
 	requireT.NoError(err)
 
-	cl := &Client{
+	return &Client{
 		name:     name,
 		client:   c,
 		requireT: requireT,
 	}
-	t.Cleanup(cl.stop)
-	return cl
 }
 
 // Client is used tor un clients.
@@ -130,18 +127,21 @@ func (c *Client) NewTransactor() *client.Transactor {
 	return c.client.NewTransactor()
 }
 
-func (c *Client) start(ctx context.Context) {
+func (c *Client) start(group *parallel.Group) {
 	if c.group != nil {
 		c.requireT.Fail("client is already running")
 	}
 
-	c.group = parallel.NewGroup(ctx)
-	c.group.Spawn(c.name, parallel.Fail, func(ctx context.Context) error {
+	c.group = parallel.NewSubgroup(group.Spawn, c.name, parallel.Continue)
+	c.group.Spawn("client", parallel.Exit, func(ctx context.Context) error {
 		err := c.client.Run(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.Get(ctx).Error("Client failed", zap.Error(err))
 		}
-		return err
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -158,26 +158,32 @@ func (c *Client) warmUp(ctx context.Context) {
 func (c *Client) stop() {
 	if c.group != nil {
 		c.group.Exit(nil)
-		if err := c.group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			c.requireT.NoError(err)
-		}
+		c.requireT.NoError(c.group.Wait())
 	}
 }
 
 const maxMsgSize = 4 * 1024
 
 // NewCluster creates new cluster.
-func NewCluster(ctx context.Context, t *testing.T, peers ...*Peer) Cluster {
-	return Cluster{
-		ctx:   ctx,
-		mesh:  NewMesh(ctx, t),
+func NewCluster(t *testing.T, peers ...*Peer) (Cluster, context.Context) {
+	group := parallel.NewGroup(NewContext(t))
+	c := Cluster{
+		group: group,
+		mesh:  NewMesh(t, parallel.NewSubgroup(group.Spawn, "mesh", parallel.Fail)),
 		peers: peers,
 	}
+	t.Cleanup(func() {
+		group.Exit(nil)
+		if err := group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+			require.NoError(t, err)
+		}
+	})
+	return c, group.Context()
 }
 
 // Cluster runs peers and clients.
 type Cluster struct {
-	ctx   context.Context //nolint:containedctx
+	group *parallel.Group
 	mesh  *Mesh
 	peers []*Peer
 }
@@ -185,7 +191,7 @@ type Cluster struct {
 // StartPeers starts peers.
 func (c Cluster) StartPeers(peers ...*Peer) {
 	for _, p := range peers {
-		p.start(c.ctx, c.newConfig(p), c.mesh.Listener(p))
+		p.start(c.group, c.newConfig(p), c.mesh.Listener(p))
 	}
 }
 
@@ -199,10 +205,10 @@ func (c Cluster) StopPeers(peers ...*Peer) {
 // StartClients starts clients.
 func (c Cluster) StartClients(clients ...*Client) {
 	for _, cl := range clients {
-		cl.start(c.ctx)
+		cl.start(c.group)
 	}
 	for _, cl := range clients {
-		cl.warmUp(c.ctx)
+		cl.warmUp(c.group.Context())
 	}
 }
 
