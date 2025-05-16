@@ -32,6 +32,7 @@ func NewPeer(t *testing.T, peerID types.ServerID, partitions types.Partitions) *
 		dir:         t.TempDir(),
 		c2pListener: c2pListener.(*net.TCPListener),
 		partitions:  partitions,
+		requireT:    requireT,
 	}
 	t.Cleanup(p.close)
 	return p
