@@ -66,7 +66,7 @@ func (m *Mesh) Listener(peer *Peer) net.Listener {
 	l, exists := m.listeners[peer]
 	if !exists {
 		var err error
-		l, err = net.Listen("tcp", ":0")
+		l, err = net.Listen("tcp", "localhost:0")
 		m.requireT.NoError(err)
 		m.listeners[peer] = l
 	}
@@ -79,7 +79,7 @@ func (m *Mesh) Pair(srcPeer, dstPeer *Peer) *Pair {
 	pair, exists := m.links[lnk]
 	if !exists {
 		dstL := m.Listener(dstPeer)
-		srcL, err := net.Listen("tcp", ":0")
+		srcL, err := net.Listen("tcp", "localhost:0")
 		m.requireT.NoError(err)
 		pair = &Pair{
 			SrcListener: srcL,
