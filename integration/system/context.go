@@ -10,8 +10,8 @@ import (
 	"github.com/outofforest/logger"
 )
 
-// NewContext creates new context for testing.
-func NewContext(t *testing.T) context.Context {
+// newContext creates new context for testing.
+func newContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(
 		logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig).With(zap.String("test", t.Name()))),
 		2*time.Minute,

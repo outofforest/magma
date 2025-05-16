@@ -25,8 +25,8 @@ type link struct {
 	DstPeer *Peer
 }
 
-// Pair stores information about connected pair of peers.
-type Pair struct {
+// pair stores information about connected pair of peers.
+type pair struct {
 	SrcListener net.Listener
 	DstListener net.Listener
 
@@ -34,23 +34,23 @@ type Pair struct {
 	Group *parallel.Group
 }
 
-// NewMesh creates new mesh.
-func NewMesh(t *testing.T, group *parallel.Group) *Mesh {
-	return &Mesh{
+// newMesh creates new mesh.
+func newMesh(t *testing.T, group *parallel.Group) *mesh {
+	return &mesh{
 		requireT:  require.New(t),
 		listeners: map[*Peer]net.Listener{},
-		links:     map[link]*Pair{},
+		links:     map[link]*pair{},
 		group:     group,
 		mHello:    hello.NewMarshaller(),
 		mP2P:      p2p.NewMarshaller(),
 	}
 }
 
-// Mesh maintains connection mesh between peers.
-type Mesh struct {
+// mesh maintains connection mesh between peers.
+type mesh struct {
 	requireT  *require.Assertions
 	listeners map[*Peer]net.Listener
-	links     map[link]*Pair
+	links     map[link]*pair
 	group     *parallel.Group
 	mHello    hello.Marshaller
 	mP2P      p2p.Marshaller
@@ -60,7 +60,7 @@ type Mesh struct {
 }
 
 // Listener returns listener for peer.
-func (m *Mesh) Listener(peer *Peer) net.Listener {
+func (m *mesh) Listener(peer *Peer) net.Listener {
 	l, exists := m.listeners[peer]
 	if !exists {
 		var err error
@@ -72,28 +72,28 @@ func (m *Mesh) Listener(peer *Peer) net.Listener {
 }
 
 // Pair returns a pair of connected endpoints.
-func (m *Mesh) Pair(srcPeer, dstPeer *Peer) *Pair {
+func (m *mesh) Pair(srcPeer, dstPeer *Peer) *pair {
 	lnk := link{SrcPeer: srcPeer, DstPeer: dstPeer}
-	pair, exists := m.links[lnk]
+	p, exists := m.links[lnk]
 	if !exists {
 		dstL := m.Listener(dstPeer)
 		srcL, err := net.Listen("tcp", "localhost:0")
 		m.requireT.NoError(err)
-		pair = &Pair{
+		p = &pair{
 			SrcListener: srcL,
 			DstListener: dstL,
 			Group:       parallel.NewSubgroup(m.group.Spawn, "clients", parallel.Continue),
 		}
-		m.links[lnk] = pair
+		m.links[lnk] = p
 
-		m.startForwarder(lnk, pair)
+		m.startForwarder(lnk, p)
 	}
 
-	return pair
+	return p
 }
 
 // ForceLeader sets the peer which should be a leader after next voting.
-func (m *Mesh) ForceLeader(peer *Peer) {
+func (m *mesh) ForceLeader(peer *Peer) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -101,7 +101,7 @@ func (m *Mesh) ForceLeader(peer *Peer) {
 }
 
 // EnableLink enables pair connection.
-func (m *Mesh) EnableLink(srcPeer, dstPeer *Peer) {
+func (m *mesh) EnableLink(srcPeer, dstPeer *Peer) {
 	pair := m.Pair(srcPeer, dstPeer)
 
 	pair.Mu.Lock()
@@ -115,7 +115,7 @@ func (m *Mesh) EnableLink(srcPeer, dstPeer *Peer) {
 }
 
 // DisableLink disables pair connection.
-func (m *Mesh) DisableLink(srcPeer, dstPeer *Peer) {
+func (m *mesh) DisableLink(srcPeer, dstPeer *Peer) {
 	pair := m.Pair(srcPeer, dstPeer)
 
 	pair.Mu.Lock()
@@ -130,7 +130,7 @@ func (m *Mesh) DisableLink(srcPeer, dstPeer *Peer) {
 	pair.Group = nil
 }
 
-func (m *Mesh) startForwarder(lnk link, pair *Pair) {
+func (m *mesh) startForwarder(lnk link, pair *pair) {
 	m.group.Spawn("forwarder", parallel.Fail, func(ctx context.Context) error {
 		err := parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			spawn("listener", parallel.Fail, func(ctx context.Context) error {
@@ -164,7 +164,7 @@ func (m *Mesh) startForwarder(lnk link, pair *Pair) {
 	})
 }
 
-func (m *Mesh) handleConn(conn net.Conn, lnk link, pair *Pair) {
+func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 	pair.Mu.Lock()
 	defer pair.Mu.Unlock()
 
@@ -226,7 +226,7 @@ func (m *Mesh) handleConn(conn net.Conn, lnk link, pair *Pair) {
 	})
 }
 
-func (m *Mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *Peer) error {
+func (m *mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *Peer) error {
 	for {
 		msg, err := srcC.ReceiveProton(m.mP2P)
 		if err != nil {
@@ -243,14 +243,14 @@ func (m *Mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *
 	}
 }
 
-func (m *Mesh) isVoteRequestBlocked(srcPeer *Peer) bool {
+func (m *mesh) isVoteRequestBlocked(srcPeer *Peer) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	return m.forcedLeader != nil && m.forcedLeader != srcPeer
 }
 
-func (m *Mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, error) {
+func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, error) {
 	msg, err := srcC.ReceiveProton(m.mHello)
 	if err != nil {
 		return nil, err

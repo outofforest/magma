@@ -166,10 +166,10 @@ const maxMsgSize = 4 * 1024
 
 // NewCluster creates new cluster.
 func NewCluster(t *testing.T, peers ...*Peer) (Cluster, context.Context) {
-	group := parallel.NewGroup(NewContext(t))
+	group := parallel.NewGroup(newContext(t))
 	c := Cluster{
 		group: group,
-		mesh:  NewMesh(t, parallel.NewSubgroup(group.Spawn, "mesh", parallel.Fail)),
+		mesh:  newMesh(t, parallel.NewSubgroup(group.Spawn, "mesh", parallel.Fail)),
 		peers: peers,
 	}
 	t.Cleanup(func() {
@@ -184,7 +184,7 @@ func NewCluster(t *testing.T, peers ...*Peer) (Cluster, context.Context) {
 // Cluster runs peers and clients.
 type Cluster struct {
 	group *parallel.Group
-	mesh  *Mesh
+	mesh  *mesh
 	peers []*Peer
 }
 
