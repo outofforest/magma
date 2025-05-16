@@ -161,7 +161,7 @@ func (s *State) Validate(
 	}
 
 	var err error
-	lastLogTerm, s.nextLogIndex, s.previousChecksum, err = s.repo.Revert(s.PreviousTerm(nextLogIndex) - 1)
+	lastLogTerm, s.nextLogIndex, s.previousChecksum, err = s.repo.RevertTerms(s.PreviousTerm(nextLogIndex) - 1)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -216,7 +216,7 @@ func (s *State) validate(
 			return 0, 0, errors.New("bug in protocol")
 		}
 		var err error
-		if _, s.nextLogIndex, s.previousChecksum, err = s.repo.Revert(lastLogTerm); err != nil {
+		if _, s.nextLogIndex, s.previousChecksum, err = s.repo.RevertTerms(lastLogTerm); err != nil {
 			return 0, 0, err
 		}
 	}

@@ -779,3 +779,63 @@ func TestEmptyTx(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestSplitAndResync(t *testing.T) {
+	t.Skip()
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := system.NewContext(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+
+	cluster := system.NewCluster(ctx, t, peer1, peer2, peer3)
+	cluster.ForceLeader(peer3)
+
+	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
+	c3 := system.NewClient(t, peer3, "client1", partitionDefault, nil)
+
+	cluster.StartPeers(peer1, peer2, peer3)
+	cluster.StartClients(c1, c3)
+
+	acc1ID := client.NewID[entities.AccountID]()
+	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: acc1ID})
+		return nil
+	}))
+	acc3ID := client.NewID[entities.AccountID]()
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: acc3ID})
+		return nil
+	}))
+
+	cluster.ForceLeader(nil)
+	cluster.DisableLink(peer3, peer1)
+	cluster.DisableLink(peer3, peer2)
+
+	acc4ID := client.NewID[entities.AccountID]()
+	requireT.ErrorIs(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: acc4ID})
+		return nil
+	}), client.ErrAwaitTimeout)
+	acc5ID := client.NewID[entities.AccountID]()
+	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: acc5ID})
+		return nil
+	}))
+
+	cluster.EnableLink(peer3, peer1)
+	cluster.EnableLink(peer3, peer2)
+
+	acc6ID := client.NewID[entities.AccountID]()
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: acc6ID})
+		return nil
+	}))
+	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		return nil
+	}))
+}
