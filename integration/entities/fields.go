@@ -4,11 +4,12 @@ import (
 	"time"
 
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
 )
 
 // Fields is used to test indices.
 type Fields struct {
-	ID       types.ID
+	ID       memdb.ID
 	Revision types.Revision
 
 	Bool   bool

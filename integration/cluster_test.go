@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/client"
-	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/integration/system"
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
+	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/parallel"
 )
 
@@ -41,8 +42,8 @@ func TestBenchmark(t *testing.T) {
 	}
 
 	var e entities.Account
-	indexLastName := indices.NewFieldIndex("lastName", &e, &e.LastName)
-	indexFirstName := indices.NewFieldIndex("firstName", &e, &e.FirstName)
+	indexLastName := indices.NewFieldIndex(&e, &e.LastName)
+	indexFirstName := indices.NewFieldIndex(&e, &e.FirstName)
 	indexName := indices.NewMultiIndex(indexLastName, indexFirstName)
 
 	clients := make([]*system.Client, 0, numOfClients)
@@ -62,7 +63,7 @@ func TestBenchmark(t *testing.T) {
 			for j := range transactionsPerClient {
 				err := tr.Tx(ctx, func(tx *client.Tx) error {
 					tx.Set(entities.Account{
-						ID:        client.NewID[entities.AccountID](),
+						ID:        memdb.NewID[entities.AccountID](),
 						FirstName: fmt.Sprintf("FirstName-%d-%d", i, j),
 						LastName:  fmt.Sprintf("LastName-%d-%d", i, j),
 					})
@@ -90,7 +91,7 @@ func TestSinglePeer(t *testing.T) {
 	cluster.StartPeers(p)
 	cluster.StartClients(c)
 
-	accountID := client.NewID[entities.AccountID]()
+	accountID := memdb.NewID[entities.AccountID]()
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{
@@ -157,7 +158,7 @@ func Test3Peers3Clients(t *testing.T) {
 	for i, peer := range peers {
 		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), partitionDefault,
 			triggerFunc()))
-		id := client.NewID[entities.AccountID]()
+		id := memdb.NewID[entities.AccountID]()
 		ids = append(ids, id)
 		idCh <- id
 	}
@@ -231,7 +232,7 @@ func TestPeerRestart(t *testing.T) {
 		for j := range 5 {
 			err := clients[cI].NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 				tx.Set(entities.Account{
-					ID:        client.NewID[entities.AccountID](),
+					ID:        memdb.NewID[entities.AccountID](),
 					FirstName: "FirstName",
 					LastName:  "LastName",
 				})
@@ -272,17 +273,17 @@ func TestPassivePeer(t *testing.T) {
 
 	accs := []entities.Account{
 		{
-			ID:        client.NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName1",
 			LastName:  "LastName1",
 		},
 		{
-			ID:        client.NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName2",
 			LastName:  "LastName2",
 		},
 		{
-			ID:        client.NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName3",
 			LastName:  "LastName3",
 		},
@@ -326,7 +327,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
-	accID := client.NewID[entities.AccountID]()
+	accID := memdb.NewID[entities.AccountID]()
 	accs := []entities.Account{
 		{
 			ID:        accID,
@@ -389,7 +390,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	tr2 := c2.NewTransactor()
 	requireT.Error(tr2.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{
-			ID:        client.NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName100",
 			LastName:  "LastName100",
 		})
@@ -412,7 +413,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	for range 10 {
 		err = tr2.Tx(ctx, func(tx *client.Tx) error {
 			tx.Set(entities.Account{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "FirstName100",
 				LastName:  "LastName100",
 			})
@@ -446,7 +447,7 @@ func TestSyncAfterRestart(t *testing.T) {
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
-	accID := client.NewID[entities.AccountID]()
+	accID := memdb.NewID[entities.AccountID]()
 	accs := []entities.Account{
 		{
 			ID:        accID,
@@ -509,11 +510,11 @@ func TestSyncAfterRestart(t *testing.T) {
 	cluster.StartClients(c2, c3)
 
 	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
 	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
 
@@ -543,11 +544,11 @@ func TestSyncAfterRestart(t *testing.T) {
 	cluster.StartClients(c2)
 
 	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
 	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
 
@@ -585,51 +586,51 @@ func TestPartitions(t *testing.T) {
 	accs := [][]entities.Account{
 		{
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P1FirstName0",
 				LastName:  "P1LastName0",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P1FirstName1",
 				LastName:  "P1LastName1",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P1FirstName2",
 				LastName:  "P1LastName2",
 			},
 		},
 		{
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P2FirstName0",
 				LastName:  "P2LastName0",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P2FirstName1",
 				LastName:  "P2LastName1",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P2FirstName2",
 				LastName:  "P2LastName2",
 			},
 		},
 		{
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P3FirstName0",
 				LastName:  "P3LastName0",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P3FirstName1",
 				LastName:  "P3LastName1",
 			},
 			{
-				ID:        client.NewID[entities.AccountID](),
+				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "P3FirstName2",
 				LastName:  "P3LastName2",
 			},
@@ -693,7 +694,7 @@ func TestTimeouts(t *testing.T) {
 	cluster.StartClients(c)
 	cluster.StopPeers(peer2)
 
-	accountID := client.NewID[entities.AccountID]()
+	accountID := memdb.NewID[entities.AccountID]()
 
 	tr := c.NewTransactor()
 	requireT.ErrorIs(tr.Tx(ctx, func(tx *client.Tx) error {
@@ -731,7 +732,7 @@ func TestOutdatedTx(t *testing.T) {
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c1, c2)
 
-	accountID := client.NewID[entities.AccountID]()
+	accountID := memdb.NewID[entities.AccountID]()
 
 	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{
@@ -808,12 +809,12 @@ func TestSplitAndResync(t *testing.T) {
 	cluster.StartPeers(peer1, peer2, peer3)
 	cluster.StartClients(c1, c3)
 
-	acc1ID := client.NewID[entities.AccountID]()
+	acc1ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc1ID})
 		return nil
 	}))
-	acc3ID := client.NewID[entities.AccountID]()
+	acc3ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc3ID})
 		return nil
@@ -823,12 +824,12 @@ func TestSplitAndResync(t *testing.T) {
 	cluster.DisableLink(peer3, peer1)
 	cluster.DisableLink(peer3, peer2)
 
-	acc4ID := client.NewID[entities.AccountID]()
+	acc4ID := memdb.NewID[entities.AccountID]()
 	requireT.ErrorIs(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc4ID})
 		return nil
 	}), client.ErrAwaitTimeout)
-	acc5ID := client.NewID[entities.AccountID]()
+	acc5ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc5ID})
 		return nil
@@ -837,13 +838,13 @@ func TestSplitAndResync(t *testing.T) {
 	cluster.EnableLink(peer3, peer1)
 	cluster.EnableLink(peer3, peer2)
 
-	acc6ID := client.NewID[entities.AccountID]()
+	acc6ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc6ID})
 		return nil
 	}))
 	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: client.NewID[entities.AccountID]()})
+		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
 }

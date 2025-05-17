@@ -1,9 +1,12 @@
 package entities
 
-import "github.com/outofforest/magma/types"
+import (
+	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
+)
 
 // AccountID represents account id.
-type AccountID types.ID
+type AccountID memdb.ID
 
 // Account represents user account in the system.
 type Account struct {

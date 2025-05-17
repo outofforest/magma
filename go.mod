@@ -1,11 +1,11 @@
 module github.com/outofforest/magma
 
-go 1.24.0
+go 1.24.2
 
 require (
 	github.com/cespare/xxhash v1.1.0
-	github.com/hashicorp/go-memdb v1.3.5
 	github.com/outofforest/logger v0.6.0
+	github.com/outofforest/memdb v1.4.0
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.15.0
 	github.com/outofforest/resonance v0.20.0
@@ -20,10 +20,9 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/outofforest/ioc/v2 v2.5.2 // indirect
+	github.com/outofforest/iradix v1.4.0 // indirect
 	github.com/outofforest/mass v0.2.1 // indirect
 	github.com/outofforest/run v0.8.0 // indirect
 	github.com/outofforest/spin v0.3.1 // indirect

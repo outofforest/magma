@@ -14,9 +14,9 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client"
-	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
 )
 
@@ -85,7 +85,7 @@ func NewClient(
 	name string,
 	partitionID types.PartitionID,
 	triggerFunc func(context.Context, *client.View) error,
-	indices ...indices.Index,
+	indices ...memdb.Index,
 ) *Client {
 	requireT := require.New(t)
 

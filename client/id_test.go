@@ -8,6 +8,7 @@ import (
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/integration/entities"
+	memdbid "github.com/outofforest/memdb/id"
 )
 
 func TestMetaLayout(t *testing.T) {
@@ -18,12 +19,12 @@ func TestMetaLayout(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal([]int{0}, idF.Index)
 	requireT.EqualValues(0, idF.Offset)
-	requireT.EqualValues(idLength, idF.Type.Size())
+	requireT.EqualValues(memdbid.Length, idF.Type.Size())
 
 	revisionF, exists := metaT.FieldByName("Revision")
 	requireT.True(exists)
 	requireT.Equal([]int{1}, revisionF.Index)
-	requireT.EqualValues(idLength, revisionF.Offset)
+	requireT.EqualValues(memdbid.Length, revisionF.Offset)
 	requireT.EqualValues(revisionLength, revisionF.Type.Size())
 }
 
