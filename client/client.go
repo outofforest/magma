@@ -8,18 +8,18 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/hashicorp/go-memdb"
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
-	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/client/wire"
 	gossipwire "github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
+	memdbid "github.com/outofforest/memdb/id"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
@@ -37,7 +37,7 @@ var (
 	ErrOutdatedTx = errors.New("outdated transaction")
 )
 
-var idType = reflect.TypeOf(types.ID{})
+var idType = reflect.TypeOf(memdb.ID{})
 
 // Config is the configuration of magma client.
 type Config struct {
@@ -48,7 +48,7 @@ type Config struct {
 	BroadcastTimeout time.Duration
 	AwaitTimeout     time.Duration
 	Marshaller       proton.Marshaller
-	Indices          []indices.Index
+	Indices          []memdb.Index
 	TriggerFunc      func(ctx context.Context, v *View) error
 }
 
@@ -59,15 +59,13 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("no object types provided")
 	}
 
-	dbSchema := &memdb.DBSchema{
-		Tables: map[string]*memdb.TableSchema{},
-	}
+	dbIndexes := make([][]memdb.Index, 0, len(objectTypes))
 
 	revisionType := reflect.TypeOf(types.Revision(0))
 
 	byID := map[uint64]typeInfo{}
 	byType := map[reflect.Type]typeInfo{}
-	for _, o := range objectTypes {
+	for tableID, o := range objectTypes {
 		t := reflect.TypeOf(o)
 
 		idF, exists := t.FieldByName("ID")
@@ -87,7 +85,7 @@ func New(config Config) (*Client, error) {
 		if revisionF.Type != revisionType {
 			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
 		}
-		if revisionF.Index[0] != 1 || revisionF.Offset != idLength {
+		if revisionF.Index[0] != 1 || revisionF.Offset != memdbid.Length {
 			return nil, errors.Errorf("revision must be the second field in type %d", t)
 		}
 
@@ -100,33 +98,23 @@ func New(config Config) (*Client, error) {
 			return nil, err
 		}
 
-		tableName := typeName(t)
 		info := typeInfo{
-			Type:  t,
-			Table: tableName,
+			Type:    t,
+			TableID: uint64(tableID),
 		}
 		byID[mID] = info
 		byType[t] = info
 
-		table := &memdb.TableSchema{
-			Name: tableName,
-			Indexes: map[string]*memdb.IndexSchema{
-				idIndexName: {
-					Name:    idIndexName,
-					Unique:  true,
-					Indexer: idIndexer{},
-				},
-			},
-		}
+		table := []memdb.Index{}
 		for _, index := range config.Indices {
 			if index.Type() == t {
-				table.Indexes[index.Name()] = index.Schema()
+				table = append(table, index)
 			}
 		}
-		dbSchema.Tables[tableName] = table
+		dbIndexes = append(dbIndexes, table)
 	}
 
-	db, err := memdb.NewMemDB(dbSchema)
+	db, err := memdb.NewMemDB(dbIndexes)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -156,7 +144,7 @@ func New(config Config) (*Client, error) {
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
 		readyCh:          make(chan struct{}),
-		awaitedTxs:       map[types.ID]chan<- error{},
+		awaitedTxs:       map[memdb.ID]chan<- error{},
 	}, nil
 }
 
@@ -181,7 +169,7 @@ type Client struct {
 	firstHotEnd      bool
 
 	mu         sync.Mutex
-	awaitedTxs map[types.ID]chan<- error
+	awaitedTxs map[memdb.ID]chan<- error
 }
 
 // Run runs client.
@@ -190,7 +178,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	log := logger.Get(ctx)
 
-	var awaitedTxsToClean []types.ID
+	var awaitedTxsToClean []memdb.ID
 
 	cMarshaller := c2p.NewMarshaller()
 
@@ -276,7 +264,7 @@ func (c *Client) Run(ctx context.Context) error {
 								for _, id := range awaitedTxsToClean {
 									delete(c.awaitedTxs, id)
 								}
-								awaitedTxsToClean = make([]types.ID, 0, len(c.awaitedTxs))
+								awaitedTxsToClean = make([]memdb.ID, 0, len(c.awaitedTxs))
 								for id := range c.awaitedTxs {
 									awaitedTxsToClean = append(awaitedTxsToClean, id)
 								}
@@ -332,7 +320,7 @@ func (c *Client) View() *View {
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
 		client:  c,
-		changes: map[types.ID]reflect.Value{},
+		changes: map[memdb.ID]reflect.Value{},
 	}
 }
 
@@ -424,7 +412,7 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			return errors.Errorf("unknown type %s", typeDef.Type)
 		}
 
-		o, err := tx.First(typeDef.Table, idIndexName, entityMeta.ID)
+		o, err := tx.First(typeDef.TableID, memdbid.IndexID, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -433,7 +421,7 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 		if o == nil {
 			copyMetaToEntity(oV, entityMeta)
 		} else {
-			oV2 := o.(reflect.Value)
+			oV2 := *o
 			if entityMeta.Revision <= revisionFromEntity(oV2) {
 				tx.Abort()
 				return ErrOutdatedTx
@@ -447,7 +435,7 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			return err
 		}
 
-		if err := tx.Insert(typeDef.Table, oV); err != nil {
+		if err := tx.Insert(typeDef.TableID, &oV); err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -458,17 +446,17 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 }
 
 type txEnvelope struct {
-	ID           types.ID
+	ID           memdb.ID
 	Tx           []byte
 	ReceivedCh   chan error
-	PreviousTxID types.ID
+	PreviousTxID memdb.ID
 }
 
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
 	client       *Client
-	changes      map[types.ID]reflect.Value
-	previousTxID types.ID
+	changes      map[memdb.ID]reflect.Value
+	previousTxID memdb.ID
 	buf          []byte
 }
 
@@ -521,7 +509,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 
 	i = uint64(varuint64.MaxSize)
 
-	txID := NewID[types.ID]()
+	txID := memdb.NewID[memdb.ID]()
 	previousTxID := t.previousTxID
 	t.previousTxID = txID
 
@@ -552,7 +540,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		}
 
 		unsafeID := unsafeIDFromEntity(v)
-		old, err := snapshot.First(typeDef.Table, idIndexName, unsafeID)
+		old, err := snapshot.First(typeDef.TableID, memdbid.IndexID, unsafeID)
 		if err != nil {
 			return txEnvelope{}, 0, errors.WithStack(err)
 		}
@@ -560,9 +548,9 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		var oldV reflect.Value
 		if old == nil {
 			oldV = reflect.New(typeDef.Type)
-			setIDInEntity(oldV, (*types.ID)(unsafe.Pointer(&unsafeID[0])))
+			setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 		} else {
-			oldV = old.(reflect.Value)
+			oldV = *old
 		}
 
 		entityMeta := &wire.EntityMetadata{
@@ -639,15 +627,7 @@ func txRecover(err *error) {
 	}
 }
 
-func typeName(t reflect.Type) string {
-	pkg := t.PkgPath()
-	if pkg == "" {
-		return t.Name()
-	}
-	return pkg + "." + t.Name()
-}
-
 type typeInfo struct {
-	Type  reflect.Type
-	Table string
+	Type    reflect.Type
+	TableID uint64
 }

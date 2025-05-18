@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
-	"github.com/outofforest/magma/client/indices"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/state/repository/format"
-	"github.com/outofforest/magma/types"
+	"github.com/outofforest/memdb"
+	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/varuint64"
 )
 
@@ -24,12 +24,12 @@ func TestEntityCreation(t *testing.T) {
 	c := newTestClient(t)
 
 	acc1 := entities.Account{
-		ID:        NewID[entities.AccountID](),
+		ID:        memdb.NewID[entities.AccountID](),
 		FirstName: "First1",
 		LastName:  "Last1",
 	}
 	acc2 := entities.Account{
-		ID:        NewID[entities.AccountID](),
+		ID:        memdb.NewID[entities.AccountID](),
 		FirstName: "First2",
 		LastName:  "Last2",
 	}
@@ -82,12 +82,12 @@ func TestEntityUpdate(t *testing.T) {
 	c := newTestClient(t)
 
 	acc1 := entities.Account{
-		ID:        NewID[entities.AccountID](),
+		ID:        memdb.NewID[entities.AccountID](),
 		FirstName: "First1",
 		LastName:  "Last1",
 	}
 	acc2 := entities.Account{
-		ID:        NewID[entities.AccountID](),
+		ID:        memdb.NewID[entities.AccountID](),
 		FirstName: "First2",
 		LastName:  "Last2",
 	}
@@ -160,18 +160,18 @@ func TestFieldIndexString(t *testing.T) {
 	requireT := require.New(t)
 
 	var acc entities.Account
-	indexLastName := indices.NewFieldIndex("lastName", &acc, &acc.LastName)
+	indexLastName := indices.NewFieldIndex(&acc, &acc.LastName)
 
 	c := newTestClient(t, indexLastName)
 
 	accs := []entities.Account{
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First2",
 			LastName:  "Last2",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First1",
 			LastName:  "Last1",
 		},
@@ -189,26 +189,26 @@ func TestFieldIndexString(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := FindFirst[entities.Account](v, indexLastName)
+	acc, exists := First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexLastName)
+	acc, exists = Last[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = FindFirst[entities.Account](v, indexLastName, "Last2")
+	acc, exists = First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexLastName, "Last2")
+	acc, exists = Last[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = FindFirst[entities.Account](v, indexLastName, "La")
+	_, exists = First[entities.Account](v, indexLastName, "La")
 	requireT.False(exists)
 
-	_, exists = FindLast[entities.Account](v, indexLastName, "La")
+	_, exists = Last[entities.Account](v, indexLastName, "La")
 	requireT.False(exists)
 
 	i := 0
@@ -316,17 +316,17 @@ func TestFieldIndexBool(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Bool)
+	index := indices.NewFieldIndex(&e, &e.Bool)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Bool: true,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Bool: false,
 		},
 	}
@@ -343,27 +343,27 @@ func TestFieldIndexBool(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	e, exists = FindLast[entities.Fields](v, index)
+	e, exists = Last[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, true)
+	e, exists = First[entities.Fields](v, index, true)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindLast[entities.Fields](v, index, true)
+	e, exists = Last[entities.Fields](v, index, true)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, false)
+	e, exists = First[entities.Fields](v, index, false)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	e, exists = FindLast[entities.Fields](v, index, false)
+	e, exists = Last[entities.Fields](v, index, false)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
@@ -408,7 +408,7 @@ func TestFieldIndexTime(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Time)
+	index := indices.NewFieldIndex(&e, &e.Time)
 
 	c := newTestClient(t, index)
 
@@ -422,31 +422,31 @@ func TestFieldIndexTime(t *testing.T) {
 
 	es := []entities.Fields{
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time0,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time1,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time2,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time3,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time4,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time5,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Time: time6,
 		},
 	}
@@ -463,19 +463,19 @@ func TestFieldIndexTime(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[6], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, time4)
+	e, exists = First[entities.Fields](v, index, time4)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, time1)
+	e, exists = First[entities.Fields](v, index, time1)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, time.Time{})
+	_, exists = First[entities.Fields](v, index, time.Time{})
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -519,29 +519,29 @@ func TestFieldIndexInt8(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Int8)
+	index := indices.NewFieldIndex(&e, &e.Int8)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Int8: 100,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Int8: 10,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Int8: 0,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Int8: -10,
 		},
 		{
-			ID:   NewID[types.ID](),
+			ID:   memdb.NewID[memdb.ID](),
 			Int8: -100,
 		},
 	}
@@ -558,19 +558,19 @@ func TestFieldIndexInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
+	e, exists = First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -608,29 +608,29 @@ func TestFieldIndexInt16(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Int16)
+	index := indices.NewFieldIndex(&e, &e.Int16)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int16: 100,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int16: 10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int16: 0,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int16: -10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int16: -100,
 		},
 	}
@@ -647,19 +647,19 @@ func TestFieldIndexInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
+	e, exists = First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -697,29 +697,29 @@ func TestFieldIndexInt32(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Int32)
+	index := indices.NewFieldIndex(&e, &e.Int32)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int32: 100,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int32: 10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int32: 0,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int32: -10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int32: -100,
 		},
 	}
@@ -736,19 +736,19 @@ func TestFieldIndexInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
+	e, exists = First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -786,29 +786,29 @@ func TestFieldIndexInt64(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Int64)
+	index := indices.NewFieldIndex(&e, &e.Int64)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int64: 100,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int64: 10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int64: 0,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int64: -10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Int64: -100,
 		},
 	}
@@ -825,34 +825,34 @@ func TestFieldIndexInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindLast[entities.Fields](v, index)
+	e, exists = Last[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(-100))
+	e, exists = First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindLast[entities.Fields](v, index, intType(-100))
+	e, exists = Last[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindLast[entities.Fields](v, index, intType(100))
+	e, exists = Last[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	_, exists = FindLast[entities.Fields](v, index, intType(1))
+	_, exists = Last[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -916,21 +916,21 @@ func TestFieldIndexUInt8(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Uint8)
+	index := indices.NewFieldIndex(&e, &e.Uint8)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Uint8: 100,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Uint8: 10,
 		},
 		{
-			ID:    NewID[types.ID](),
+			ID:    memdb.NewID[memdb.ID](),
 			Uint8: 0,
 		},
 	}
@@ -947,15 +947,15 @@ func TestFieldIndexUInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -987,21 +987,21 @@ func TestFieldIndexUInt16(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Uint16)
+	index := indices.NewFieldIndex(&e, &e.Uint16)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint16: 100,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint16: 10,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint16: 0,
 		},
 	}
@@ -1018,15 +1018,15 @@ func TestFieldIndexUInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -1058,21 +1058,21 @@ func TestFieldIndexUInt32(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Uint32)
+	index := indices.NewFieldIndex(&e, &e.Uint32)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint32: 100,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint32: 10,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint32: 0,
 		},
 	}
@@ -1089,15 +1089,15 @@ func TestFieldIndexUInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -1129,21 +1129,21 @@ func TestFieldIndexUInt64(t *testing.T) {
 	requireT := require.New(t)
 
 	var e entities.Fields
-	index := indices.NewFieldIndex("index", &e, &e.Uint64)
+	index := indices.NewFieldIndex(&e, &e.Uint64)
 
 	c := newTestClient(t, index)
 
 	es := []entities.Fields{
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint64: 100,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint64: 10,
 		},
 		{
-			ID:     NewID[types.ID](),
+			ID:     memdb.NewID[memdb.ID](),
 			Uint64: 0,
 		},
 	}
@@ -1160,26 +1160,26 @@ func TestFieldIndexUInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := FindFirst[entities.Fields](v, index)
+	e, exists := First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = FindLast[entities.Fields](v, index)
+	e, exists = Last[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindFirst[entities.Fields](v, index, intType(100))
+	e, exists = First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = FindLast[entities.Fields](v, index, intType(100))
+	e, exists = Last[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = FindFirst[entities.Fields](v, index, intType(1))
+	_, exists = First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	_, exists = FindLast[entities.Fields](v, index, intType(1))
+	_, exists = Last[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
 	it := ForwardIterator[entities.Fields](v, index)
@@ -1230,7 +1230,7 @@ func TestIfIndex(t *testing.T) {
 
 	var acc entities.Account
 	indexLastName := indices.NewIfIndex[entities.Account](
-		"if", indices.NewFieldIndex("lastName", &acc, &acc.LastName),
+		indices.NewFieldIndex(&acc, &acc.LastName),
 		func(acc *entities.Account) bool {
 			return acc.FirstName == "First1"
 		},
@@ -1240,17 +1240,17 @@ func TestIfIndex(t *testing.T) {
 
 	accs := []entities.Account{
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First1",
 			LastName:  "Last3",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First2",
 			LastName:  "Last2",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First1",
 			LastName:  "Last2",
 		},
@@ -1268,15 +1268,15 @@ func TestIfIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := FindFirst[entities.Account](v, indexLastName)
+	acc, exists := First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	acc, exists = FindFirst[entities.Account](v, indexLastName, "Last2")
+	acc, exists = First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	_, exists = FindFirst[entities.Account](v, indexLastName, "Missing")
+	_, exists = First[entities.Account](v, indexLastName, "Missing")
 	requireT.False(exists)
 
 	i := 0
@@ -1336,35 +1336,35 @@ func TestMultiIndex(t *testing.T) {
 
 	var acc entities.Account
 	indexName := indices.NewMultiIndex(
-		indices.NewFieldIndex("lastName", &acc, &acc.LastName),
-		indices.NewFieldIndex("firstName", &acc, &acc.FirstName),
+		indices.NewFieldIndex(&acc, &acc.LastName),
+		indices.NewFieldIndex(&acc, &acc.FirstName),
 	)
 
 	c := newTestClient(t, indexName)
 
 	accs := []entities.Account{
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First3",
 			LastName:  "Last2",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First2",
 			LastName:  "Last2",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First1",
 			LastName:  "Last1",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "First",
 			LastName:  "Last",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "st",
 			LastName:  "La",
 		},
@@ -1382,56 +1382,56 @@ func TestMultiIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := FindFirst[entities.Account](v, indexName)
+	acc, exists := First[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexName)
+	acc, exists = Last[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = FindFirst[entities.Account](v, indexName, "Last2")
+	acc, exists = First[entities.Account](v, indexName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexName, "Last2")
+	acc, exists = Last[entities.Account](v, indexName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = FindFirst[entities.Account](v, indexName, "Last")
+	acc, exists = First[entities.Account](v, indexName, "Last")
 	requireT.True(exists)
 	requireT.Equal(accs[3], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexName, "Last")
+	acc, exists = Last[entities.Account](v, indexName, "Last")
 	requireT.True(exists)
 	requireT.Equal(accs[3], acc)
 
-	acc, exists = FindFirst[entities.Account](v, indexName, "La")
+	acc, exists = First[entities.Account](v, indexName, "La")
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexName, "La")
+	acc, exists = Last[entities.Account](v, indexName, "La")
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	_, exists = FindFirst[entities.Account](v, indexName, "Las")
+	_, exists = First[entities.Account](v, indexName, "Las")
 	requireT.False(exists)
 
-	_, exists = FindLast[entities.Account](v, indexName, "Las")
+	_, exists = Last[entities.Account](v, indexName, "Las")
 	requireT.False(exists)
 
-	acc, exists = FindFirst[entities.Account](v, indexName, "Last2", "First3")
+	acc, exists = First[entities.Account](v, indexName, "Last2", "First3")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = FindLast[entities.Account](v, indexName, "Last2", "First3")
+	acc, exists = Last[entities.Account](v, indexName, "Last2", "First3")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = FindFirst[entities.Account](v, indexName, "Last2", "Fir")
+	_, exists = First[entities.Account](v, indexName, "Last2", "Fir")
 	requireT.False(exists)
 
-	_, exists = FindLast[entities.Account](v, indexName, "Last2", "Fir")
+	_, exists = Last[entities.Account](v, indexName, "Last2", "Fir")
 	requireT.False(exists)
 
 	i := 0
@@ -1624,12 +1624,12 @@ func TestMultiIfIndex(t *testing.T) {
 
 	var acc entities.Account
 	indexName := indices.NewMultiIndex(
-		indices.NewIfIndex[entities.Account]("ifLast",
-			indices.NewFieldIndex("lastName", &acc, &acc.LastName), func(e *entities.Account) bool {
+		indices.NewIfIndex[entities.Account](
+			indices.NewFieldIndex(&acc, &acc.LastName), func(e *entities.Account) bool {
 				return strings.HasPrefix(e.LastName, "A")
 			}),
-		indices.NewIfIndex[entities.Account]("ifFirst",
-			indices.NewFieldIndex("firstName", &acc, &acc.FirstName), func(e *entities.Account) bool {
+		indices.NewIfIndex[entities.Account](
+			indices.NewFieldIndex(&acc, &acc.FirstName), func(e *entities.Account) bool {
 				return strings.HasPrefix(e.FirstName, "B")
 			}),
 	)
@@ -1638,22 +1638,22 @@ func TestMultiIfIndex(t *testing.T) {
 
 	accs := []entities.Account{
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "C1",
 			LastName:  "A1",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "B2",
 			LastName:  "C2",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "B1",
 			LastName:  "A1",
 		},
 		{
-			ID:        NewID[entities.AccountID](),
+			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "B2",
 			LastName:  "A2",
 		},
@@ -1707,7 +1707,7 @@ func TestMultiIfIndex(t *testing.T) {
 
 const maxMsgSize = 4 * 1024
 
-func newTestClient(t *testing.T, indices ...indices.Index) testClient {
+func newTestClient(t *testing.T, indices ...memdb.Index) testClient {
 	client, err := New(Config{
 		Service:        "test",
 		MaxMessageSize: maxMsgSize,
