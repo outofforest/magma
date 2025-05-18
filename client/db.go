@@ -19,7 +19,7 @@ type View struct {
 
 // Get returns the object.
 func Get[T any](v *View, id any) (T, bool) {
-	return findFirst[T](v, memdbid.IndexID, id)
+	return first[T](v, memdbid.IndexID, id)
 }
 
 // First returns the first object matching indexed values.
@@ -27,7 +27,7 @@ func First[T any](v *View, index memdb.Index, args ...any) (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return findFirst[T](v, index.ID(), args...)
+	return first[T](v, index.ID(), args...)
 }
 
 // Last returns the first object matching indexed values.
@@ -35,7 +35,7 @@ func Last[T any](v *View, index memdb.Index, args ...any) (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return findLast[T](v, index.ID(), args...)
+	return last[T](v, index.ID(), args...)
 }
 
 // All iterates over all entities using ID index.
@@ -80,7 +80,7 @@ func BackwardIterator[T any](v *View, index memdb.Index, args ...any) func() (T,
 	return backwardIterator[T](v, index.ID(), args...)
 }
 
-func findFirst[T any](v *View, index uint64, args ...any) (T, bool) {
+func first[T any](v *View, index uint64, args ...any) (T, bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -99,7 +99,7 @@ func findFirst[T any](v *View, index uint64, args ...any) (T, bool) {
 	return o.Elem().Interface().(T), true
 }
 
-func findLast[T any](v *View, index uint64, args ...any) (T, bool) {
+func last[T any](v *View, index uint64, args ...any) (T, bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]

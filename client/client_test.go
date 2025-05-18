@@ -1749,5 +1749,13 @@ func (tc testClient) Tx(txF func(tx *Tx) error) error {
 	size = n + uint64(len(txRaw))
 	binary.LittleEndian.PutUint64(buf[size:], xxh3.HashSeed(buf[:size], tc.client.previousChecksum))
 
-	return tc.client.applyTx(buf[:size+format.ChecksumSize])
+	txn := tc.client.db.Txn(true)
+	previousChecksum, err := tc.client.applyTx(nil, tc.client.previousChecksum, txn, buf[:size+format.ChecksumSize])
+	if err != nil {
+		txn.Abort()
+		return err
+	}
+	txn.Commit()
+	tc.client.previousChecksum = previousChecksum
+	return nil
 }
