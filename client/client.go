@@ -216,11 +216,13 @@ func (c *Client) Run(ctx context.Context) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
 
-						tx := c.db.Txn(true)
+						var commitCh chan struct{}
+						var tx *memdb.Txn
 						defer func() {
-							tx.Commit()
+							if tx != nil {
+								tx.Commit()
+							}
 						}()
-						commitCh := make(chan struct{})
 
 						for {
 							m, err := conn.ReceiveProton(cMarshaller)
@@ -230,6 +232,10 @@ func (c *Client) Run(ctx context.Context) error {
 
 							switch msg := m.(type) {
 							case *gossipwire.StartLogStream:
+								if tx == nil {
+									tx = c.db.Txn(true)
+									commitCh = make(chan struct{})
+								}
 								var length uint64
 								for length < msg.Length {
 									txRaw, err := conn.ReceiveRawBytes()
@@ -248,10 +254,16 @@ func (c *Client) Run(ctx context.Context) error {
 									c.nextLogIndex += types.Index(len(txRaw))
 								}
 							case *gossipwire.HotEnd:
+								if tx == nil {
+									continue
+								}
+
 								tx.Commit()
-								tx = c.db.Txn(true)
 								close(commitCh)
-								commitCh = make(chan struct{})
+
+								tx = nil
+								commitCh = nil
+
 								c.applyHotEnd(triggerCh)
 							default:
 								return errors.Errorf("unexpected message %T", msg)
@@ -500,6 +512,8 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 
 func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64, retErr error) {
 	defer clear(t.changes)
+
+	t.client.db.AwaitTxn()
 
 	pendingTx := &Tx{
 		View: &View{
