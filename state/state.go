@@ -24,7 +24,7 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 		return nil, nil, err
 	}
 
-	var nextLogIndex, nextLogIndexInFile types.Index
+	var nextIndex, nextIndexInFile types.Index
 	var previousChecksum uint64
 	var highestTermSeen rafttypes.Term
 
@@ -37,27 +37,27 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 		}
 
 		header := currentFile.Header()
-		prevChecksum, err := readChecksum(repo, header.NextLogIndex)
+		prevChecksum, err := readChecksum(repo, header.NextIndex)
 		if err != nil {
 			_ = currentFile.Close()
 			return nil, nil, err
 		}
 
 		highestTermSeen = header.Term
-		nextLogIndexInFile, previousChecksum = initialize(log, prevChecksum)
-		nextLogIndex = header.NextLogIndex + nextLogIndexInFile
+		nextIndexInFile, previousChecksum = initialize(log, prevChecksum)
+		nextIndex = header.NextIndex + nextIndexInFile
 	}
 
 	s := &State{
-		repo:               repo,
-		em:                 em,
-		evState:            em.State(),
-		nextLogIndex:       nextLogIndex,
-		previousChecksum:   previousChecksum,
-		currentFile:        currentFile,
-		log:                log,
-		nextLogIndexInFile: nextLogIndexInFile,
-		highestTermSeen:    highestTermSeen,
+		repo:             repo,
+		em:               em,
+		evState:          em.State(),
+		nextIndex:        nextIndex,
+		previousChecksum: previousChecksum,
+		currentFile:      currentFile,
+		log:              log,
+		nextIndexInFile:  nextIndexInFile,
+		highestTermSeen:  highestTermSeen,
 	}
 	return s, s.close, nil
 }
@@ -67,12 +67,12 @@ type State struct {
 	repo             *repository.Repository
 	em               *events.Store
 	evState          events.State
-	nextLogIndex     types.Index
+	nextIndex        types.Index
 	previousChecksum uint64
 
-	currentFile        *repository.File
-	log                []byte
-	nextLogIndexInFile types.Index
+	currentFile     *repository.File
+	log             []byte
+	nextIndexInFile types.Index
 
 	highestTermSeen rafttypes.Term
 }
@@ -116,17 +116,17 @@ func (s *State) VoteFor(candidate types.ServerID) (bool, error) {
 	return true, nil
 }
 
-// LastLogTerm returns the term of the last log entry in the state.
+// LastTerm returns the term of the last log entry in the state.
 // If the log is empty, it returns 0.
-func (s *State) LastLogTerm() rafttypes.Term {
+func (s *State) LastTerm() rafttypes.Term {
 	return s.repo.LastTerm()
 }
 
-// NextLogIndex returns the index of the next log entry.
+// NextIndex returns the index of the next log entry.
 // This is calculated based on the current length of the log.
 // It effectively points to the position where a new log entry would be appended.
-func (s *State) NextLogIndex() types.Index {
-	return s.nextLogIndex
+func (s *State) NextIndex() types.Index {
+	return s.nextIndex
 }
 
 // PreviousTerm returns term of previous log item.
@@ -146,37 +146,34 @@ func (s *State) AppendTerm() (rafttypes.Term, types.Index, error) {
 }
 
 // Validate validates the common point in log.
-func (s *State) Validate(
-	nextLogIndex types.Index,
-	lastLogTerm rafttypes.Term,
-) (rafttypes.Term, types.Index, error) {
-	if nextLogIndex == 0 {
-		return s.validate(nextLogIndex, lastLogTerm)
+func (s *State) Validate(nextIndex types.Index, lastTerm rafttypes.Term) (rafttypes.Term, types.Index, error) {
+	if nextIndex == 0 {
+		return s.validate(nextIndex, lastTerm)
 	}
-	if lastLogTerm == 0 {
+	if lastTerm == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
 
-	if nextLogIndex > s.nextLogIndex {
-		return s.PreviousTerm(s.nextLogIndex), s.nextLogIndex, nil
+	if nextIndex > s.nextIndex {
+		return s.PreviousTerm(s.nextIndex), s.nextIndex, nil
 	}
 
-	if s.PreviousTerm(nextLogIndex) == lastLogTerm {
-		return s.validate(nextLogIndex, lastLogTerm)
+	if s.PreviousTerm(nextIndex) == lastTerm {
+		return s.validate(nextIndex, lastTerm)
 	}
 
 	var err error
-	lastLogTerm, s.nextLogIndex, err = s.repo.RevertTerms(s.PreviousTerm(nextLogIndex) - 1)
+	lastTerm, s.nextIndex, err = s.repo.RevertTerms(s.PreviousTerm(nextIndex) - 1)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	s.previousChecksum, err = readChecksum(s.repo, s.nextLogIndex)
+	s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	return lastLogTerm, s.nextLogIndex, nil
+	return lastTerm, s.nextIndex, nil
 }
 
 // Append appends data to log.
@@ -195,49 +192,49 @@ func (s *State) Sync() (types.Index, error) {
 			return 0, err
 		}
 	}
-	return s.nextLogIndex, nil
+	return s.nextIndex, nil
 }
 
 func (s *State) validate(
-	nextLogIndex types.Index,
-	lastLogTerm rafttypes.Term,
+	nextIndex types.Index,
+	lastTerm rafttypes.Term,
 ) (_ rafttypes.Term, _ types.Index, retErr error) {
 	if s.evState.Term == 0 {
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if nextLogIndex > s.nextLogIndex {
+	if nextIndex > s.nextIndex {
 		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if nextLogIndex == 0 && lastLogTerm != 0 {
+	if nextIndex == 0 && lastTerm != 0 {
 		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if nextLogIndex != 0 && lastLogTerm == 0 {
+	if nextIndex != 0 && lastTerm == 0 {
 		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if s.PreviousTerm(nextLogIndex) != lastLogTerm {
+	if s.PreviousTerm(nextIndex) != lastTerm {
 		// FIXME (wojciech): This is not tested.
 		return 0, 0, errors.New("bug in protocol")
 	}
-	if nextLogIndex < s.nextLogIndex {
-		if s.PreviousTerm(nextLogIndex+1) == lastLogTerm {
+	if nextIndex < s.nextIndex {
+		if s.PreviousTerm(nextIndex+1) == lastTerm {
 			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
 		var err error
-		if _, s.nextLogIndex, err = s.repo.RevertTerms(lastLogTerm); err != nil {
+		if _, s.nextIndex, err = s.repo.RevertTerms(lastTerm); err != nil {
 			return 0, 0, err
 		}
 
-		s.previousChecksum, err = readChecksum(s.repo, s.nextLogIndex)
+		s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	return lastLogTerm, s.nextLogIndex, nil
+	return lastTerm, s.nextIndex, nil
 }
 
 func (s *State) appendTx(
@@ -300,7 +297,7 @@ func (s *State) appendTx(
 			}
 
 			var err error
-			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex)
+			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextIndex)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -308,7 +305,7 @@ func (s *State) appendTx(
 			if err != nil {
 				return 0, 0, err
 			}
-			s.nextLogIndexInFile = 0
+			s.nextIndexInFile = 0
 			s.highestTermSeen = rafttypes.Term(term)
 		case s.highestTermSeen == 0:
 			// FIXME (wojciech): This is not tested.
@@ -345,12 +342,12 @@ func (s *State) appendTx(
 		data = data[n1+size:]
 		s.previousChecksum = checksum
 	}
-	return s.repo.LastTerm(), s.nextLogIndex, nil
+	return s.repo.LastTerm(), s.nextIndex, nil
 }
 
 func (s *State) append(data []byte) error {
 	//nolint:nestif
-	if len(data) > len(s.log[s.nextLogIndexInFile:]) {
+	if len(data) > len(s.log[s.nextIndexInFile:]) {
 		if s.currentFile != nil {
 			if err := s.currentFile.Close(); err != nil {
 				return err
@@ -358,7 +355,7 @@ func (s *State) append(data []byte) error {
 		}
 
 		var err error
-		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex)
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex)
 		if err != nil {
 			return err
 		}
@@ -366,12 +363,12 @@ func (s *State) append(data []byte) error {
 		if err != nil {
 			return err
 		}
-		s.nextLogIndexInFile = 0
+		s.nextIndexInFile = 0
 	}
 
-	n := types.Index(copy(s.log[s.nextLogIndexInFile:], data))
-	s.nextLogIndexInFile += n
-	s.nextLogIndex += n
+	n := types.Index(copy(s.log[s.nextIndexInFile:], data))
+	s.nextIndexInFile += n
+	s.nextIndex += n
 
 	return nil
 }
@@ -418,12 +415,12 @@ func initialize(log []byte, previousChecksum uint64) (types.Index, uint64) {
 	}
 }
 
-func readChecksum(repo *repository.Repository, nextLogIndex types.Index) (uint64, error) {
-	if nextLogIndex == 0 {
+func readChecksum(repo *repository.Repository, nextIndex types.Index) (uint64, error) {
+	if nextIndex == 0 {
 		return 0, nil
 	}
 
-	file, err := repo.OpenByIndex(nextLogIndex - format.ChecksumSize)
+	file, err := repo.OpenByIndex(nextIndex - format.ChecksumSize)
 	if err != nil {
 		return 0, err
 	}

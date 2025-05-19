@@ -6,8 +6,8 @@ import (
 
 // InitRequest initializes tx stream.
 type InitRequest struct {
-	PartitionID  magmatypes.PartitionID
-	NextLogIndex magmatypes.Index
+	PartitionID magmatypes.PartitionID
+	NextIndex   magmatypes.Index
 }
 
 // InitResponse is a response to init request.

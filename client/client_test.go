@@ -1758,6 +1758,6 @@ func (tc testClient) Tx(txF func(tx *Tx) error) error {
 	}
 	txn.Commit()
 	tc.client.previousChecksum = previousChecksum
-	tc.client.nextLogIndex += types.Index(len(tx.Tx))
+	tc.client.nextIndex += types.Index(len(tx.Tx))
 	return nil
 }

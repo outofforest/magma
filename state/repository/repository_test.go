@@ -151,7 +151,7 @@ func TestCreateFollowingTerm(t *testing.T) {
 	requireT.Equal(&format.Header{
 		PreviousTerm:   1,
 		Term:           2,
-		NextLogIndex:   10,
+		NextIndex:      10,
 		HeaderChecksum: 2115352002467121528,
 	}, h)
 	requireT.Equal(bytes.Repeat([]byte{0x00}, int(maxHeaderSize-size)), data[size:maxHeaderSize])
@@ -170,7 +170,7 @@ func TestCreateFollowingTerm(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           2,
-				NextLogIndex:   10,
+				NextIndex:      10,
 				HeaderChecksum: 2115352002467121528,
 			},
 		},
@@ -204,7 +204,7 @@ func TestCreateHeader(t *testing.T) {
 	requireT.Equal(format.Header{
 		PreviousTerm:   0,
 		Term:           1,
-		NextLogIndex:   2,
+		NextIndex:      2,
 		HeaderChecksum: 11725894641885870814,
 	}, file.Header())
 
@@ -216,7 +216,7 @@ func TestCreateHeader(t *testing.T) {
 	requireT.Equal(format.Header{
 		PreviousTerm:   1,
 		Term:           2,
-		NextLogIndex:   3,
+		NextIndex:      3,
 		HeaderChecksum: 9639843743847120848,
 	}, file.Header())
 	requireT.NotNil(file)
@@ -247,10 +247,10 @@ func TestRevertTermsToEqual(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, err := r.RevertTerms(3)
+	lastTerm, nextIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(3, nextLogIndex)
+	requireT.EqualValues(3, nextIndex)
 
 	requireT.Equal([]fileInfo{
 		{
@@ -265,7 +265,7 @@ func TestRevertTermsToEqual(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextLogIndex:   1,
+				NextIndex:      1,
 				HeaderChecksum: 1229607450597664475,
 			},
 		},
@@ -274,7 +274,7 @@ func TestRevertTermsToEqual(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           3,
-				NextLogIndex:   2,
+				NextIndex:      2,
 				HeaderChecksum: 10839254553578776291,
 			},
 		},
@@ -304,10 +304,10 @@ func TestRevertTermsToLower(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, err := r.RevertTerms(3)
+	lastTerm, nextIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
-	requireT.EqualValues(3, nextLogIndex)
+	requireT.EqualValues(3, nextIndex)
 
 	requireT.Equal([]fileInfo{
 		{
@@ -322,7 +322,7 @@ func TestRevertTermsToLower(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           2,
-				NextLogIndex:   1,
+				NextIndex:      1,
 				HeaderChecksum: 15123016224832269261,
 			},
 		},
@@ -331,7 +331,7 @@ func TestRevertTermsToLower(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   2,
 				Term:           2,
-				NextLogIndex:   2,
+				NextIndex:      2,
 				HeaderChecksum: 10710426285935794252,
 			},
 		},
@@ -373,10 +373,10 @@ func TestRevertTermsAndCreate(t *testing.T) {
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	lastTerm, nextLogIndex, err := r.RevertTerms(3)
+	lastTerm, nextIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(2, nextLogIndex)
+	requireT.EqualValues(2, nextIndex)
 	requireT.EqualValues(3, r.nextFileIndex)
 
 	file, err = r.Create(5, 3)
@@ -397,7 +397,7 @@ func TestRevertTermsAndCreate(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextLogIndex:   1,
+				NextIndex:      1,
 				HeaderChecksum: 1229607450597664475,
 			},
 		},
@@ -406,7 +406,7 @@ func TestRevertTermsAndCreate(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextLogIndex:   3,
+				NextIndex:      3,
 				HeaderChecksum: 13274324415149675937,
 			},
 		},
@@ -428,10 +428,10 @@ func TestRevertTermsAndOpen(t *testing.T) {
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	lastTerm, nextLogIndex, err := r1.RevertTerms(3)
+	lastTerm, nextIndex, err := r1.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(2, nextLogIndex)
+	requireT.EqualValues(2, nextIndex)
 	requireT.EqualValues(3, r1.nextFileIndex)
 
 	file, err = r1.Create(5, 3)
@@ -454,7 +454,7 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextLogIndex:   1,
+				NextIndex:      1,
 				HeaderChecksum: 1229607450597664475,
 			},
 		},
@@ -463,7 +463,7 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextLogIndex:   3,
+				NextIndex:      3,
 				HeaderChecksum: 13274324415149675937,
 			},
 		},
@@ -482,7 +482,7 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextLogIndex:   1,
+				NextIndex:      1,
 				HeaderChecksum: 1229607450597664475,
 			},
 		},
@@ -491,7 +491,7 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextLogIndex:   3,
+				NextIndex:      3,
 				HeaderChecksum: 13274324415149675937,
 			},
 		},

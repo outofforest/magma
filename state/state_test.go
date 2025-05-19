@@ -134,25 +134,25 @@ func TestVoteFor(t *testing.T) {
 	requireT.False(granted)
 }
 
-func TestLastLogTerm(t *testing.T) {
+func TestLastTerm(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
 
 	s, _ := newState(t, "")
 
-	requireT.EqualValues(0, s.LastLogTerm())
+	requireT.EqualValues(0, s.LastTerm())
 
 	requireT.NoError(s.SetCurrentTerm(1))
 	appendLog(requireT, s, 0x01, 0x01)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	requireT.NoError(s.SetCurrentTerm(5))
 	appendLog(requireT, s, 0x01, 0x02, 0x01, 0x04)
-	requireT.EqualValues(4, s.LastLogTerm())
+	requireT.EqualValues(4, s.LastTerm())
 }
 
-func TestNextLogIndex(t *testing.T) {
+func TestNextIndex(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
@@ -160,15 +160,15 @@ func TestNextLogIndex(t *testing.T) {
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
 
-	requireT.EqualValues(0, s.NextLogIndex())
+	requireT.EqualValues(0, s.NextIndex())
 
 	appendLog(requireT, s, 0x01, 0x01)
 
-	requireT.EqualValues(10, s.NextLogIndex())
+	requireT.EqualValues(10, s.NextIndex())
 
 	appendLog(requireT, s, 0x01, 0x02, 0x02, 0x01, 0x00)
 
-	requireT.EqualValues(31, s.NextLogIndex())
+	requireT.EqualValues(31, s.NextIndex())
 }
 
 func TestPreviousTerm(t *testing.T) {
@@ -197,7 +197,7 @@ func TestPreviousTerm(t *testing.T) {
 	requireT.EqualValues(0, s.PreviousTerm(0))
 }
 
-func TestValidateErrorOnZeroNextLogIndex(t *testing.T) {
+func TestValidateErrorOnZeroNextIndex(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
@@ -210,10 +210,10 @@ func TestValidateErrorOnZeroNextLogIndex(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
-func TestValidateErrorOnZeroLastLogTerm(t *testing.T) {
+func TestValidateErrorOnZeroLastTerm(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
@@ -226,7 +226,7 @@ func TestValidateErrorOnZeroLastLogTerm(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestValidateErrorIfCurrentTermNotSet(t *testing.T) {
@@ -240,7 +240,7 @@ func TestValidateErrorIfCurrentTermNotSet(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestValidateErrorIfOverwrittenInTheMiddleOfTheTerm(t *testing.T) {
@@ -260,7 +260,7 @@ func TestValidateErrorIfOverwrittenInTheMiddleOfTheTerm(t *testing.T) {
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x0a, 0x01, 0x00, 0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Validate(11, 1)
 	requireT.Error(err)
@@ -279,7 +279,7 @@ func TestValidateNothingHappensIfPreviousIndexDoesNotExist1(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestValidateNothingHappensIfPreviousIndexDoesNotExist2(t *testing.T) {
@@ -296,7 +296,7 @@ func TestValidateNothingHappensIfPreviousIndexDoesNotExist2(t *testing.T) {
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Validate(11, 1)
 	requireT.NoError(err)
@@ -305,7 +305,7 @@ func TestValidateNothingHappensIfPreviousIndexDoesNotExist2(t *testing.T) {
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 }
 
 func TestValidateRevertWhenLastLogDoesNotMatch(t *testing.T) {
@@ -328,7 +328,7 @@ func TestValidateRevertWhenLastLogDoesNotMatch(t *testing.T) {
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -337,11 +337,11 @@ func TestValidateRevertWhenLastLogDoesNotMatch(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -367,7 +367,7 @@ func TestValidateRevertToNothing(t *testing.T) {
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -376,8 +376,8 @@ func TestValidateRevertToNothing(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 	requireT.Zero(s.previousChecksum)
 }
 
@@ -435,7 +435,7 @@ func TestAppendErrorIfCurrentTermNotSet(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorOnInvalidTxSize(t *testing.T) {
@@ -449,8 +449,8 @@ func TestAppendErrorOnInvalidTxSize(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 }
 
 func TestAppendErrorIfTxSizeIsTooLow(t *testing.T) {
@@ -464,7 +464,7 @@ func TestAppendErrorIfTxSizeIsTooLow(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -481,7 +481,7 @@ func TestAppendErrorIfTxSizeIsTooBig1(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -498,7 +498,7 @@ func TestAppendErrorIfTxSizeIsTooBig2(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(21, s.nextLogIndex)
+	requireT.EqualValues(21, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0xa, 0x1, 0x0, 0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6,
@@ -516,7 +516,7 @@ func TestAppendErrorIfTxSizeIsZero(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorOnInvalidTermNumber(t *testing.T) {
@@ -530,8 +530,8 @@ func TestAppendErrorOnInvalidTermNumber(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 }
 
 func TestAppendErrorOnMissingTerm(t *testing.T) {
@@ -545,7 +545,7 @@ func TestAppendErrorOnMissingTerm(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorOnTermNumberAboveCurrentTerm(t *testing.T) {
@@ -559,8 +559,8 @@ func TestAppendErrorOnTermNumberAboveCurrentTerm(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 }
 
 func TestAppendErrorOnNewZeroTerm(t *testing.T) {
@@ -574,7 +574,7 @@ func TestAppendErrorOnNewZeroTerm(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorIfSameTermCreatedInSameOperation(t *testing.T) {
@@ -588,7 +588,7 @@ func TestAppendErrorIfSameTermCreatedInSameOperation(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -605,17 +605,17 @@ func TestAppendErrorIfSameTermCreatedInNextOperation(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x01}, false, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -632,7 +632,7 @@ func TestAppendErrorIfLowerTermCreatedInSameOperation(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x02, 0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 	)
@@ -649,17 +649,17 @@ func TestAppendErrorIfLowerTermCreatedInNextOperation(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x02, 0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x01}, false, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x02, 0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 	)
@@ -676,29 +676,29 @@ func TestAppendErrorIfOverwrittenWithExistingHigherTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(30, nextIndex)
-	requireT.EqualValues(30, s.nextLogIndex)
+	requireT.EqualValues(30, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27,
 		0x9, 0x3, 0x5b, 0xfb, 0x94, 0xd1, 0xe7, 0x4f, 0xf3, 0xc0,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Validate(10, 1)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x03}, false, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -715,30 +715,30 @@ func TestAppendErrorIfOverwrittenWithExistingSameTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(30, nextIndex)
-	requireT.EqualValues(30, s.nextLogIndex)
+	requireT.EqualValues(30, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27,
 		0x9, 0x3, 0x5b, 0xfb, 0x94, 0xd1, 0xe7, 0x4f, 0xf3, 0xc0,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Validate(20, 2)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(20, nextIndex)
-	requireT.EqualValues(20, s.nextLogIndex)
+	requireT.EqualValues(20, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x03}, false, true)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(20, s.nextLogIndex)
+	requireT.EqualValues(20, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27,
@@ -756,7 +756,7 @@ func TestAppendErrorIfNoTerm(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorTermMarkNotAllowed1(t *testing.T) {
@@ -770,7 +770,7 @@ func TestAppendErrorTermMarkNotAllowed1(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorTermMarkNotAllowed2(t *testing.T) {
@@ -784,17 +784,17 @@ func TestAppendErrorTermMarkNotAllowed2(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x02}, false, false)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -811,24 +811,24 @@ func TestAppendErrorTermMarkNotAllowed3(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Validate(0, 0)
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x01, 0x02}, false, false)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorTermMarkNotAllowed4(t *testing.T) {
@@ -842,17 +842,17 @@ func TestAppendErrorTermMarkNotAllowed4(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{0x02, 0x00, 0x00, 0x01, 0x01}, false, false)
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(21, s.nextLogIndex)
+	requireT.EqualValues(21, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0xa, 0x0, 0x0, 0x2d, 0xd4, 0x3a, 0x37, 0x13, 0xde, 0x55, 0xd4,
@@ -871,7 +871,7 @@ func TestAppendErrorIfTermMarkExceedsTxSliceBoundary(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorIfTxExceedsTxSliceBoundary(t *testing.T) {
@@ -886,7 +886,7 @@ func TestAppendErrorIfTxExceedsTxSliceBoundary(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
@@ -903,7 +903,7 @@ func TestAppendErrorIfThereIsNoChecksum(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendErrorIfChecksumIsInvalid(t *testing.T) {
@@ -919,7 +919,7 @@ func TestAppendErrorIfChecksumIsInvalid(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 }
 
 func TestAppendIfTransactionIsTooBig(t *testing.T) {
@@ -939,7 +939,7 @@ func TestAppendIfTransactionIsTooBig(t *testing.T) {
 	requireT.Error(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 }
 
 func TestAppendNilOnEmptyLog1(t *testing.T) {
@@ -953,7 +953,7 @@ func TestAppendNilOnEmptyLog1(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
+	requireT.Zero(s.nextIndex)
 	requireT.Zero(s.previousChecksum)
 }
 
@@ -968,21 +968,21 @@ func TestAppendNilOnNonEmptyLog1(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append(nil, false, true)
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -999,11 +999,11 @@ func TestAppendOnEmptyOnlyTerm1(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -1020,11 +1020,11 @@ func TestAppendOnEmptyOnlyTerm2(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x02, 0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 	}), s.previousChecksum)
@@ -1041,12 +1041,12 @@ func TestAppendOnEmptyLogWithTerm1(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(21, nextIndex)
-	requireT.EqualValues(21, s.nextLogIndex)
+	requireT.EqualValues(21, s.nextIndex)
 	logEqual(requireT, s,
 		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0xa, 0x1, 0x0, 0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6,
 	}), s.previousChecksum)
@@ -1063,12 +1063,12 @@ func TestAppendOnEmptyLogWithTerm2(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(21, nextIndex)
-	requireT.EqualValues(21, s.nextLogIndex)
+	requireT.EqualValues(21, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x2, 0xb, 0x8c, 0x68, 0x5e, 0x86, 0x90, 0x91, 0x4b,
 		0xa, 0x1, 0x0, 0x39, 0xc9, 0xc0, 0x90, 0x51, 0x46, 0xe, 0xfa,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x39, 0xc9, 0xc0, 0x90, 0x51, 0x46, 0xe, 0xfa,
 	}), s.previousChecksum)
@@ -1099,8 +1099,8 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{
 		0x01, 0x01,
@@ -1109,12 +1109,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	}), s.previousChecksum)
@@ -1123,12 +1123,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	}), s.previousChecksum)
@@ -1139,13 +1139,13 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1154,13 +1154,13 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1169,13 +1169,13 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1184,11 +1184,11 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -1197,12 +1197,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(32, nextIndex)
-	requireT.EqualValues(32, s.nextLogIndex)
+	requireT.EqualValues(32, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	)
-	requireT.EqualValues(4, s.LastLogTerm())
+	requireT.EqualValues(4, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	}), s.previousChecksum)
@@ -1211,12 +1211,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(32, nextIndex)
-	requireT.EqualValues(32, s.nextLogIndex)
+	requireT.EqualValues(32, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	)
-	requireT.EqualValues(4, s.LastLogTerm())
+	requireT.EqualValues(4, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	}), s.previousChecksum)
@@ -1225,13 +1225,13 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(42, nextIndex)
-	requireT.EqualValues(42, s.nextLogIndex)
+	requireT.EqualValues(42, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 		0x9, 0x6, 0x6e, 0xca, 0xef, 0x69, 0x40, 0x18, 0x78, 0xb6,
 	)
-	requireT.EqualValues(6, s.LastLogTerm())
+	requireT.EqualValues(6, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x6e, 0xca, 0xef, 0x69, 0x40, 0x18, 0x78, 0xb6,
 	}), s.previousChecksum)
@@ -1240,11 +1240,11 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -1253,12 +1253,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	}), s.previousChecksum)
@@ -1267,12 +1267,12 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	}), s.previousChecksum)
@@ -1281,13 +1281,13 @@ func TestHappyPath(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(42, nextIndex)
-	requireT.EqualValues(42, s.nextLogIndex)
+	requireT.EqualValues(42, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 		0xa, 0x1, 0x1, 0x90, 0xe4, 0x40, 0xd4, 0xa8, 0x13, 0x3f, 0x4c,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x90, 0xe4, 0x40, 0xd4, 0xa8, 0x13, 0x3f, 0x4c,
 	}), s.previousChecksum)
@@ -1304,8 +1304,8 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Zero(lastTerm)
 	requireT.Zero(nextIndex)
-	requireT.Zero(s.nextLogIndex)
-	requireT.Zero(s.LastLogTerm())
+	requireT.Zero(s.nextIndex)
+	requireT.Zero(s.LastTerm())
 
 	lastTerm, nextIndex, err = s.Append([]byte{
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
@@ -1314,12 +1314,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	}), s.previousChecksum)
@@ -1328,12 +1328,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	}), s.previousChecksum)
@@ -1344,13 +1344,13 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1359,13 +1359,13 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1374,13 +1374,13 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(41, nextIndex)
-	requireT.EqualValues(41, s.nextLogIndex)
+	requireT.EqualValues(41, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 		0x9, 0x3, 0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	)
-	requireT.EqualValues(3, s.LastLogTerm())
+	requireT.EqualValues(3, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x18, 0x82, 0x23, 0x4e, 0xbf, 0x25, 0xeb, 0xab,
 	}), s.previousChecksum)
@@ -1389,11 +1389,11 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -1404,12 +1404,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(32, nextIndex)
-	requireT.EqualValues(32, s.nextLogIndex)
+	requireT.EqualValues(32, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	)
-	requireT.EqualValues(4, s.LastLogTerm())
+	requireT.EqualValues(4, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	}), s.previousChecksum)
@@ -1418,12 +1418,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(4, lastTerm)
 	requireT.EqualValues(32, nextIndex)
-	requireT.EqualValues(32, s.nextLogIndex)
+	requireT.EqualValues(32, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	)
-	requireT.EqualValues(4, s.LastLogTerm())
+	requireT.EqualValues(4, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 	}), s.previousChecksum)
@@ -1434,13 +1434,13 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(6, lastTerm)
 	requireT.EqualValues(42, nextIndex)
-	requireT.EqualValues(42, s.nextLogIndex)
+	requireT.EqualValues(42, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x4, 0x87, 0x46, 0x7e, 0x15, 0x79, 0x22, 0xb7, 0x50, 0xb, 0x0, 0x1, 0x2, 0xc5, 0x76, 0x79, 0xf3, 0xe3, 0x94, 0x45, 0xc,
 		0x9, 0x6, 0x6e, 0xca, 0xef, 0x69, 0x40, 0x18, 0x78, 0xb6,
 	)
-	requireT.EqualValues(6, s.LastLogTerm())
+	requireT.EqualValues(6, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x6e, 0xca, 0xef, 0x69, 0x40, 0x18, 0x78, 0xb6,
 	}), s.previousChecksum)
@@ -1449,11 +1449,11 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(1, lastTerm)
 	requireT.EqualValues(10, nextIndex)
-	requireT.EqualValues(10, s.nextLogIndex)
+	requireT.EqualValues(10, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	)
-	requireT.EqualValues(1, s.LastLogTerm())
+	requireT.EqualValues(1, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 	}), s.previousChecksum)
@@ -1464,12 +1464,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	}), s.previousChecksum)
@@ -1478,12 +1478,12 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 	}), s.previousChecksum)
@@ -1494,13 +1494,13 @@ func TestHappyPathWithChecksum(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(7, lastTerm)
 	requireT.EqualValues(42, nextIndex)
-	requireT.EqualValues(42, s.nextLogIndex)
+	requireT.EqualValues(42, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x7, 0xda, 0x6a, 0xaa, 0xbe, 0xe3, 0xf5, 0xc0, 0x0, 0xa, 0x0, 0x0, 0x44, 0x87, 0x30, 0xd8, 0x81, 0xcb, 0x53, 0x9f,
 		0xa, 0x1, 0x1, 0x90, 0xe4, 0x40, 0xd4, 0xa8, 0x13, 0x3f, 0x4c,
 	)
-	requireT.EqualValues(7, s.LastLogTerm())
+	requireT.EqualValues(7, s.LastTerm())
 	requireT.Equal(binary.LittleEndian.Uint64([]byte{
 		0x90, 0xe4, 0x40, 0xd4, 0xa8, 0x13, 0x3f, 0x4c,
 	}), s.previousChecksum)
@@ -1624,10 +1624,10 @@ func TestNew(t *testing.T) {
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(121, s2.CurrentTerm())
 	requireT.Equal(candidate, s2.evState.VotedFor)
-	requireT.EqualValues(120, s2.LastLogTerm())
+	requireT.EqualValues(120, s2.LastTerm())
 	requireT.EqualValues(120, s2.highestTermSeen)
-	requireT.EqualValues(1200, s2.NextLogIndex())
-	requireT.EqualValues(10, s2.nextLogIndexInFile)
+	requireT.EqualValues(1200, s2.NextIndex())
+	requireT.EqualValues(10, s2.nextIndexInFile)
 
 	lastTerm, nextIndex, err := s2.Append([]byte{0x02, 0x01, 0x00}, false, false)
 	requireT.NoError(err)
@@ -1664,10 +1664,10 @@ func TestNewWithTxExceedingPageCapacity(t *testing.T) {
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(s2.repo.PageCapacity()+10, s2.NextLogIndex())
-	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextLogIndexInFile)
+	requireT.EqualValues(s2.repo.PageCapacity()+10, s2.NextIndex())
+	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextIndexInFile)
 }
 
 func TestNewWithValidData(t *testing.T) {
@@ -1683,10 +1683,10 @@ func TestNewWithValidData(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.EqualValues(1, s1.CurrentTerm())
-	requireT.EqualValues(1, s1.LastLogTerm())
+	requireT.EqualValues(1, s1.LastTerm())
 	requireT.EqualValues(1, s1.highestTermSeen)
-	requireT.EqualValues(21, s1.NextLogIndex())
-	requireT.EqualValues(21, s1.nextLogIndexInFile)
+	requireT.EqualValues(21, s1.NextIndex())
+	requireT.EqualValues(21, s1.nextIndexInFile)
 
 	file, err := s1.repo.OpenCurrent()
 	requireT.NoError(err)
@@ -1720,10 +1720,10 @@ func TestNewWithInvalidChecksum(t *testing.T) {
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(10, s2.NextLogIndex())
-	requireT.EqualValues(10, s2.nextLogIndexInFile)
+	requireT.EqualValues(10, s2.NextIndex())
+	requireT.EqualValues(10, s2.nextIndexInFile)
 }
 
 func TestNewWithInvalidSize(t *testing.T) {
@@ -1749,10 +1749,10 @@ func TestNewWithInvalidSize(t *testing.T) {
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(10, s2.NextLogIndex())
-	requireT.EqualValues(10, s2.nextLogIndexInFile)
+	requireT.EqualValues(10, s2.NextIndex())
+	requireT.EqualValues(10, s2.nextIndexInFile)
 }
 
 func TestNewWithZeroSize(t *testing.T) {
@@ -1776,10 +1776,10 @@ func TestNewWithZeroSize(t *testing.T) {
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(10, s2.NextLogIndex())
-	requireT.EqualValues(10, s2.nextLogIndexInFile)
+	requireT.EqualValues(10, s2.NextIndex())
+	requireT.EqualValues(10, s2.nextIndexInFile)
 }
 
 func TestNewWithFullFile(t *testing.T) {
@@ -1800,10 +1800,10 @@ func TestNewWithFullFile(t *testing.T) {
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(s2.repo.PageCapacity(), s2.NextLogIndex())
-	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextLogIndexInFile)
+	requireT.EqualValues(s2.repo.PageCapacity(), s2.NextIndex())
+	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextIndexInFile)
 }
 
 func TestNewWithBrokenSize(t *testing.T) {
@@ -1822,16 +1822,16 @@ func TestNewWithBrokenSize(t *testing.T) {
 	_, _, err = s1.Append(b, false, false)
 	requireT.NoError(err)
 
-	requireT.EqualValues(s1.repo.PageCapacity()-1, s1.NextLogIndex())
-	requireT.EqualValues(s1.repo.PageCapacity()-1, s1.nextLogIndexInFile)
+	requireT.EqualValues(s1.repo.PageCapacity()-1, s1.NextIndex())
+	requireT.EqualValues(s1.repo.PageCapacity()-1, s1.nextIndexInFile)
 	s1.log[s1.repo.PageCapacity()-1] = 0x80
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
-	requireT.EqualValues(1, s2.LastLogTerm())
+	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
-	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.NextLogIndex())
-	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.nextLogIndexInFile)
+	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.NextIndex())
+	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.nextIndexInFile)
 }
 
 func TestSync(t *testing.T) {
@@ -1848,12 +1848,12 @@ func TestSync(t *testing.T) {
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(31, nextIndex)
-	requireT.EqualValues(31, s.nextLogIndex)
+	requireT.EqualValues(31, s.nextIndex)
 	logEqual(requireT, s,
 		0x9, 0x1, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
 		0x9, 0x2, 0x61, 0x5a, 0x5c, 0xd9, 0x98, 0x56, 0x91, 0x27, 0xa, 0x3, 0x4, 0xa7, 0xfb, 0xbf, 0x97, 0x4f, 0x3a, 0x2b, 0xc6,
 	)
-	requireT.EqualValues(2, s.LastLogTerm())
+	requireT.EqualValues(2, s.LastTerm())
 	syncedIndex, err := s.Sync()
 	requireT.NoError(err)
 	requireT.EqualValues(31, syncedIndex)
