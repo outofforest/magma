@@ -790,6 +790,76 @@ func TestEmptyTx(t *testing.T) {
 	}))
 }
 
+func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+
+	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
+	cluster.StartPeers(peer1, peer2, peer3)
+	cluster.StartClients(c)
+
+	acc1 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "FirstName0",
+		LastName:  "LastName0",
+	}
+	acc2 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "FirstName2",
+		LastName:  "LastName2",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(acc1)
+		return nil
+	}))
+
+	acc1.FirstName = "FirstName1"
+	acc1.LastName = "LastName1"
+
+	requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(acc1)
+		return nil
+	}))
+
+	cluster.StopPeers(peer1)
+	peer1.DropData()
+	cluster.StartPeers(peer1)
+
+	var err error
+	for range 5 {
+		err = tr.Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(acc2)
+			return nil
+		})
+		if err == nil {
+			break
+		}
+	}
+	requireT.NoError(err)
+
+	acc1.Revision = 2
+	acc2.Revision = 1
+
+	v := c.View()
+
+	acc, exists := client.Get[entities.Account](v, acc1.ID)
+	requireT.True(exists)
+	requireT.Equal(acc1, acc)
+
+	acc, exists = client.Get[entities.Account](v, acc2.ID)
+	requireT.True(exists)
+	requireT.Equal(acc2, acc)
+}
+
 func TestSplitAndResync(t *testing.T) {
 	t.Skip()
 	t.Parallel()

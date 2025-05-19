@@ -48,6 +48,13 @@ type Peer struct {
 	group       *parallel.Group
 }
 
+// DropData drops data directory of the peer.
+func (p *Peer) DropData() {
+	if err := os.RemoveAll(p.dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		p.requireT.NoError(err)
+	}
+}
+
 func (p *Peer) start(group *parallel.Group, config types.Config, p2pListener net.Listener) {
 	if p.group != nil {
 		p.requireT.Fail("peer is already running")

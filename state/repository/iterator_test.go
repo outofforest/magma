@@ -370,3 +370,50 @@ func TestIteratorHotEnd(t *testing.T) {
 
 	requireT.NoError(it.Close())
 }
+
+func TestIteratorWithNextIndexInTheFuture(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	r, _ := newRepo(t, "")
+
+	tp := NewTailProvider()
+	it := r.Iterator(tp, 3)
+
+	reader, size, err := it.Reader(false)
+	requireT.NoError(err)
+	requireT.Nil(reader)
+	requireT.Zero(size)
+
+	file, err := r.Create(1, 0, 0)
+	requireT.NoError(err)
+	data, err := file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x01, 0x02, 0x03})
+	requireT.NoError(file.Close())
+
+	tp.SetTail(3, 0)
+	reader, size, err = it.Reader(false)
+	requireT.NoError(err)
+	requireT.Nil(reader)
+	requireT.Zero(size)
+
+	file, err = r.Create(2, 3, 0)
+	requireT.NoError(err)
+	data, err = file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x04, 0x05})
+	requireT.NoError(file.Close())
+
+	tp.SetTail(5, 0)
+	reader, size, err = it.Reader(false)
+	requireT.NoError(err)
+	requireT.NotNil(reader)
+	requireT.EqualValues(2, size)
+	data, err = io.ReadAll(reader)
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x04, 0x05}, data)
+
+	requireT.NoError(it.Close())
+}
