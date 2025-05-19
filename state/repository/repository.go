@@ -110,11 +110,7 @@ func (r *Repository) PageCapacity() uint64 {
 }
 
 // Create creates new file.
-func (r *Repository) Create(
-	term types.Term,
-	nextLogIndex magmatypes.Index,
-	previousChecksum uint64,
-) (_ *File, retErr error) {
+func (r *Repository) Create(term types.Term, nextLogIndex magmatypes.Index) (_ *File, retErr error) {
 	if term == 0 {
 		return nil, errors.New("invalid term")
 	}
@@ -123,9 +119,8 @@ func (r *Repository) Create(
 	defer r.mu.Unlock()
 
 	header := &format.Header{
-		PreviousChecksum: previousChecksum,
-		Term:             term,
-		NextLogIndex:     nextLogIndex,
+		Term:         term,
+		NextLogIndex: nextLogIndex,
 	}
 
 	if len(r.files) > 0 {
@@ -213,7 +208,7 @@ func (r *Repository) OpenByIndex(index magmatypes.Index) (*File, error) {
 
 	for i := len(r.files) - 1; i >= 0; i-- {
 		if f := r.files[i]; f.Header.NextLogIndex <= index {
-			offset := uint64(f.Header.NextLogIndex - index)
+			offset := uint64(index - f.Header.NextLogIndex)
 			if offset >= r.pageSize-maxHeaderSize {
 				return nil, errors.New("index does not exist")
 			}
@@ -250,7 +245,7 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 }
 
 // RevertTerms reverts repository to previous term.
-func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index, uint64, error) {
+func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -258,12 +253,12 @@ func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index,
 		for i := len(r.files) - 1; i >= 0; i-- {
 			if h := r.files[i].Header; h.PreviousTerm <= term {
 				r.files = r.files[:i]
-				return h.PreviousTerm, h.NextLogIndex, h.PreviousChecksum, nil
+				return h.PreviousTerm, h.NextLogIndex, nil
 			}
 		}
 	}
 
-	return 0, 0, 0, errors.New("nothing to revert")
+	return 0, 0, errors.New("nothing to revert")
 }
 
 // LastTerm returns last stored term.

@@ -1,10 +1,5 @@
 package reactor
 
-// FIXME (wojciech): Adding new peers.
-// FIXME (wojciech): Preventing server from being a leader.
-// FIXME (wojciech): Rebalance reactors across servers.
-// FIXME (wojciech): Stop accepting client requests if there are too many uncommitted entries.
-
 import (
 	"github.com/pkg/errors"
 

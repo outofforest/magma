@@ -30,7 +30,6 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 
 	var log []byte
 	if currentFile != nil {
-		var err error
 		log, err = currentFile.Map()
 		if err != nil {
 			_ = currentFile.Close()
@@ -38,8 +37,14 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 		}
 
 		header := currentFile.Header()
+		prevChecksum, err := readChecksum(repo, header.NextLogIndex)
+		if err != nil {
+			_ = currentFile.Close()
+			return nil, nil, err
+		}
+
 		highestTermSeen = header.Term
-		nextLogIndexInFile, previousChecksum = initialize(log, header.PreviousChecksum)
+		nextLogIndexInFile, previousChecksum = initialize(log, prevChecksum)
 		nextLogIndex = header.NextLogIndex + nextLogIndexInFile
 	}
 
@@ -161,10 +166,16 @@ func (s *State) Validate(
 	}
 
 	var err error
-	lastLogTerm, s.nextLogIndex, s.previousChecksum, err = s.repo.RevertTerms(s.PreviousTerm(nextLogIndex) - 1)
+	lastLogTerm, s.nextLogIndex, err = s.repo.RevertTerms(s.PreviousTerm(nextLogIndex) - 1)
 	if err != nil {
 		return 0, 0, err
 	}
+
+	s.previousChecksum, err = readChecksum(s.repo, s.nextLogIndex)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	return lastLogTerm, s.nextLogIndex, nil
 }
 
@@ -216,7 +227,12 @@ func (s *State) validate(
 			return 0, 0, errors.New("bug in protocol")
 		}
 		var err error
-		if _, s.nextLogIndex, s.previousChecksum, err = s.repo.RevertTerms(lastLogTerm); err != nil {
+		if _, s.nextLogIndex, err = s.repo.RevertTerms(lastLogTerm); err != nil {
+			return 0, 0, err
+		}
+
+		s.previousChecksum, err = readChecksum(s.repo, s.nextLogIndex)
+		if err != nil {
 			return 0, 0, err
 		}
 	}
@@ -284,7 +300,7 @@ func (s *State) appendTx(
 			}
 
 			var err error
-			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex, s.previousChecksum)
+			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextLogIndex)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -322,7 +338,7 @@ func (s *State) appendTx(
 		copy(buf[n:], data[n1:n1+sizeWithoutChecksum])
 		copy(buf[len(buf)-8:], hashBuf[:])
 
-		if err := s.append(buf, s.previousChecksum); err != nil {
+		if err := s.append(buf); err != nil {
 			return 0, 0, err
 		}
 
@@ -332,7 +348,7 @@ func (s *State) appendTx(
 	return s.repo.LastTerm(), s.nextLogIndex, nil
 }
 
-func (s *State) append(data []byte, previousChecksum uint64) error {
+func (s *State) append(data []byte) error {
 	//nolint:nestif
 	if len(data) > len(s.log[s.nextLogIndexInFile:]) {
 		if s.currentFile != nil {
@@ -342,7 +358,7 @@ func (s *State) append(data []byte, previousChecksum uint64) error {
 		}
 
 		var err error
-		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex, previousChecksum)
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextLogIndex)
 		if err != nil {
 			return err
 		}
@@ -400,4 +416,23 @@ func initialize(log []byte, previousChecksum uint64) (types.Index, uint64) {
 			return index, previousChecksum
 		}
 	}
+}
+
+func readChecksum(repo *repository.Repository, nextLogIndex types.Index) (uint64, error) {
+	if nextLogIndex == 0 {
+		return 0, nil
+	}
+
+	file, err := repo.OpenByIndex(nextLogIndex - format.ChecksumSize)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	var rawChecksum [format.ChecksumSize]byte
+	if _, err := file.Reader().Read(rawChecksum[:]); err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	return binary.LittleEndian.Uint64(rawChecksum[:]), nil
 }
