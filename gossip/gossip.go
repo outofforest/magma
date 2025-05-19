@@ -302,7 +302,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				switch m := res.Message.(type) {
 				case *reactor.StartTransfer:
 					for _, peerID := range res.Recipients {
-						if p := peersL2P[peerID]; p.SendCh != nil {
+						if p := peersL2P[peerID]; p.SendCh != nil && p.Iterator == nil {
 							p.Iterator = pState.Repo.Iterator(pState.providerPeers, m.NextLogIndex)
 							peersL2P[peerID] = p
 							p.SendCh <- p.Iterator
@@ -310,7 +310,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 					}
 				default:
 					for _, peerID := range res.Recipients {
-						if p := peersL2P[peerID]; p.SendCh != nil {
+						if p := peersL2P[peerID]; p.SendCh != nil && p.Iterator == nil {
 							p.SendCh <- res.Message
 						}
 					}
