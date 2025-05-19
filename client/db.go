@@ -206,11 +206,16 @@ func backwardIterator[T any](v *View, index uint64, args ...any) func() (T, bool
 	}
 }
 
+type change struct {
+	Old *reflect.Value
+	New *reflect.Value
+}
+
 // Tx represents transaction.
 type Tx struct {
 	*View
 
-	changes map[memdb.ID]reflect.Value
+	changes map[memdb.ID]change
 }
 
 // Set sets object in transaction.
@@ -232,9 +237,19 @@ func (tx *Tx) Set(o any) {
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
-	if err := tx.tx.Insert(typeDef.TableID, &oPtrValue); err != nil {
+	old, err := tx.tx.Insert(typeDef.TableID, &oPtrValue)
+	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	tx.changes[id] = oPtrValue
+	if ch, exists := tx.changes[id]; exists {
+		ch.New = &oPtrValue
+		tx.changes[id] = ch
+		return
+	}
+
+	tx.changes[id] = change{
+		Old: old,
+		New: &oPtrValue,
+	}
 }
