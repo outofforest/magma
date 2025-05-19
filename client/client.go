@@ -93,16 +93,17 @@ func New(config Config) (*Client, error) {
 			return nil, errors.Errorf("double registration of object %s", t)
 		}
 
-		mID, err := config.Marshaller.ID(reflect.New(t).Interface())
+		msgID, err := config.Marshaller.ID(reflect.New(t).Interface())
 		if err != nil {
 			return nil, err
 		}
 
 		info := typeInfo{
 			Type:    t,
+			MsgID:   msgID,
 			TableID: uint64(tableID),
 		}
-		byID[mID] = info
+		byID[msgID] = info
 		byType[t] = info
 
 		table := []memdb.Index{}
@@ -217,12 +218,9 @@ func (c *Client) Run(ctx context.Context) error {
 
 						tx := c.db.Txn(true)
 						defer func() {
-							tx.Abort()
+							tx.Commit()
 						}()
 						commitCh := make(chan struct{})
-
-						checksum := c.previousChecksum
-						nextLogIndex := c.nextLogIndex
 
 						for {
 							m, err := conn.ReceiveProton(cMarshaller)
@@ -241,17 +239,17 @@ func (c *Client) Run(ctx context.Context) error {
 
 									length += uint64(len(txRaw))
 
-									checksum, err = c.applyTx(commitCh, checksum, tx, txRaw)
+									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw)
 									if err != nil {
+										tx.Abort()
 										return err
 									}
-									nextLogIndex += types.Index(len(txRaw))
+									c.previousChecksum = checksum
+									c.nextLogIndex += types.Index(len(txRaw))
 								}
 							case *gossipwire.HotEnd:
 								tx.Commit()
 								tx = c.db.Txn(true)
-								c.previousChecksum = checksum
-								c.nextLogIndex = nextLogIndex
 								close(commitCh)
 								commitCh = make(chan struct{})
 								c.applyHotEnd(triggerCh)
@@ -343,7 +341,7 @@ func (c *Client) View() *View {
 func (c *Client) NewTransactor() *Transactor {
 	return &Transactor{
 		client:  c,
-		changes: map[memdb.ID]reflect.Value{},
+		changes: map[memdb.ID]change{},
 	}
 }
 
@@ -460,7 +458,7 @@ func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retE
 	}
 
 	for _, e := range c.pendingEntities {
-		if err := tx.Insert(e.TableID, e.Entity); err != nil {
+		if _, err := tx.Insert(e.TableID, e.Entity); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -478,7 +476,7 @@ type txEnvelope struct {
 // Transactor builds and broadcasts transactions.
 type Transactor struct {
 	client       *Client
-	changes      map[memdb.ID]reflect.Value
+	changes      map[memdb.ID]change
 	previousTxID memdb.ID
 	buf          []byte
 }
@@ -515,7 +513,6 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 	defer pendingTx.tx.Abort()
 	defer txRecover(&retErr)
 
-	snapshot := t.client.db.Txn(false)
 	if err := txF(pendingTx); err != nil {
 		return txEnvelope{}, 0, err
 	}
@@ -550,34 +547,25 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 	}
 	i += metaSize
 
-	for _, v := range pendingTx.changes {
-		id, err := t.client.config.Marshaller.ID(v.Interface())
-		if err != nil {
-			return txEnvelope{}, 0, err
-		}
-
-		vv := v.Elem()
+	for _, ch := range pendingTx.changes {
+		vv := ch.New.Elem()
 		typeDef, exists := t.client.byType[vv.Type()]
 		if !exists {
 			return txEnvelope{}, 0, errors.Errorf("unknown type %s", vv.Type())
 		}
 
-		unsafeID := unsafeIDFromEntity(v)
-		old, err := snapshot.First(typeDef.TableID, memdbid.IndexID, unsafeID)
-		if err != nil {
-			return txEnvelope{}, 0, errors.WithStack(err)
-		}
+		unsafeID := unsafeIDFromEntity(*ch.New)
 
 		var oldV reflect.Value
-		if old == nil {
+		if ch.Old == nil {
 			oldV = reflect.New(typeDef.Type)
 			setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 		} else {
-			oldV = *old
+			oldV = *ch.Old
 		}
 
 		entityMeta := &wire.EntityMetadata{
-			MessageID: id,
+			MessageID: typeDef.MsgID,
 		}
 		copyMetaFromEntity(entityMeta, oldV)
 		entityMeta.Revision++
@@ -588,7 +576,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		}
 		i += entitySize
 
-		_, msgSize, err := t.client.config.Marshaller.MakePatch(v.Interface(), oldV.Interface(), t.buf[i:])
+		_, msgSize, err := t.client.config.Marshaller.MakePatch(ch.New.Interface(), oldV.Interface(), t.buf[i:])
 		if err != nil {
 			return txEnvelope{}, 0, err
 		}
@@ -669,5 +657,6 @@ func txRecover(err *error) {
 
 type typeInfo struct {
 	Type    reflect.Type
+	MsgID   uint64
 	TableID uint64
 }

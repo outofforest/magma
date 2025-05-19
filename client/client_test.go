@@ -12,6 +12,7 @@ import (
 
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/state/repository/format"
+	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/varuint64"
@@ -1757,5 +1758,6 @@ func (tc testClient) Tx(txF func(tx *Tx) error) error {
 	}
 	txn.Commit()
 	tc.client.previousChecksum = previousChecksum
+	tc.client.nextLogIndex += types.Index(len(tx.Tx))
 	return nil
 }
