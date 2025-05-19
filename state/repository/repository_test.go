@@ -193,6 +193,26 @@ func TestCreateFailsOnPastTerm(t *testing.T) {
 	requireT.Nil(file)
 }
 
+func TestCreateFailsOnPastNextIndex(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	r, _ := newRepo(t, "")
+
+	file, err := r.Create(1, 100)
+	requireT.NoError(err)
+	requireT.NotNil(file)
+	requireT.NoError(file.Close())
+
+	file, err = r.Create(1, 100)
+	requireT.Error(err)
+	requireT.Nil(file)
+
+	file, err = r.Create(1, 10)
+	requireT.Error(err)
+	requireT.Nil(file)
+}
+
 func TestCreateHeader(t *testing.T) {
 	t.Parallel()
 
@@ -223,92 +243,32 @@ func TestCreateHeader(t *testing.T) {
 	requireT.NoError(file.Close())
 }
 
-func TestRevertTermsToEqual(t *testing.T) {
-	t.Parallel()
+func TestRevert(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
 	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1)
+	file, err = r.Create(2, 4)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 2)
+	file, err = r.Create(2, 8)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3)
+	file, err = r.Create(5, 12)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4)
+	file, err = r.Create(5, 16)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-
-	lastTerm, nextIndex, err := r.RevertTerms(3)
-	requireT.NoError(err)
-	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(3, nextIndex)
-
-	requireT.Equal([]fileInfo{
-		{
-			Index: 0,
-			Header: &format.Header{
-				Term:           1,
-				HeaderChecksum: 11339396051936363247,
-			},
-		},
-		{
-			Index: 1,
-			Header: &format.Header{
-				PreviousTerm:   1,
-				Term:           3,
-				NextIndex:      1,
-				HeaderChecksum: 1229607450597664475,
-			},
-		},
-		{
-			Index: 2,
-			Header: &format.Header{
-				PreviousTerm:   3,
-				Term:           3,
-				NextIndex:      2,
-				HeaderChecksum: 10839254553578776291,
-			},
-		},
-	}, r.files)
-}
-
-func TestRevertTermsToLower(t *testing.T) {
-	requireT := require.New(t)
-	r, _ := newRepo(t, "")
-
-	file, err := r.Create(1, 0)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(2, 1)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(2, 2)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5)
+	file, err = r.Create(6, 20)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextIndex, err := r.RevertTerms(3)
-	requireT.NoError(err)
-	requireT.EqualValues(2, lastTerm)
-	requireT.EqualValues(3, nextIndex)
-
+	lastTerm := r.Revert(21)
+	requireT.EqualValues(6, lastTerm)
+	requireT.EqualValues(6, r.nextFileIndex)
 	requireT.Equal([]fileInfo{
 		{
 			Index: 0,
@@ -322,8 +282,8 @@ func TestRevertTermsToLower(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           2,
-				NextIndex:      1,
-				HeaderChecksum: 15123016224832269261,
+				NextIndex:      4,
+				HeaderChecksum: 6221781658810840391,
 			},
 		},
 		{
@@ -331,55 +291,176 @@ func TestRevertTermsToLower(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   2,
 				Term:           2,
-				NextIndex:      2,
-				HeaderChecksum: 10710426285935794252,
+				NextIndex:      8,
+				HeaderChecksum: 15625698895732335618,
+			},
+		},
+		{
+			Index: 3,
+			Header: &format.Header{
+				PreviousTerm:   2,
+				Term:           5,
+				NextIndex:      12,
+				HeaderChecksum: 6112322204271324775,
+			},
+		},
+		{
+			Index: 4,
+			Header: &format.Header{
+				PreviousTerm:   5,
+				Term:           5,
+				NextIndex:      16,
+				HeaderChecksum: 16849667337589248367,
+			},
+		},
+		{
+			Index: 5,
+			Header: &format.Header{
+				PreviousTerm:   5,
+				Term:           6,
+				NextIndex:      20,
+				HeaderChecksum: 15895387317041773886,
 			},
 		},
 	}, r.files)
+
+	lastTerm = r.Revert(20)
+	requireT.EqualValues(5, lastTerm)
+	requireT.EqualValues(6, r.nextFileIndex)
+	requireT.Equal([]fileInfo{
+		{
+			Index: 0,
+			Header: &format.Header{
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
+			},
+		},
+		{
+			Index: 1,
+			Header: &format.Header{
+				PreviousTerm:   1,
+				Term:           2,
+				NextIndex:      4,
+				HeaderChecksum: 6221781658810840391,
+			},
+		},
+		{
+			Index: 2,
+			Header: &format.Header{
+				PreviousTerm:   2,
+				Term:           2,
+				NextIndex:      8,
+				HeaderChecksum: 15625698895732335618,
+			},
+		},
+		{
+			Index: 3,
+			Header: &format.Header{
+				PreviousTerm:   2,
+				Term:           5,
+				NextIndex:      12,
+				HeaderChecksum: 6112322204271324775,
+			},
+		},
+		{
+			Index: 4,
+			Header: &format.Header{
+				PreviousTerm:   5,
+				Term:           5,
+				NextIndex:      16,
+				HeaderChecksum: 16849667337589248367,
+			},
+		},
+	}, r.files)
+
+	lastTerm = r.Revert(16)
+	requireT.EqualValues(5, lastTerm)
+	requireT.EqualValues(6, r.nextFileIndex)
+	requireT.Equal([]fileInfo{
+		{
+			Index: 0,
+			Header: &format.Header{
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
+			},
+		},
+		{
+			Index: 1,
+			Header: &format.Header{
+				PreviousTerm:   1,
+				Term:           2,
+				NextIndex:      4,
+				HeaderChecksum: 6221781658810840391,
+			},
+		},
+		{
+			Index: 2,
+			Header: &format.Header{
+				PreviousTerm:   2,
+				Term:           2,
+				NextIndex:      8,
+				HeaderChecksum: 15625698895732335618,
+			},
+		},
+		{
+			Index: 3,
+			Header: &format.Header{
+				PreviousTerm:   2,
+				Term:           5,
+				NextIndex:      12,
+				HeaderChecksum: 6112322204271324775,
+			},
+		},
+	}, r.files)
+
+	lastTerm = r.Revert(5)
+	requireT.EqualValues(2, lastTerm)
+	requireT.EqualValues(6, r.nextFileIndex)
+	requireT.Equal([]fileInfo{
+		{
+			Index: 0,
+			Header: &format.Header{
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
+			},
+		},
+		{
+			Index: 1,
+			Header: &format.Header{
+				PreviousTerm:   1,
+				Term:           2,
+				NextIndex:      4,
+				HeaderChecksum: 6221781658810840391,
+			},
+		},
+	}, r.files)
+
+	lastTerm = r.Revert(0)
+	requireT.EqualValues(0, lastTerm)
+	requireT.EqualValues(6, r.nextFileIndex)
+	requireT.Equal([]fileInfo{}, r.files)
 }
 
-func TestRevertTermsFailsIfEmpty(t *testing.T) {
-	requireT := require.New(t)
-	r, _ := newRepo(t, "")
-
-	_, _, err := r.RevertTerms(1)
-	requireT.Error(err)
-}
-
-func TestRevertTermsFailsIfNothingToRevert(t *testing.T) {
+func TestRevertAndCreate(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
 	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-
-	_, _, err = r.RevertTerms(1)
-	requireT.Error(err)
-}
-
-func TestRevertTermsAndCreate(t *testing.T) {
-	requireT := require.New(t)
-	r, _ := newRepo(t, "")
-
-	file, err := r.Create(1, 0)
+	file, err = r.Create(3, 4)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1)
-	requireT.NoError(err)
-	requireT.NoError(file.Close())
-	file, err = r.Create(4, 2)
+	file, err = r.Create(4, 8)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	lastTerm, nextIndex, err := r.RevertTerms(3)
-	requireT.NoError(err)
+	lastTerm := r.Revert(5)
 	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(2, nextIndex)
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	file, err = r.Create(5, 3)
+	file, err = r.Create(5, 16)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r.nextFileIndex)
@@ -397,8 +478,8 @@ func TestRevertTermsAndCreate(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextIndex:      1,
-				HeaderChecksum: 1229607450597664475,
+				NextIndex:      4,
+				HeaderChecksum: 13099147573018155347,
 			},
 		},
 		{
@@ -406,35 +487,33 @@ func TestRevertTermsAndCreate(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextIndex:      3,
-				HeaderChecksum: 13274324415149675937,
+				NextIndex:      16,
+				HeaderChecksum: 6815100597312017575,
 			},
 		},
 	}, r.files)
 }
 
-func TestRevertTermsAndOpen(t *testing.T) {
+func TestRevertAndOpen(t *testing.T) {
 	requireT := require.New(t)
 	r1, dir := newRepo(t, "")
 
 	file, err := r1.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(3, 1)
+	file, err = r1.Create(3, 4)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(4, 2)
+	file, err = r1.Create(4, 8)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	lastTerm, nextIndex, err := r1.RevertTerms(3)
-	requireT.NoError(err)
+	lastTerm := r1.Revert(5)
 	requireT.EqualValues(3, lastTerm)
-	requireT.EqualValues(2, nextIndex)
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	file, err = r1.Create(5, 3)
+	file, err = r1.Create(5, 16)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r1.nextFileIndex)
@@ -454,8 +533,8 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextIndex:      1,
-				HeaderChecksum: 1229607450597664475,
+				NextIndex:      4,
+				HeaderChecksum: 13099147573018155347,
 			},
 		},
 		{
@@ -463,8 +542,8 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextIndex:      3,
-				HeaderChecksum: 13274324415149675937,
+				NextIndex:      16,
+				HeaderChecksum: 6815100597312017575,
 			},
 		},
 	}, r2.files)
@@ -482,8 +561,8 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   1,
 				Term:           3,
-				NextIndex:      1,
-				HeaderChecksum: 1229607450597664475,
+				NextIndex:      4,
+				HeaderChecksum: 13099147573018155347,
 			},
 		},
 		{
@@ -491,11 +570,11 @@ func TestRevertTermsAndOpen(t *testing.T) {
 			Header: &format.Header{
 				PreviousTerm:   3,
 				Term:           5,
-				NextIndex:      3,
-				HeaderChecksum: 13274324415149675937,
+				NextIndex:      16,
+				HeaderChecksum: 6815100597312017575,
 			},
 		},
-	}, r2.files)
+	}, r1.files)
 }
 
 func TestLastTerm(t *testing.T) {
@@ -511,7 +590,7 @@ func TestLastTerm(t *testing.T) {
 
 	requireT.EqualValues(1, r.LastTerm())
 
-	file, err = r.Create(3, 0)
+	file, err = r.Create(3, 1)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -531,36 +610,108 @@ func TestPreviousTerm(t *testing.T) {
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	requireT.Zero(r.PreviousTerm(0))
-	requireT.EqualValues(1, r.PreviousTerm(1))
-	requireT.EqualValues(1, r.PreviousTerm(100))
+	term, nextIndex := r.PreviousTerm(0)
+	requireT.Zero(term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(1)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(100)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
 
 	file, err = r.Create(2, 50)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	requireT.Zero(r.PreviousTerm(0))
-	requireT.EqualValues(1, r.PreviousTerm(1))
-	requireT.EqualValues(1, r.PreviousTerm(49))
-	requireT.EqualValues(1, r.PreviousTerm(50))
-	requireT.EqualValues(2, r.PreviousTerm(51))
-	requireT.EqualValues(2, r.PreviousTerm(100))
+	term, nextIndex = r.PreviousTerm(0)
+	requireT.Zero(term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(1)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(49)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(50)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(51)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(100)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(200)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
 
-	file, err = r.Create(4, 100)
+	file, err = r.Create(2, 100)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	requireT.Zero(r.PreviousTerm(0))
-	requireT.EqualValues(1, r.PreviousTerm(1))
-	requireT.EqualValues(1, r.PreviousTerm(49))
-	requireT.EqualValues(1, r.PreviousTerm(50))
-	requireT.EqualValues(2, r.PreviousTerm(51))
-	requireT.EqualValues(2, r.PreviousTerm(99))
-	requireT.EqualValues(2, r.PreviousTerm(100))
-	requireT.EqualValues(4, r.PreviousTerm(101))
-	requireT.EqualValues(4, r.PreviousTerm(200))
+	term, nextIndex = r.PreviousTerm(0)
+	requireT.Zero(term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(1)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(49)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(50)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(51)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(99)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(100)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(200)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+
+	file, err = r.Create(4, 150)
+	requireT.NoError(err)
+	requireT.NotNil(file)
+	requireT.NoError(file.Close())
+
+	term, nextIndex = r.PreviousTerm(0)
+	requireT.Zero(term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(1)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(49)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(50)
+	requireT.EqualValues(1, term)
+	requireT.Zero(nextIndex)
+	term, nextIndex = r.PreviousTerm(51)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(99)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(100)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(150)
+	requireT.EqualValues(2, term)
+	requireT.EqualValues(50, nextIndex)
+	term, nextIndex = r.PreviousTerm(151)
+	requireT.EqualValues(4, term)
+	requireT.EqualValues(150, nextIndex)
+	term, nextIndex = r.PreviousTerm(200)
+	requireT.EqualValues(4, term)
+	requireT.EqualValues(150, nextIndex)
 }
 
 func TestOpenCurrent(t *testing.T) {
@@ -571,7 +722,7 @@ func TestOpenCurrent(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 0)
+	file, err = r.Create(3, 1)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NotNil(file)
@@ -584,9 +735,10 @@ func TestOpenCurrent(t *testing.T) {
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.Equal(format.Header{
+		NextIndex:      1,
 		PreviousTerm:   1,
 		Term:           3,
-		HeaderChecksum: 13861199811570477881,
+		HeaderChecksum: 1229607450597664475,
 	}, file.Header())
 
 	var b [3]byte

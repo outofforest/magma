@@ -65,9 +65,10 @@ func TestLeaderSetup(t *testing.T) {
 			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:      3,
-			NextIndex: 53,
-			LastTerm:  3,
+			Term:           3,
+			NextIndex:      53,
+			LastTerm:       3,
+			TermStartIndex: 43,
 		},
 	}, result)
 	requireT.EqualValues(43, r.indexTermStarted)
@@ -1027,7 +1028,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 	))
 }
 
-func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
+func TestLeaderApplyLogSyncResponseNextIndexEqualsTermStartIndex(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1065,9 +1066,10 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:      5,
-			NextIndex: 42,
-			LastTerm:  2,
+			Term:           5,
+			NextIndex:      42,
+			LastTerm:       2,
+			TermStartIndex: 21,
 		},
 	}, result)
 	requireT.EqualValues(42, r.nextIndex[peer1ID])
@@ -1492,9 +1494,10 @@ func TestLeaderApplyActivePeerConnected(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:      5,
-			NextIndex: 94,
-			LastTerm:  5,
+			Term:           5,
+			NextIndex:      94,
+			LastTerm:       5,
+			TermStartIndex: 84,
 		},
 	}, result)
 	requireT.Equal(serverID, r.leaderID)
@@ -1560,9 +1563,10 @@ func TestLeaderApplyPassivePeerConnected(t *testing.T) {
 			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:      5,
-			NextIndex: 94,
-			LastTerm:  5,
+			Term:           5,
+			NextIndex:      94,
+			LastTerm:       5,
+			TermStartIndex: 84,
 		},
 	}, result)
 	requireT.Equal(serverID, r.leaderID)

@@ -228,10 +228,12 @@ func (r *Reactor) applyLogSyncResponse(
 	}
 
 	r.nextIndex[peerID] = m.NextIndex
+	lastTerm, termStartIndex := r.state.PreviousTerm(m.NextIndex)
 	req := &types.LogSyncRequest{
-		Term:      r.state.CurrentTerm(),
-		NextIndex: m.NextIndex,
-		LastTerm:  r.state.PreviousTerm(m.NextIndex),
+		Term:           r.state.CurrentTerm(),
+		NextIndex:      m.NextIndex,
+		LastTerm:       lastTerm,
+		TermStartIndex: termStartIndex,
 	}
 
 	// We send no logs until a common point is found.
@@ -489,10 +491,12 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 }
 
 func (r *Reactor) newLogSyncRequest() *types.LogSyncRequest {
+	lastTerm, termStartIndex := r.state.PreviousTerm(r.commitInfo.NextIndex)
 	return &types.LogSyncRequest{
-		Term:      r.state.CurrentTerm(),
-		NextIndex: r.commitInfo.NextIndex,
-		LastTerm:  r.lastTerm,
+		Term:           r.state.CurrentTerm(),
+		NextIndex:      r.commitInfo.NextIndex,
+		LastTerm:       lastTerm,
+		TermStartIndex: termStartIndex,
 	}
 }
 
@@ -500,10 +504,13 @@ func (r *Reactor) handleLogSyncRequest(
 	peerID magmatypes.ServerID,
 	req *types.LogSyncRequest,
 ) (*types.LogSyncResponse, error) {
+	if req.NextIndex > 0 && req.NextIndex == req.TermStartIndex {
+		return nil, errors.New("bug in protocol")
+	}
+
 	resp := &types.LogSyncResponse{
 		Term:      r.state.CurrentTerm(),
 		NextIndex: r.commitInfo.NextIndex,
-		SyncIndex: r.syncedCount,
 	}
 	if req.Term < r.state.CurrentTerm() {
 		return resp, nil
@@ -512,26 +519,36 @@ func (r *Reactor) handleLogSyncRequest(
 		return nil, errors.New("bug in protocol")
 	}
 
-	var err error
-	r.lastTerm, r.commitInfo.NextIndex, err = r.state.Validate(req.NextIndex, req.LastTerm)
+	lastTerm, nextIndex, ready, err := r.state.Validate(req.LastTerm, req.NextIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	if r.commitInfo.NextIndex < r.syncedCount {
-		r.syncedCount = r.commitInfo.NextIndex
-	}
-	if req.NextIndex < r.syncedCount {
-		r.syncedCount = req.NextIndex
-	}
-	if req.NextIndex == r.commitInfo.NextIndex {
+	switch {
+	case ready:
+		if nextIndex < r.commitInfo.CommittedCount {
+			return nil, errors.New("bug in protocol")
+		}
+
+		r.commitInfo.NextIndex = nextIndex
+		r.lastTerm = lastTerm
 		r.leaderID = peerID
+
+		if r.commitInfo.NextIndex < r.syncedCount {
+			r.syncedCount = r.commitInfo.NextIndex
+		}
+		if req.NextIndex < r.syncedCount {
+			r.syncedCount = req.NextIndex
+		}
+
+		resp.NextIndex = r.commitInfo.NextIndex
+		resp.SyncIndex = r.syncedCount
+	case r.commitInfo.NextIndex >= req.NextIndex:
+		resp.NextIndex = req.TermStartIndex
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
 
-	resp.SyncIndex = r.syncedCount
-	resp.NextIndex = r.commitInfo.NextIndex
 	return resp, nil
 }
 

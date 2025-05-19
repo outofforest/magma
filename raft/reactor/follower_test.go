@@ -485,7 +485,7 @@ func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 	))
 }
 
-func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
+func TestFollowerLogSyncRequestTermMismatch(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -501,61 +501,10 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
 	r.syncedCount = 43
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:      4,
-		NextIndex: 43,
-		LastTerm:  3,
-	})
-	requireT.NoError(err)
-	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: magmatypes.ZeroServerID,
-		CommitInfo: types.CommitInfo{
-			NextIndex:      21,
-			CommittedCount: 0,
-		},
-		Channel: ChannelL2P,
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Message: &types.LogSyncResponse{
-			Term:      4,
-			NextIndex: 21,
-			SyncIndex: 21,
-		},
-	}, result)
-	requireT.EqualValues(1, r.ignoreElectionTick)
-	requireT.EqualValues(21, r.syncedCount)
-
-	requireT.EqualValues(4, s.CurrentTerm())
-
-	txb = newTxBuilder()
-	logEqual(requireT, dir, txs(
-		txb(0x01), txb(0x01, 0x00),
-	))
-}
-
-func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
-	requireT := require.New(t)
-	s, dir := newState(t, "")
-	requireT.NoError(s.SetCurrentTerm(3))
-
-	txb := newTxBuilder()
-	_, _, err := s.Append(txs(
-		txb(0x01), txb(0x01, 0x01),
-		txb(0x02), txb(0x02, 0x02, 0x02),
-		txb(0x03), txb(0x02, 0x03, 0x03),
-	), true, true)
-	requireT.NoError(err)
-
-	r := newReactor(s)
-
-	// First time.
-
-	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:      5,
-		NextIndex: 62,
-		LastTerm:  4,
+		Term:           4,
+		NextIndex:      43,
+		LastTerm:       3,
+		TermStartIndex: 21,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -571,52 +520,19 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:      5,
-			NextIndex: 43,
-		},
-	}, result)
-	requireT.EqualValues(2, r.lastTerm)
-
-	requireT.EqualValues(5, s.CurrentTerm())
-
-	txb = newTxBuilder()
-	logEqual(requireT, dir, txs(
-		txb(0x01), txb(0x01, 0x01),
-		txb(0x02), txb(0x02, 0x02, 0x02),
-	))
-
-	// Second time.
-
-	result, err = r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:      6,
-		NextIndex: 22,
-		LastTerm:  3,
-	})
-	requireT.NoError(err)
-	requireT.Equal(types.RoleFollower, r.role)
-	requireT.Equal(Result{
-		Role:     types.RoleFollower,
-		LeaderID: magmatypes.ZeroServerID,
-		CommitInfo: types.CommitInfo{
-			NextIndex:      21,
-			CommittedCount: 0,
-		},
-		Channel: ChannelL2P,
-		Recipients: []magmatypes.ServerID{
-			peer1ID,
-		},
-		Message: &types.LogSyncResponse{
-			Term:      6,
+			Term:      4,
 			NextIndex: 21,
+			SyncIndex: 0,
 		},
 	}, result)
-	requireT.EqualValues(1, r.lastTerm)
+	requireT.EqualValues(1, r.ignoreElectionTick)
+	requireT.EqualValues(43, r.syncedCount)
 
-	requireT.EqualValues(6, s.CurrentTerm())
+	requireT.EqualValues(4, s.CurrentTerm())
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(
-		txb(0x01), txb(0x01, 0x01),
+		txb(0x01), txb(0x01, 0x00),
 	))
 }
 
@@ -864,6 +780,28 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedC
 		txb(0x01), txb(0x01, 0x00),
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	))
+}
+
+func TestFollowerLogSyncRequestErrorIfNextIndexEquals(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(2))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x01),
+		txb(0x02),
+	), true, true)
+	requireT.NoError(err)
+	r := newReactor(s)
+
+	_, err = r.Apply(peer1ID, &types.LogSyncRequest{
+		Term:           4,
+		NextIndex:      10,
+		LastTerm:       3,
+		TermStartIndex: 10,
+	})
+	requireT.Error(err)
 }
 
 func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommittedCount(t *testing.T) {
