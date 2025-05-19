@@ -132,20 +132,24 @@ func New(config Config) (*Client, error) {
 	}
 
 	return &Client{
-		config:  config,
-		txCh:    make(chan txEnvelope),
-		metaM:   metaM,
-		doneCh:  make(chan struct{}),
-		bufSize: 10 * (config.MaxMessageSize + varuint64.MaxSize),
-		byID:    byID,
-		byType:  byType,
-		// Taking snapshot is a funny way of saying that we want to disable change tracking mechanism.
-		db:               db.Snapshot(),
+		config:           config,
+		txCh:             make(chan txEnvelope),
+		metaM:            metaM,
+		doneCh:           make(chan struct{}),
+		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
+		byID:             byID,
+		byType:           byType,
+		db:               db,
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
 		readyCh:          make(chan struct{}),
-		awaitedTxs:       map[memdb.ID]chan<- error{},
+		awaitedTxs:       map[memdb.ID]chan<- any{},
 	}, nil
+}
+
+type pendingEntity struct {
+	TableID uint64
+	Entity  *reflect.Value
 }
 
 // Client connects to magma network, receives log updates and sends transactions.
@@ -169,7 +173,9 @@ type Client struct {
 	firstHotEnd      bool
 
 	mu         sync.Mutex
-	awaitedTxs map[memdb.ID]chan<- error
+	awaitedTxs map[memdb.ID]chan<- any
+
+	pendingEntities []pendingEntity
 }
 
 // Run runs client.
@@ -209,6 +215,15 @@ func (c *Client) Run(ctx context.Context) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
 
+						tx := c.db.Txn(true)
+						defer func() {
+							tx.Abort()
+						}()
+						commitCh := make(chan struct{})
+
+						checksum := c.previousChecksum
+						nextLogIndex := c.nextLogIndex
+
 						for {
 							m, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
@@ -226,11 +241,19 @@ func (c *Client) Run(ctx context.Context) error {
 
 									length += uint64(len(txRaw))
 
-									if err := c.applyTx(txRaw); err != nil {
+									checksum, err = c.applyTx(commitCh, checksum, tx, txRaw)
+									if err != nil {
 										return err
 									}
+									nextLogIndex += types.Index(len(txRaw))
 								}
 							case *gossipwire.HotEnd:
+								tx.Commit()
+								tx = c.db.Txn(true)
+								c.previousChecksum = checksum
+								c.nextLogIndex = nextLogIndex
+								close(commitCh)
+								commitCh = make(chan struct{})
 								c.applyHotEnd(triggerCh)
 							default:
 								return errors.Errorf("unexpected message %T", msg)
@@ -341,18 +364,22 @@ func (c *Client) applyHotEnd(triggerCh chan struct{}) {
 	}
 }
 
-func (c *Client) applyTx(txRaw []byte) error {
-	txTotalLen := types.Index(len(txRaw))
+func (c *Client) applyTx(
+	commitCh <-chan struct{},
+	previousChecksum uint64,
+	tx *memdb.Txn,
+	txRaw []byte,
+) (uint64, error) {
 	txLen, n := varuint64.Parse(txRaw)
 
 	if txLen < format.ChecksumSize {
-		return errors.New("unexpected tx size")
+		return 0, errors.New("unexpected tx size")
 	}
 
 	i := len(txRaw) - format.ChecksumSize
-	checksum := xxh3.HashSeed(txRaw[:i], c.previousChecksum)
+	checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
 	if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-		return errors.New("tx checksum mismatch")
+		return 0, errors.New("tx checksum mismatch")
 	}
 
 	txLen -= format.ChecksumSize
@@ -360,45 +387,39 @@ func (c *Client) applyTx(txRaw []byte) error {
 
 	if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
 		// This is a term mark. Ignore.
-		c.previousChecksum = checksum
-		c.nextLogIndex += txTotalLen
-		return nil
+		return checksum, nil
 	}
 
 	metaID, n := varuint64.Parse(txRaw)
 	metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
 	if err != nil {
-		return err
+		return 0, err
 	}
 	meta := metaAny.(*wire.TxMetadata)
 
-	err = c.storeTx(meta.EntityMetadataID, txRaw[n+metaSize:])
+	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:])
 	if err != nil && !errors.Is(err, ErrOutdatedTx) {
-		return err
+		return 0, err
 	}
-
-	c.previousChecksum = checksum
-	c.nextLogIndex += txTotalLen
 
 	c.mu.Lock()
 	receivedCh := c.awaitedTxs[meta.ID]
-	if receivedCh != nil {
-		delete(c.awaitedTxs, meta.ID)
-		receivedCh <- err
-	}
+	delete(c.awaitedTxs, meta.ID)
 	c.mu.Unlock()
 
-	return nil
+	if receivedCh != nil {
+		if err != nil {
+			receivedCh <- err
+		} else {
+			receivedCh <- commitCh
+		}
+	}
+
+	return checksum, nil
 }
 
-func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
-	tx := c.db.Txn(true)
-	defer func() {
-		if retErr != nil {
-			tx.Abort()
-		}
-	}()
-
+func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retErr error) {
+	c.pendingEntities = c.pendingEntities[:0]
 	for len(txRaw) > 0 {
 		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
 		if err != nil {
@@ -423,7 +444,6 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 		} else {
 			oV2 := *o
 			if entityMeta.Revision <= revisionFromEntity(oV2) {
-				tx.Abort()
 				return ErrOutdatedTx
 			}
 			oV.Elem().Set(oV2.Elem())
@@ -435,20 +455,23 @@ func (c *Client) storeTx(entityMetaID uint64, txRaw []byte) (retErr error) {
 			return err
 		}
 
-		if err := tx.Insert(typeDef.TableID, &oV); err != nil {
-			return errors.WithStack(err)
-		}
-
+		c.pendingEntities = append(c.pendingEntities, pendingEntity{TableID: typeDef.TableID, Entity: &oV})
 		txRaw = txRaw[entityMetaSize+msgSize:]
 	}
-	tx.Commit()
+
+	for _, e := range c.pendingEntities {
+		if err := tx.Insert(e.TableID, e.Entity); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	return nil
 }
 
 type txEnvelope struct {
 	ID           memdb.ID
 	Tx           []byte
-	ReceivedCh   chan error
+	ReceivedCh   chan any
 	PreviousTxID memdb.ID
 }
 
@@ -583,7 +606,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 	return txEnvelope{
 		ID:           txID,
 		Tx:           t.buf[varuint64.MaxSize-n : i],
-		ReceivedCh:   make(chan error, 1),
+		ReceivedCh:   make(chan any, 1),
 		PreviousTxID: previousTxID,
 	}, 0, nil
 }
@@ -612,8 +635,25 @@ func (t *Transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		return errors.New("client closed")
 	case <-time.After(t.client.config.AwaitTimeout):
 		return ErrAwaitTimeout
-	case err := <-tx.ReceivedCh:
-		return err
+	case result := <-tx.ReceivedCh:
+		switch r := result.(type) {
+		case error:
+			return r
+		case <-chan struct{}:
+			select {
+			case <-ctx.Done():
+				return errors.WithStack(ctx.Err())
+			case <-t.client.doneCh:
+				if ctx.Err() != nil {
+					return errors.WithStack(ctx.Err())
+				}
+				return errors.New("client closed")
+			case <-r:
+				return nil
+			}
+		default:
+			panic("impossible situation")
+		}
 	}
 }
 
