@@ -708,6 +708,15 @@ func TestTimeouts(t *testing.T) {
 
 	cluster.StopPeers(peer1)
 
+	requireT.Error(tr.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Account{
+			ID:        accountID,
+			FirstName: "FirstName",
+			LastName:  "LastName",
+		})
+		return nil
+	}))
+
 	requireT.ErrorIs(tr.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{
 			ID:        accountID,
