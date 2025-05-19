@@ -12,6 +12,6 @@ const ChecksumSize = 8
 type Header struct {
 	PreviousTerm   types.Term
 	Term           types.Term
-	NextLogIndex   magmatypes.Index
+	NextIndex      magmatypes.Index
 	HeaderChecksum uint64
 }

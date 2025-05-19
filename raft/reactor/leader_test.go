@@ -33,9 +33,9 @@ func TestLeaderSetup(t *testing.T) {
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
 
-	requireT.EqualValues(2, r.lastLogTerm)
+	requireT.EqualValues(2, r.lastTerm)
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   43,
+		NextIndex:      43,
 		CommittedCount: 2,
 		HotEndIndex:    0,
 	}
@@ -52,7 +52,7 @@ func TestLeaderSetup(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   53,
+			NextIndex:      53,
 			CommittedCount: 2,
 			HotEndIndex:    53,
 		},
@@ -65,9 +65,9 @@ func TestLeaderSetup(t *testing.T) {
 			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:         3,
-			NextLogIndex: 53,
-			LastLogTerm:  3,
+			Term:      3,
+			NextIndex: 53,
+			LastTerm:  3,
 		},
 	}, result)
 	requireT.EqualValues(43, r.indexTermStarted)
@@ -85,7 +85,7 @@ func TestLeaderSetup(t *testing.T) {
 		peer4ID: 0,
 	}, r.matchIndex)
 
-	requireT.EqualValues(3, r.lastLogTerm)
+	requireT.EqualValues(3, r.lastTerm)
 
 	requireT.EqualValues(3, s.CurrentTerm())
 
@@ -117,9 +117,9 @@ func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 	requireT.EqualValues(3, s.CurrentTerm())
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 42,
-		LastLogTerm:  2,
+		Term:      4,
+		NextIndex: 42,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -127,7 +127,7 @@ func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -135,9 +135,9 @@ func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 42,
-			SyncLogIndex: 0,
+			Term:      4,
+			NextIndex: 42,
+			SyncIndex: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -172,9 +172,9 @@ func TestLeaderApplyLogSyncRequestErrorIfThereIsAnotherLeader(t *testing.T) {
 	requireT.EqualValues(3, s.CurrentTerm())
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         3,
-		NextLogIndex: 52,
-		LastLogTerm:  3,
+		Term:      3,
+		NextIndex: 52,
+		LastTerm:  3,
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -192,15 +192,15 @@ func TestLeaderApplyLogSyncResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         3,
-		NextLogIndex: 10,
+		Term:      3,
+		NextIndex: 10,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Zero(r.votedForMe)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -221,9 +221,9 @@ func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -231,7 +231,7 @@ func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -251,9 +251,9 @@ func TestLeaderApplyLogACKErrorIfReportedIndexIsGreater(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         1,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      1,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.Error(err)
 	requireT.Equal(Result{}, result)
@@ -273,9 +273,9 @@ func TestLeaderApplyLogACKErrorIfSyncIndexIsGreater(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         1,
-		NextLogIndex: 9,
-		SyncLogIndex: 10,
+		Term:      1,
+		NextIndex: 9,
+		SyncIndex: 10,
 	})
 	requireT.Error(err)
 	requireT.Equal(Result{}, result)
@@ -301,16 +301,16 @@ func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 0,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -342,16 +342,16 @@ func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 10,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 10,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -385,16 +385,16 @@ func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
 	r.nextIndex[peer1ID] = 21
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 10,
-		SyncLogIndex: 10,
+		Term:      2,
+		NextIndex: 10,
+		SyncIndex: 10,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -428,16 +428,16 @@ func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 	r.matchIndex[peer1ID] = 21
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 10,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 10,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -471,16 +471,16 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	r.matchIndex[serverID] = 31
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -488,22 +488,22 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
 	requireT.EqualValues(31, r.matchIndex[peer1ID])
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   31,
+		NextIndex:      31,
 		CommittedCount: 0,
 		HotEndIndex:    31,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 21,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 21,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   31,
+			NextIndex:      31,
 			CommittedCount: 0,
 			HotEndIndex:    31,
 		},
@@ -513,7 +513,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 	requireT.EqualValues(31, r.nextIndex[peer2ID])
 	requireT.EqualValues(21, r.matchIndex[peer2ID])
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   31,
+		NextIndex:      31,
 		CommittedCount: 0,
 		HotEndIndex:    31,
 	}, r.commitInfo)
@@ -544,16 +544,16 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	r.commitInfo.CommittedCount = 42
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 42,
 			HotEndIndex:    42,
 		},
@@ -561,22 +561,22 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	requireT.EqualValues(31, r.nextIndex[peer1ID])
 	requireT.EqualValues(31, r.matchIndex[peer1ID])
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 42,
 		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 21,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 21,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 42,
 			HotEndIndex:    42,
 		},
@@ -586,7 +586,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 	requireT.EqualValues(31, r.nextIndex[peer2ID])
 	requireT.EqualValues(21, r.matchIndex[peer2ID])
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 42,
 		HotEndIndex:    42,
 	}, r.commitInfo)
@@ -616,16 +616,16 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 	r.matchIndex[serverID] = 42
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 			HotEndIndex:    42,
 		},
@@ -639,22 +639,22 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 		peer4ID:  0,
 	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 0,
 		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(passivePeerID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 42,
-		SyncLogIndex: 42,
+		Term:      2,
+		NextIndex: 42,
+		SyncIndex: 42,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 			HotEndIndex:    42,
 		},
@@ -669,7 +669,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 		peer4ID:  0,
 	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 0,
 		HotEndIndex:    42,
 	}, r.commitInfo)
@@ -697,16 +697,16 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	r.matchIndex[serverID] = 42
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 31,
-		SyncLogIndex: 31,
+		Term:      2,
+		NextIndex: 31,
+		SyncIndex: 31,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 			HotEndIndex:    42,
 		},
@@ -720,22 +720,22 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		peer4ID:  0,
 	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 0,
 		HotEndIndex:    42,
 	}, r.commitInfo)
 
 	result, err = r.Apply(peer2ID, &types.LogACK{
-		Term:         2,
-		NextLogIndex: 42,
-		SyncLogIndex: 42,
+		Term:      2,
+		NextIndex: 42,
+		SyncIndex: 42,
 	})
 	requireT.NoError(err)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 31,
 			HotEndIndex:    42,
 		},
@@ -750,7 +750,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		peer4ID:  0,
 	}, r.matchIndex)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   42,
+		NextIndex:      42,
 		CommittedCount: 31,
 		HotEndIndex:    42,
 	}, r.commitInfo)
@@ -766,9 +766,9 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT.EqualValues(1, s.CurrentTerm())
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         3,
-		NextLogIndex: 10,
-		LastLogTerm:  1,
+		Term:      3,
+		NextIndex: 10,
+		LastTerm:  1,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -776,7 +776,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -822,8 +822,8 @@ func TestLeaderApplyLogSyncResponseErrorIfReplicatedMore(t *testing.T) {
 	r.nextIndex[peer1ID] = 0
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         5,
-		NextLogIndex: 95,
+		Term:      5,
+		NextIndex: 95,
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -848,9 +848,9 @@ func TestLeaderApplyLogSyncResponseErrorIfSyncIsAheadLog(t *testing.T) {
 	requireT.NoError(err)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         2,
-		NextLogIndex: 23,
-		SyncLogIndex: 24,
+		Term:      2,
+		NextIndex: 23,
+		SyncIndex: 24,
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -877,8 +877,8 @@ func TestLeaderApplyLogSyncResponseIgnorePastTerm(t *testing.T) {
 	r.nextIndex[peer1ID] = 0
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         4,
-		NextLogIndex: 84,
+		Term:      4,
+		NextIndex: 84,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -886,7 +886,7 @@ func TestLeaderApplyLogSyncResponseIgnorePastTerm(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -925,9 +925,9 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 	r.nextIndex[peer1ID] = 42
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         5,
-		NextLogIndex: 42,
-		SyncLogIndex: 30,
+		Term:      5,
+		NextIndex: 42,
+		SyncIndex: 30,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -935,7 +935,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -944,7 +944,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 			peer1ID,
 		},
 		Message: &StartTransfer{
-			NextLogIndex: 42,
+			NextIndex: 42,
 		},
 	}, result)
 	requireT.EqualValues(42, r.nextIndex[peer1ID])
@@ -986,9 +986,9 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 	r.nextIndex[passivePeerID] = 42
 
 	result, err := r.Apply(passivePeerID, &types.LogSyncResponse{
-		Term:         5,
-		NextLogIndex: 42,
-		SyncLogIndex: 30,
+		Term:      5,
+		NextIndex: 42,
+		SyncIndex: 30,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -996,7 +996,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1005,7 +1005,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 			passivePeerID,
 		},
 		Message: &StartTransfer{
-			NextLogIndex: 42,
+			NextIndex: 42,
 		},
 	}, result)
 	requireT.EqualValues(42, r.nextIndex[passivePeerID])
@@ -1047,8 +1047,8 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 	r.nextIndex[peer1ID] = 94
 
 	result, err := r.Apply(peer1ID, &types.LogSyncResponse{
-		Term:         5,
-		NextLogIndex: 42,
+		Term:      5,
+		NextIndex: 42,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -1056,7 +1056,7 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1065,9 +1065,9 @@ func TestLeaderApplyLogSyncResponseCommonPointNotFound(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:         5,
-			NextLogIndex: 42,
-			LastLogTerm:  2,
+			Term:      5,
+			NextIndex: 42,
+			LastTerm:  2,
 		},
 	}, result)
 	requireT.EqualValues(42, r.nextIndex[peer1ID])
@@ -1115,7 +1115,7 @@ func TestLeaderApplyHeartbeatTickAfterHeartbeatTime(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1168,7 +1168,7 @@ func TestLeaderApplyHeartbeatTickBeforeHeartbeatTime(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1212,7 +1212,7 @@ func TestLeaderApplyHeartbeatTickCommit(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 94,
 			HotEndIndex:    94,
 		},
@@ -1265,12 +1265,12 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   75,
+			NextIndex:      75,
 			CommittedCount: 0,
 			HotEndIndex:    75,
 		},
 	}, result)
-	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(4, r.lastTerm)
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(
@@ -1344,7 +1344,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   86,
+			NextIndex:      86,
 			CommittedCount: 0,
 			HotEndIndex:    86,
 		},
@@ -1362,7 +1362,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		peer3ID: 0,
 		peer4ID: 0,
 	}, r.matchIndex)
-	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(4, r.lastTerm)
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(
@@ -1405,7 +1405,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   87,
+			NextIndex:      87,
 			CommittedCount: 0,
 			HotEndIndex:    87,
 		},
@@ -1423,7 +1423,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		peer3ID: 0,
 		peer4ID: 0,
 	}, r.matchIndex)
-	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(4, r.lastTerm)
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(
@@ -1483,7 +1483,7 @@ func TestLeaderApplyActivePeerConnected(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1492,9 +1492,9 @@ func TestLeaderApplyActivePeerConnected(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:         5,
-			NextLogIndex: 94,
-			LastLogTerm:  5,
+			Term:      5,
+			NextIndex: 94,
+			LastTerm:  5,
 		},
 	}, result)
 	requireT.Equal(serverID, r.leaderID)
@@ -1551,7 +1551,7 @@ func TestLeaderApplyPassivePeerConnected(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 0,
 			HotEndIndex:    94,
 		},
@@ -1560,9 +1560,9 @@ func TestLeaderApplyPassivePeerConnected(t *testing.T) {
 			passivePeerID,
 		},
 		Message: &types.LogSyncRequest{
-			Term:         5,
-			NextLogIndex: 94,
-			LastLogTerm:  5,
+			Term:      5,
+			NextIndex: 94,
+			LastTerm:  5,
 		},
 	}, result)
 	requireT.Equal(serverID, r.leaderID)
@@ -1603,7 +1603,7 @@ func TestLeaderApplyHeartbeatChangeToFollowerOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 0,
 		},
 	}, result)

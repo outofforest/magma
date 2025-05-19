@@ -15,30 +15,30 @@ type ElectionTick uint64
 type LogSyncRequest struct {
 	// Term is the leader's current term.
 	Term Term
-	// NextLogIndex is the index of the next log entry.
-	NextLogIndex types.Index
-	// LastLogTerm is the term of the last log entry.
-	LastLogTerm Term
+	// NextIndex is the index of the next log entry.
+	NextIndex types.Index
+	// LastTerm is the term of the last log entry.
+	LastTerm Term
 }
 
 // LogSyncResponse is sent to leader pointing to current log tail.
 type LogSyncResponse struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
-	// NextLogIndex is the index of the next log item to receive.
-	NextLogIndex types.Index
-	// SyncLogIndex is the index synced to persistent storage.
-	SyncLogIndex types.Index
+	// NextIndex is the index of the next log item to receive.
+	NextIndex types.Index
+	// SyncIndex is the index synced to persistent storage.
+	SyncIndex types.Index
 }
 
 // LogACK acknowledges log transfer.
 type LogACK struct {
 	// Term is the current term of the server receiving the request, for leader to update itself.
 	Term Term
-	// NextLogIndex is the index of the next log item to receive.
-	NextLogIndex types.Index
-	// SyncLogIndex is the index synced to persistent storage.
-	SyncLogIndex types.Index
+	// NextIndex is the index of the next log item to receive.
+	NextIndex types.Index
+	// SyncIndex is the index synced to persistent storage.
+	SyncIndex types.Index
 }
 
 // VoteRequest represents the structure of a request sent by a Raft candidate
@@ -46,10 +46,10 @@ type LogACK struct {
 type VoteRequest struct {
 	// Term is the candidate's current term.
 	Term Term
-	// NextLogIndex is the index of the candidate's next log entry.
-	NextLogIndex types.Index
-	// LastLogTerm is the term of the candidate's last log entry.
-	LastLogTerm Term
+	// NextIndex is the index of the candidate's next log entry.
+	NextIndex types.Index
+	// LastTerm is the term of the candidate's last log entry.
+	LastTerm Term
 }
 
 // VoteResponse represents the response sent by a Raft node
@@ -76,7 +76,7 @@ type ClientRequest struct {
 
 // CommitInfo reports the committed height.
 type CommitInfo struct {
-	NextLogIndex   types.Index
+	NextIndex      types.Index
 	CommittedCount types.Index
 	HotEndIndex    types.Index
 }

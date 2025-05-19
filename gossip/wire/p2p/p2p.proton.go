@@ -337,14 +337,14 @@ func size2(m *types.VoteRequest) uint64 {
 		helpers.UInt64Size(m.Term, &n)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Size(m.NextLogIndex, &n)
+		helpers.UInt64Size(m.NextIndex, &n)
 	}
 	{
-		// LastLogTerm
+		// LastTerm
 
-		helpers.UInt64Size(m.LastLogTerm, &n)
+		helpers.UInt64Size(m.LastTerm, &n)
 	}
 	return n
 }
@@ -357,14 +357,14 @@ func marshal2(m *types.VoteRequest, b []byte) uint64 {
 		helpers.UInt64Marshal(m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		helpers.UInt64Marshal(m.NextIndex, b, &o)
 	}
 	{
-		// LastLogTerm
+		// LastTerm
 
-		helpers.UInt64Marshal(m.LastLogTerm, b, &o)
+		helpers.UInt64Marshal(m.LastTerm, b, &o)
 	}
 
 	return o
@@ -378,14 +378,14 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 		helpers.UInt64Unmarshal(&m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 	}
 	{
-		// LastLogTerm
+		// LastTerm
 
-		helpers.UInt64Unmarshal(&m.LastLogTerm, b, &o)
+		helpers.UInt64Unmarshal(&m.LastTerm, b, &o)
 	}
 
 	return o
@@ -404,23 +404,23 @@ func makePatch2(m, mSrc *types.VoteRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+			helpers.UInt64Marshal(m.NextIndex, b, &o)
 		}
 	}
 	{
-		// LastLogTerm
+		// LastTerm
 
-		if reflect.DeepEqual(m.LastLogTerm, mSrc.LastLogTerm) {
+		if reflect.DeepEqual(m.LastTerm, mSrc.LastTerm) {
 			b[0] &= 0xFB
 		} else {
 			b[0] |= 0x04
-			helpers.UInt64Marshal(m.LastLogTerm, b, &o)
+			helpers.UInt64Marshal(m.LastTerm, b, &o)
 		}
 	}
 
@@ -437,17 +437,17 @@ func applyPatch2(m *types.VoteRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
 		if b[0]&0x02 != 0 {
-			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 		}
 	}
 	{
-		// LastLogTerm
+		// LastTerm
 
 		if b[0]&0x04 != 0 {
-			helpers.UInt64Unmarshal(&m.LastLogTerm, b, &o)
+			helpers.UInt64Unmarshal(&m.LastTerm, b, &o)
 		}
 	}
 
@@ -462,14 +462,14 @@ func size3(m *types.LogACK) uint64 {
 		helpers.UInt64Size(m.Term, &n)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Size(m.NextLogIndex, &n)
+		helpers.UInt64Size(m.NextIndex, &n)
 	}
 	{
-		// SyncLogIndex
+		// SyncIndex
 
-		helpers.UInt64Size(m.SyncLogIndex, &n)
+		helpers.UInt64Size(m.SyncIndex, &n)
 	}
 	return n
 }
@@ -482,14 +482,14 @@ func marshal3(m *types.LogACK, b []byte) uint64 {
 		helpers.UInt64Marshal(m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		helpers.UInt64Marshal(m.NextIndex, b, &o)
 	}
 	{
-		// SyncLogIndex
+		// SyncIndex
 
-		helpers.UInt64Marshal(m.SyncLogIndex, b, &o)
+		helpers.UInt64Marshal(m.SyncIndex, b, &o)
 	}
 
 	return o
@@ -503,14 +503,14 @@ func unmarshal3(m *types.LogACK, b []byte) uint64 {
 		helpers.UInt64Unmarshal(&m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 	}
 	{
-		// SyncLogIndex
+		// SyncIndex
 
-		helpers.UInt64Unmarshal(&m.SyncLogIndex, b, &o)
+		helpers.UInt64Unmarshal(&m.SyncIndex, b, &o)
 	}
 
 	return o
@@ -529,23 +529,23 @@ func makePatch3(m, mSrc *types.LogACK, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+			helpers.UInt64Marshal(m.NextIndex, b, &o)
 		}
 	}
 	{
-		// SyncLogIndex
+		// SyncIndex
 
-		if reflect.DeepEqual(m.SyncLogIndex, mSrc.SyncLogIndex) {
+		if reflect.DeepEqual(m.SyncIndex, mSrc.SyncIndex) {
 			b[0] &= 0xFB
 		} else {
 			b[0] |= 0x04
-			helpers.UInt64Marshal(m.SyncLogIndex, b, &o)
+			helpers.UInt64Marshal(m.SyncIndex, b, &o)
 		}
 	}
 
@@ -562,17 +562,17 @@ func applyPatch3(m *types.LogACK, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
 		if b[0]&0x02 != 0 {
-			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 		}
 	}
 	{
-		// SyncLogIndex
+		// SyncIndex
 
 		if b[0]&0x04 != 0 {
-			helpers.UInt64Unmarshal(&m.SyncLogIndex, b, &o)
+			helpers.UInt64Unmarshal(&m.SyncIndex, b, &o)
 		}
 	}
 

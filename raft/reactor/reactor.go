@@ -21,7 +21,7 @@ const (
 
 // StartTransfer initializes log transfer.
 type StartTransfer struct {
-	NextLogIndex magmatypes.Index
+	NextIndex magmatypes.Index
 }
 
 // Result is the result of state transition.
@@ -54,9 +54,9 @@ func New(
 		activePeers: activePeers,
 		state:       s,
 		majority:    (len(activePeers)+1)/2 + 1,
-		lastLogTerm: s.LastLogTerm(),
+		lastTerm:    s.LastTerm(),
 		commitInfo: types.CommitInfo{
-			NextLogIndex: s.NextLogIndex(),
+			NextIndex: s.NextIndex(),
 		},
 		nextIndex:  map[magmatypes.ServerID]magmatypes.Index{},
 		matchIndex: map[magmatypes.ServerID]magmatypes.Index{},
@@ -77,7 +77,7 @@ type Reactor struct {
 
 	majority             int
 	role                 types.Role
-	lastLogTerm          types.Term
+	lastTerm             types.Term
 	syncedCount          magmatypes.Index
 	leaderCommittedCount magmatypes.Index
 	commitInfo           types.CommitInfo
@@ -143,7 +143,7 @@ func (r *Reactor) applyAppendTx(peerID magmatypes.ServerID, tx []byte) (Result, 
 	}
 
 	var err error
-	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Append(tx, true, true)
+	r.lastTerm, r.commitInfo.NextIndex, err = r.state.Append(tx, true, true)
 	if err != nil {
 		return r.resultError(err)
 	}
@@ -162,18 +162,18 @@ func (r *Reactor) applyLogACK(peerID magmatypes.ServerID, m *types.LogACK) (Resu
 		return r.resultEmpty()
 	}
 
-	if m.NextLogIndex > r.commitInfo.NextLogIndex {
+	if m.NextIndex > r.commitInfo.NextIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
-	if m.SyncLogIndex > m.NextLogIndex {
+	if m.SyncIndex > m.NextIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex >= r.nextIndex[peerID] {
-		r.nextIndex[peerID] = m.NextLogIndex
-		if index, exists := r.matchIndex[peerID]; exists && m.SyncLogIndex > index {
-			r.matchIndex[peerID] = m.SyncLogIndex
-			r.updateLeaderCommit(m.SyncLogIndex)
+	if m.NextIndex >= r.nextIndex[peerID] {
+		r.nextIndex[peerID] = m.NextIndex
+		if index, exists := r.matchIndex[peerID]; exists && m.SyncIndex > index {
+			r.matchIndex[peerID] = m.SyncIndex
+			r.updateLeaderCommit(m.SyncIndex)
 		}
 	}
 
@@ -209,29 +209,29 @@ func (r *Reactor) applyLogSyncResponse(
 		return r.resultEmpty()
 	}
 
-	if m.NextLogIndex > r.commitInfo.NextLogIndex {
+	if m.NextIndex > r.commitInfo.NextIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
-	if m.SyncLogIndex > m.NextLogIndex {
+	if m.SyncIndex > m.NextIndex {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	if m.NextLogIndex == r.nextIndex[peerID] {
+	if m.NextIndex == r.nextIndex[peerID] {
 		if _, exists := r.matchIndex[peerID]; exists {
-			r.matchIndex[peerID] = m.SyncLogIndex
-			r.updateLeaderCommit(m.SyncLogIndex)
+			r.matchIndex[peerID] = m.SyncIndex
+			r.updateLeaderCommit(m.SyncIndex)
 		}
 
 		return r.resultMessageAndRecipient(ChannelL2P, &StartTransfer{
-			NextLogIndex: m.NextLogIndex,
+			NextIndex: m.NextIndex,
 		}, peerID)
 	}
 
-	r.nextIndex[peerID] = m.NextLogIndex
+	r.nextIndex[peerID] = m.NextIndex
 	req := &types.LogSyncRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: m.NextLogIndex,
-		LastLogTerm:  r.state.PreviousTerm(m.NextLogIndex),
+		Term:      r.state.CurrentTerm(),
+		NextIndex: m.NextIndex,
+		LastTerm:  r.state.PreviousTerm(m.NextIndex),
 	}
 
 	// We send no logs until a common point is found.
@@ -310,18 +310,18 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	}
 
 	var err error
-	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Append(m.Data, false, false)
+	r.lastTerm, r.commitInfo.NextIndex, err = r.state.Append(m.Data, false, false)
 	if err != nil {
 		return r.resultError(err)
 	}
 
-	r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
+	r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
 
 	return r.resultEmpty()
 }
 
 func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
-	if r.commitInfo.NextLogIndex < r.syncedCount {
+	if r.commitInfo.NextIndex < r.syncedCount {
 		// FIXME (wojciech): This is not tested.
 		return r.resultError(errors.New("bug in protocol"))
 	}
@@ -329,7 +329,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 	r.heartbeatTick = tick
 
 	//nolint:nestif
-	if r.commitInfo.NextLogIndex > r.syncedCount && tick%5 == 0 {
+	if r.commitInfo.NextIndex > r.syncedCount && tick%5 == 0 {
 		var err error
 		r.syncedCount, err = r.state.Sync()
 		if err != nil {
@@ -353,9 +353,9 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 			}
 
 			return r.resultMessageAndRecipient(ChannelP2P, &types.LogACK{
-				Term:         r.state.CurrentTerm(),
-				NextLogIndex: r.commitInfo.NextLogIndex,
-				SyncLogIndex: r.syncedCount,
+				Term:      r.state.CurrentTerm(),
+				NextIndex: r.commitInfo.NextIndex,
+				SyncIndex: r.syncedCount,
 			}, r.leaderID)
 		}
 	}
@@ -378,7 +378,7 @@ func (r *Reactor) applyElectionTick(tick types.ElectionTick) (Result, error) {
 
 func (r *Reactor) applyHotEnd(peerID magmatypes.ServerID) (Result, error) {
 	if r.role != types.RoleLeader && r.leaderID == peerID {
-		r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
+		r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
 	}
 
 	return r.resultEmpty()
@@ -393,7 +393,7 @@ func (r *Reactor) applyPeerConnected(peerID magmatypes.ServerID) (Result, error)
 		r.matchIndex[peerID] = 0
 	}
 
-	r.nextIndex[peerID] = r.commitInfo.NextLogIndex
+	r.nextIndex[peerID] = r.commitInfo.NextIndex
 
 	return r.resultMessageAndRecipient(ChannelL2P, r.newLogSyncRequest(), peerID)
 }
@@ -452,9 +452,9 @@ func (r *Reactor) transitionToCandidate() (Result, error) {
 	}
 
 	return r.resultBroadcastMessage(r.activePeers, ChannelP2P, &types.VoteRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.commitInfo.NextLogIndex,
-		LastLogTerm:  r.lastLogTerm,
+		Term:      r.state.CurrentTerm(),
+		NextIndex: r.commitInfo.NextIndex,
+		LastTerm:  r.lastTerm,
 	})
 }
 
@@ -463,23 +463,23 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	r.leaderID = r.serverID
 	clear(r.matchIndex)
 
-	r.indexTermStarted = r.commitInfo.NextLogIndex
+	r.indexTermStarted = r.commitInfo.NextIndex
 	var err error
-	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.AppendTerm()
+	r.lastTerm, r.commitInfo.NextIndex, err = r.state.AppendTerm()
 	if err != nil {
 		return r.resultError(err)
 	}
-	r.commitInfo.HotEndIndex = r.commitInfo.NextLogIndex
+	r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
 
 	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
-		r.commitInfo.CommittedCount = r.commitInfo.NextLogIndex
+		r.commitInfo.CommittedCount = r.commitInfo.NextIndex
 		return r.resultEmpty()
 	}
 
 	for _, p := range r.peers {
-		r.nextIndex[p] = r.commitInfo.NextLogIndex
+		r.nextIndex[p] = r.commitInfo.NextIndex
 	}
 	for _, p := range r.activePeers {
 		r.matchIndex[p] = 0
@@ -490,9 +490,9 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 
 func (r *Reactor) newLogSyncRequest() *types.LogSyncRequest {
 	return &types.LogSyncRequest{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.commitInfo.NextLogIndex,
-		LastLogTerm:  r.lastLogTerm,
+		Term:      r.state.CurrentTerm(),
+		NextIndex: r.commitInfo.NextIndex,
+		LastTerm:  r.lastTerm,
 	}
 }
 
@@ -501,37 +501,37 @@ func (r *Reactor) handleLogSyncRequest(
 	req *types.LogSyncRequest,
 ) (*types.LogSyncResponse, error) {
 	resp := &types.LogSyncResponse{
-		Term:         r.state.CurrentTerm(),
-		NextLogIndex: r.commitInfo.NextLogIndex,
-		SyncLogIndex: r.syncedCount,
+		Term:      r.state.CurrentTerm(),
+		NextIndex: r.commitInfo.NextIndex,
+		SyncIndex: r.syncedCount,
 	}
 	if req.Term < r.state.CurrentTerm() {
 		return resp, nil
 	}
-	if req.NextLogIndex < r.commitInfo.CommittedCount {
+	if req.NextIndex < r.commitInfo.CommittedCount {
 		return nil, errors.New("bug in protocol")
 	}
 
 	var err error
-	r.lastLogTerm, r.commitInfo.NextLogIndex, err = r.state.Validate(req.NextLogIndex, req.LastLogTerm)
+	r.lastTerm, r.commitInfo.NextIndex, err = r.state.Validate(req.NextIndex, req.LastTerm)
 	if err != nil {
 		return nil, err
 	}
 
-	if r.commitInfo.NextLogIndex < r.syncedCount {
-		r.syncedCount = r.commitInfo.NextLogIndex
+	if r.commitInfo.NextIndex < r.syncedCount {
+		r.syncedCount = r.commitInfo.NextIndex
 	}
-	if req.NextLogIndex < r.syncedCount {
-		r.syncedCount = req.NextLogIndex
+	if req.NextIndex < r.syncedCount {
+		r.syncedCount = req.NextIndex
 	}
-	if req.NextLogIndex == r.commitInfo.NextLogIndex {
+	if req.NextIndex == r.commitInfo.NextIndex {
 		r.leaderID = peerID
 	}
 
 	r.ignoreElectionTick = r.electionTick + 1
 
-	resp.SyncLogIndex = r.syncedCount
-	resp.NextLogIndex = r.commitInfo.NextLogIndex
+	resp.SyncIndex = r.syncedCount
+	resp.NextIndex = r.commitInfo.NextIndex
 	return resp, nil
 }
 
@@ -539,8 +539,8 @@ func (r *Reactor) handleVoteRequest(
 	candidateID magmatypes.ServerID,
 	req *types.VoteRequest,
 ) (*types.VoteResponse, error) {
-	if req.Term < r.state.CurrentTerm() || r.lastLogTerm > req.LastLogTerm ||
-		(r.lastLogTerm == req.LastLogTerm && r.commitInfo.NextLogIndex > req.NextLogIndex) {
+	if req.Term < r.state.CurrentTerm() || r.lastTerm > req.LastTerm ||
+		(r.lastTerm == req.LastTerm && r.commitInfo.NextIndex > req.NextIndex) {
 		return &types.VoteResponse{
 			Term: r.state.CurrentTerm(),
 		}, nil
@@ -572,8 +572,8 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 }
 
 func (r *Reactor) updateFollowerCommit() {
-	if r.commitInfo.NextLogIndex > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
-		r.commitInfo.CommittedCount = r.commitInfo.NextLogIndex
+	if r.commitInfo.NextIndex > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
+		r.commitInfo.CommittedCount = r.commitInfo.NextIndex
 		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
 			r.commitInfo.CommittedCount = r.leaderCommittedCount
 		}

@@ -303,7 +303,7 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				case *reactor.StartTransfer:
 					for _, peerID := range res.Recipients {
 						if p := peersL2P[peerID]; p.SendCh != nil && p.Iterator == nil {
-							p.Iterator = pState.Repo.Iterator(pState.providerPeers, m.NextLogIndex)
+							p.Iterator = pState.Repo.Iterator(pState.providerPeers, m.NextIndex)
 							peersL2P[peerID] = p
 							p.SendCh <- p.Iterator
 						}
@@ -316,8 +316,8 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 					}
 				}
 			}
-			if res.CommitInfo.NextLogIndex != commitInfo.NextLogIndex && leaderID == g.serverID {
-				pState.providerPeers.SetTail(res.CommitInfo.NextLogIndex, 0)
+			if res.CommitInfo.NextIndex != commitInfo.NextIndex && leaderID == g.serverID {
+				pState.providerPeers.SetTail(res.CommitInfo.NextIndex, 0)
 			}
 			if res.CommitInfo.CommittedCount > commitInfo.CommittedCount ||
 				res.CommitInfo.HotEndIndex > commitInfo.HotEndIndex {
@@ -718,7 +718,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		return err
 	}
 
-	it := pState.Repo.Iterator(pState.providerClients, msgInit.NextLogIndex)
+	it := pState.Repo.Iterator(pState.providerClients, msgInit.NextIndex)
 
 	ch2 := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch2

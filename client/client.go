@@ -169,7 +169,7 @@ type Client struct {
 	entityMetadataID uint64
 
 	previousChecksum uint64
-	nextLogIndex     types.Index
+	nextIndex        types.Index
 	readyCh          chan struct{}
 	firstHotEnd      bool
 
@@ -196,8 +196,8 @@ func (c *Client) Run(ctx context.Context) error {
 				conn.BufferWrites()
 
 				if err := conn.SendProton(&c2p.InitRequest{
-					PartitionID:  c.config.PartitionID,
-					NextLogIndex: c.nextLogIndex,
+					PartitionID: c.config.PartitionID,
+					NextIndex:   c.nextIndex,
 				}, cMarshaller); err != nil {
 					return errors.WithStack(err)
 				}
@@ -251,7 +251,7 @@ func (c *Client) Run(ctx context.Context) error {
 										return err
 									}
 									c.previousChecksum = checksum
-									c.nextLogIndex += types.Index(len(txRaw))
+									c.nextIndex += types.Index(len(txRaw))
 								}
 							case *gossipwire.HotEnd:
 								if tx == nil {

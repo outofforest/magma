@@ -32,14 +32,14 @@ func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 10,
 			HotEndIndex:    10,
 		},
 	}, result)
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
-	requireT.EqualValues(1, r.lastLogTerm)
+	requireT.EqualValues(1, r.lastTerm)
 
 	granted, err := s.VoteFor(peer1ID)
 	requireT.NoError(err)
@@ -83,14 +83,14 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   86,
+			NextIndex:      86,
 			CommittedCount: 75,
 			HotEndIndex:    86,
 		},
 	}, result)
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
-	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(4, r.lastTerm)
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(
@@ -129,7 +129,7 @@ func TestSingleModeApplyHeartbeatTickDoNothing(t *testing.T) {
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   75,
+			NextIndex:      75,
 			CommittedCount: 75,
 			HotEndIndex:    75,
 		},
@@ -138,11 +138,11 @@ func TestSingleModeApplyHeartbeatTickDoNothing(t *testing.T) {
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   75,
+		NextIndex:      75,
 		CommittedCount: 75,
 		HotEndIndex:    75,
 	}, r.commitInfo)
-	requireT.EqualValues(4, r.lastLogTerm)
+	requireT.EqualValues(4, r.lastTerm)
 
 	txb = newTxBuilder()
 	logEqual(requireT, dir, txs(

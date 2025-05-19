@@ -110,7 +110,7 @@ func (r *Repository) PageCapacity() uint64 {
 }
 
 // Create creates new file.
-func (r *Repository) Create(term types.Term, nextLogIndex magmatypes.Index) (_ *File, retErr error) {
+func (r *Repository) Create(term types.Term, nextIndex magmatypes.Index) (_ *File, retErr error) {
 	if term == 0 {
 		return nil, errors.New("invalid term")
 	}
@@ -119,8 +119,8 @@ func (r *Repository) Create(term types.Term, nextLogIndex magmatypes.Index) (_ *
 	defer r.mu.Unlock()
 
 	header := &format.Header{
-		Term:         term,
-		NextLogIndex: nextLogIndex,
+		Term:      term,
+		NextIndex: nextIndex,
 	}
 
 	if len(r.files) > 0 {
@@ -207,8 +207,8 @@ func (r *Repository) OpenByIndex(index magmatypes.Index) (*File, error) {
 	defer r.mu.RUnlock()
 
 	for i := len(r.files) - 1; i >= 0; i-- {
-		if f := r.files[i]; f.Header.NextLogIndex <= index {
-			offset := uint64(index - f.Header.NextLogIndex)
+		if f := r.files[i]; f.Header.NextIndex <= index {
+			offset := uint64(index - f.Header.NextIndex)
 			if offset >= r.pageSize-maxHeaderSize {
 				return nil, errors.New("index does not exist")
 			}
@@ -228,9 +228,9 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 	fileOffset := offset
 	for i := len(r.files) - 1; i >= 0; i-- {
 		file := r.files[i]
-		if offset >= file.Header.NextLogIndex {
+		if offset >= file.Header.NextIndex {
 			fileIndex = uint64(i)
-			fileOffset -= file.Header.NextLogIndex
+			fileOffset -= file.Header.NextIndex
 			break
 		}
 	}
@@ -253,7 +253,7 @@ func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index,
 		for i := len(r.files) - 1; i >= 0; i-- {
 			if h := r.files[i].Header; h.PreviousTerm <= term {
 				r.files = r.files[:i]
-				return h.PreviousTerm, h.NextLogIndex, nil
+				return h.PreviousTerm, h.NextIndex, nil
 			}
 		}
 	}
@@ -279,7 +279,7 @@ func (r *Repository) PreviousTerm(index magmatypes.Index) types.Term {
 	defer r.mu.RUnlock()
 
 	for i := len(r.files) - 1; i >= 0; i-- {
-		if h := r.files[i].Header; h.NextLogIndex < index {
+		if h := r.files[i].Header; h.NextIndex < index {
 			return h.Term
 		}
 	}

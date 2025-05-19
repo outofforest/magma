@@ -277,9 +277,9 @@ func size3(m *InitRequest) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Size(m.NextLogIndex, &n)
+		helpers.UInt64Size(m.NextIndex, &n)
 	}
 	return n
 }
@@ -297,9 +297,9 @@ func marshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		helpers.UInt64Marshal(m.NextIndex, b, &o)
 	}
 
 	return o
@@ -320,9 +320,9 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 	}
 
 	return o
@@ -346,13 +346,13 @@ func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+			helpers.UInt64Marshal(m.NextIndex, b, &o)
 		}
 	}
 
@@ -376,10 +376,10 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
 		if b[0]&0x02 != 0 {
-			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 		}
 	}
 

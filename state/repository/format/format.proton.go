@@ -112,9 +112,9 @@ func size0(m *Header) uint64 {
 		helpers.UInt64Size(m.Term, &n)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Size(m.NextLogIndex, &n)
+		helpers.UInt64Size(m.NextIndex, &n)
 	}
 	{
 		// HeaderChecksum
@@ -137,9 +137,9 @@ func marshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Marshal(m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+		helpers.UInt64Marshal(m.NextIndex, b, &o)
 	}
 	{
 		// HeaderChecksum
@@ -163,9 +163,9 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Unmarshal(&m.Term, b, &o)
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 	}
 	{
 		// HeaderChecksum
@@ -199,13 +199,13 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
-		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
 			b[0] &= 0xFB
 		} else {
 			b[0] |= 0x04
-			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
+			helpers.UInt64Marshal(m.NextIndex, b, &o)
 		}
 	}
 	{
@@ -239,10 +239,10 @@ func applyPatch0(m *Header, b []byte) uint64 {
 		}
 	}
 	{
-		// NextLogIndex
+		// NextIndex
 
 		if b[0]&0x04 != 0 {
-			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
+			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 		}
 	}
 	{

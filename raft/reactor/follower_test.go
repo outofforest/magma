@@ -141,9 +141,9 @@ func TestFollowerSetup(t *testing.T) {
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
 
-	r.lastLogTerm = 3
+	r.lastTerm = 3
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   10,
+		NextIndex:      10,
 		CommittedCount: 5,
 		HotEndIndex:    100,
 	}
@@ -158,9 +158,9 @@ func TestFollowerSetup(t *testing.T) {
 	requireT.Empty(r.nextIndex)
 	requireT.Empty(r.matchIndex)
 
-	requireT.EqualValues(3, r.lastLogTerm)
+	requireT.EqualValues(3, r.lastTerm)
 	requireT.Equal(types.CommitInfo{
-		NextLogIndex:   10,
+		NextIndex:      10,
 		CommittedCount: 5,
 		HotEndIndex:    0,
 	}, r.commitInfo)
@@ -189,7 +189,7 @@ func TestFollowerAppendTxAppendToEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   magmatypes.Index(len(tx)),
+			NextIndex:      magmatypes.Index(len(tx)),
 			CommittedCount: 0,
 		},
 	}, result)
@@ -223,7 +223,7 @@ func TestFollowerAppendTxAppendToNonEmptyLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   35,
+			NextIndex:      35,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -261,7 +261,7 @@ func TestFollowerAppendTxDoesNothingIfNotFromLeader(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -302,9 +302,9 @@ func TestFollowerLogACKDoesNothing(t *testing.T) {
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
-		Term:         1,
-		NextLogIndex: 21,
-		SyncLogIndex: 21,
+		Term:      1,
+		NextIndex: 21,
+		SyncIndex: 21,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -312,7 +312,7 @@ func TestFollowerLogACKDoesNothing(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   21,
+			NextIndex:      21,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -342,9 +342,9 @@ func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         3,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      3,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -352,7 +352,7 @@ func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -360,9 +360,9 @@ func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         3,
-			NextLogIndex: 43,
-			SyncLogIndex: 0,
+			Term:      3,
+			NextIndex: 43,
+			SyncIndex: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -396,9 +396,9 @@ func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 	r.syncedCount = 21
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 42,
-		LastLogTerm:  2,
+		Term:      4,
+		NextIndex: 42,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -406,7 +406,7 @@ func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -414,9 +414,9 @@ func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 42,
-			SyncLogIndex: 21,
+			Term:      4,
+			NextIndex: 42,
+			SyncIndex: 21,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -450,9 +450,9 @@ func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 	r.syncedCount = 42
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 42,
-		LastLogTerm:  2,
+		Term:      4,
+		NextIndex: 42,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -460,7 +460,7 @@ func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   42,
+			NextIndex:      42,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -468,9 +468,9 @@ func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 42,
-			SyncLogIndex: 42,
+			Term:      4,
+			NextIndex: 42,
+			SyncIndex: 42,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -501,9 +501,9 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
 	r.syncedCount = 43
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 43,
-		LastLogTerm:  3,
+		Term:      4,
+		NextIndex: 43,
+		LastTerm:  3,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -511,7 +511,7 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   21,
+			NextIndex:      21,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -519,9 +519,9 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatch(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 21,
-			SyncLogIndex: 21,
+			Term:      4,
+			NextIndex: 21,
+			SyncIndex: 21,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -553,9 +553,9 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	// First time.
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         5,
-		NextLogIndex: 62,
-		LastLogTerm:  4,
+		Term:      5,
+		NextIndex: 62,
+		LastTerm:  4,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -563,7 +563,7 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -571,11 +571,11 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         5,
-			NextLogIndex: 43,
+			Term:      5,
+			NextIndex: 43,
 		},
 	}, result)
-	requireT.EqualValues(2, r.lastLogTerm)
+	requireT.EqualValues(2, r.lastTerm)
 
 	requireT.EqualValues(5, s.CurrentTerm())
 
@@ -588,9 +588,9 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 	// Second time.
 
 	result, err = r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         6,
-		NextLogIndex: 22,
-		LastLogTerm:  3,
+		Term:      6,
+		NextIndex: 22,
+		LastTerm:  3,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -598,7 +598,7 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   21,
+			NextIndex:      21,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -606,11 +606,11 @@ func TestFollowerLogSyncRequestDiscardOnTermMismatchTwice(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         6,
-			NextLogIndex: 21,
+			Term:      6,
+			NextIndex: 21,
 		},
 	}, result)
-	requireT.EqualValues(1, r.lastLogTerm)
+	requireT.EqualValues(1, r.lastTerm)
 
 	requireT.EqualValues(6, s.CurrentTerm())
 
@@ -635,9 +635,9 @@ func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 1000,
-		LastLogTerm:  3,
+		Term:      4,
+		NextIndex: 1000,
+		LastTerm:  3,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -645,7 +645,7 @@ func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -653,8 +653,8 @@ func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 43,
+			Term:      4,
+			NextIndex: 43,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -668,7 +668,7 @@ func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 	))
 }
 
-func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
+func TestFollowerLogSyncRequestSendResponseIfLastTermIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -682,9 +682,9 @@ func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      4,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -692,7 +692,7 @@ func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -700,9 +700,9 @@ func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 43,
-			SyncLogIndex: 0,
+			Term:      4,
+			NextIndex: 43,
+			SyncIndex: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -717,7 +717,7 @@ func TestFollowerLogSyncRequestSendResponseIfLastLogTermIsLower(t *testing.T) {
 	))
 }
 
-func TestFollowerLogSyncRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
+func TestFollowerLogSyncRequestSendResponseIfNextIndexIsLower(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -731,9 +731,9 @@ func TestFollowerLogSyncRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
-		Term:         4,
-		NextLogIndex: 44,
-		LastLogTerm:  2,
+		Term:      4,
+		NextIndex: 44,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -741,7 +741,7 @@ func TestFollowerLogSyncRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -749,9 +749,9 @@ func TestFollowerLogSyncRequestSendResponseIfNextLogIndexIsLower(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 43,
-			SyncLogIndex: 0,
+			Term:      4,
+			NextIndex: 43,
+			SyncIndex: 0,
 		},
 	}, result)
 	requireT.EqualValues(1, r.ignoreElectionTick)
@@ -779,9 +779,9 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer2ID, &types.LogSyncRequest{
-		Term:         3,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      3,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -789,7 +789,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelL2P,
@@ -797,8 +797,8 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 			peer2ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 43,
+			Term:      4,
+			NextIndex: 43,
 		},
 	}, result)
 	requireT.Zero(r.ignoreElectionTick)
@@ -826,15 +826,15 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedC
 	r := newReactor(s)
 
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   43,
+		NextIndex:      43,
 		CommittedCount: 43,
 		HotEndIndex:    43,
 	}
 
 	result, err := r.Apply(peer2ID, &types.LogSyncRequest{
-		Term:         3,
-		NextLogIndex: 40,
-		LastLogTerm:  2,
+		Term:      3,
+		NextIndex: 40,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -842,7 +842,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedC
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 43,
 			HotEndIndex:    43,
 		},
@@ -851,8 +851,8 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedC
 			peer2ID,
 		},
 		Message: &types.LogSyncResponse{
-			Term:         4,
-			NextLogIndex: 43,
+			Term:      4,
+			NextIndex: 43,
 		},
 	}, result)
 	requireT.Zero(r.ignoreElectionTick)
@@ -880,15 +880,15 @@ func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommittedCount(t *testing.
 	r := newReactor(s)
 
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   43,
+		NextIndex:      43,
 		CommittedCount: 43,
 		HotEndIndex:    43,
 	}
 
 	_, err = r.Apply(peer2ID, &types.LogSyncRequest{
-		Term:         5,
-		NextLogIndex: 40,
-		LastLogTerm:  2,
+		Term:      5,
+		NextIndex: 40,
+		LastTerm:  2,
 	})
 	requireT.Error(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -909,9 +909,9 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         1,
-		NextLogIndex: 0,
-		LastLogTerm:  0,
+		Term:      1,
+		NextIndex: 0,
+		LastTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -958,9 +958,9 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -968,7 +968,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1008,9 +1008,9 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 50,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 50,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1018,7 +1018,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   44,
+			NextIndex:      44,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1051,9 +1051,9 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         3,
-		NextLogIndex: 0,
-		LastLogTerm:  0,
+		Term:      3,
+		NextIndex: 0,
+		LastTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1061,7 +1061,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1101,9 +1101,9 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1111,7 +1111,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1127,9 +1127,9 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	result, err = r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1137,7 +1137,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1169,9 +1169,9 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1179,7 +1179,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1195,9 +1195,9 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
-		Term:         3,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      3,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1205,7 +1205,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1229,9 +1229,9 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         1,
-		NextLogIndex: 0,
-		LastLogTerm:  0,
+		Term:      1,
+		NextIndex: 0,
+		LastTerm:  0,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1239,7 +1239,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1261,7 +1261,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	requireT.True(granted)
 }
 
-func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
+func TestFollowerApplyVoteRequestRejectedOnLowerLogTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
@@ -1275,9 +1275,9 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         3,
-		NextLogIndex: 43,
-		LastLogTerm:  1,
+		Term:      3,
+		NextIndex: 43,
+		LastTerm:  1,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1285,7 +1285,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLastLogTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1321,9 +1321,9 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1331,7 +1331,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   44,
+			NextIndex:      44,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1367,9 +1367,9 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	r := newReactor(s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1377,7 +1377,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1393,9 +1393,9 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	result, err = r.Apply(peer2ID, &types.VoteRequest{
-		Term:         2,
-		NextLogIndex: 43,
-		LastLogTerm:  2,
+		Term:      2,
+		NextIndex: 43,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleFollower, r.role)
@@ -1403,7 +1403,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   43,
+			NextIndex:      43,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1436,7 +1436,7 @@ func TestFollowerApplyElectionTickAfterElectionTime(t *testing.T) {
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 		Channel: ChannelP2P,
@@ -1447,9 +1447,9 @@ func TestFollowerApplyElectionTickAfterElectionTime(t *testing.T) {
 			peer4ID,
 		},
 		Message: &types.VoteRequest{
-			Term:         1,
-			NextLogIndex: 0,
-			LastLogTerm:  0,
+			Term:      1,
+			NextIndex: 0,
+			LastTerm:  0,
 		},
 	}, result)
 
@@ -1478,7 +1478,7 @@ func TestFollowerApplyElectionTickBeforeElectionTime(t *testing.T) {
 	requireT.Equal(0, r.votedForMe)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -1513,7 +1513,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.Equal(Result{
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   0,
+			NextIndex:      0,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -1546,7 +1546,7 @@ func TestFollowerApplyHeartbeatTickCommitToLeaderCommit(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 84,
 		},
 		Channel: ChannelP2P,
@@ -1554,9 +1554,9 @@ func TestFollowerApplyHeartbeatTickCommitToLeaderCommit(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogACK{
-			Term:         5,
-			NextLogIndex: 94,
-			SyncLogIndex: 94,
+			Term:      5,
+			NextIndex: 94,
+			SyncIndex: 94,
 		},
 		Force: true,
 	}, result)
@@ -1587,7 +1587,7 @@ func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   84,
+			NextIndex:      84,
 			CommittedCount: 84,
 		},
 		Channel: ChannelP2P,
@@ -1595,9 +1595,9 @@ func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.LogACK{
-			Term:         5,
-			NextLogIndex: 84,
-			SyncLogIndex: 84,
+			Term:      5,
+			NextIndex: 84,
+			SyncIndex: 84,
 		},
 		Force: true,
 	}, result)
@@ -1628,7 +1628,7 @@ func TestFollowerApplyHeartbeatTickNoLeader(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   94,
+			NextIndex:      94,
 			CommittedCount: 94,
 		},
 		Force: true,
@@ -1657,7 +1657,7 @@ func TestFollowerApplyHeartbeat(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   10,
+			NextIndex:      10,
 			CommittedCount: 10,
 		},
 	}, result)
@@ -1687,7 +1687,7 @@ func TestFollowerApplyHeartbeatIgnoreIfNotLeader(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: magmatypes.ZeroServerID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   20,
+			NextIndex:      20,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -1718,7 +1718,7 @@ func TestFollowerApplyHeartbeatIgnoreLowerTerm(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   20,
+			NextIndex:      20,
 			CommittedCount: 0,
 		},
 	}, result)
@@ -1740,7 +1740,7 @@ func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
 	r := newReactor(s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   20,
+		NextIndex:      20,
 		CommittedCount: 20,
 	}
 
@@ -1766,7 +1766,7 @@ func TestFollowerApplyHotEnd(t *testing.T) {
 	r := newReactor(s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   20,
+		NextIndex:      20,
 		CommittedCount: 10,
 		HotEndIndex:    0,
 	}
@@ -1778,7 +1778,7 @@ func TestFollowerApplyHotEnd(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   20,
+			NextIndex:      20,
 			CommittedCount: 10,
 			HotEndIndex:    20,
 		},
@@ -1800,7 +1800,7 @@ func TestFollowerApplyHotEndIgnoreFromNonLeader(t *testing.T) {
 	r := newReactor(s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
-		NextLogIndex:   20,
+		NextIndex:      20,
 		CommittedCount: 10,
 		HotEndIndex:    0,
 	}
@@ -1812,7 +1812,7 @@ func TestFollowerApplyHotEndIgnoreFromNonLeader(t *testing.T) {
 		Role:     types.RoleFollower,
 		LeaderID: peer1ID,
 		CommitInfo: types.CommitInfo{
-			NextLogIndex:   20,
+			NextIndex:      20,
 			CommittedCount: 10,
 			HotEndIndex:    0,
 		},
