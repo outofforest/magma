@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,7 +68,7 @@ func TestCreateFailsIfTermIsZero(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(0, 0, 0)
+	file, err := r.Create(0, 0)
 	requireT.Error(err)
 	requireT.Nil(file)
 }
@@ -78,7 +79,7 @@ func TestCreateFirstTerm(t *testing.T) {
 	requireT := require.New(t)
 	r, dir := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -95,7 +96,7 @@ func TestCreateFirstTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Equal(&format.Header{
 		Term:           1,
-		HeaderChecksum: 12640084365124082706,
+		HeaderChecksum: 11339396051936363247,
 	}, h)
 	requireT.Equal(bytes.Repeat([]byte{0x00}, int(pageSize-size)), data[size:])
 
@@ -104,7 +105,7 @@ func TestCreateFirstTerm(t *testing.T) {
 			Index: 0,
 			Header: &format.Header{
 				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 	}, r.files)
@@ -116,12 +117,12 @@ func TestCreateFollowingTerm(t *testing.T) {
 	requireT := require.New(t)
 	r, dir := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 10, 11)
+	file, err = r.Create(2, 10)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -138,7 +139,7 @@ func TestCreateFollowingTerm(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Equal(&format.Header{
 		Term:           1,
-		HeaderChecksum: 12640084365124082706,
+		HeaderChecksum: 11339396051936363247,
 	}, h)
 
 	data, err = os.ReadFile(filepath.Join(dir, "1"))
@@ -148,11 +149,10 @@ func TestCreateFollowingTerm(t *testing.T) {
 	h, size, err := m.Unmarshal(id, data)
 	requireT.NoError(err)
 	requireT.Equal(&format.Header{
-		PreviousTerm:     1,
-		PreviousChecksum: 11,
-		Term:             2,
-		NextLogIndex:     10,
-		HeaderChecksum:   3020817970091451091,
+		PreviousTerm:   1,
+		Term:           2,
+		NextLogIndex:   10,
+		HeaderChecksum: 2115352002467121528,
 	}, h)
 	requireT.Equal(bytes.Repeat([]byte{0x00}, int(maxHeaderSize-size)), data[size:maxHeaderSize])
 	requireT.Equal(bytes.Repeat([]byte{0x00}, int(pageSize-maxHeaderSize)), data[maxHeaderSize:])
@@ -162,17 +162,16 @@ func TestCreateFollowingTerm(t *testing.T) {
 			Index: 0,
 			Header: &format.Header{
 				Term:           1,
-				HeaderChecksum: 12640084365124082706,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				PreviousChecksum: 11,
-				Term:             2,
-				NextLogIndex:     10,
-				HeaderChecksum:   3020817970091451091,
+				PreviousTerm:   1,
+				Term:           2,
+				NextLogIndex:   10,
+				HeaderChecksum: 2115352002467121528,
 			},
 		},
 	}, r.files)
@@ -184,12 +183,12 @@ func TestCreateFailsOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(2, 0, 0)
+	file, err := r.Create(2, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(1, 10, 11)
+	file, err = r.Create(1, 10)
 	requireT.Error(err)
 	requireT.Nil(file)
 }
@@ -200,27 +199,25 @@ func TestCreateHeader(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 2, 3)
+	file, err := r.Create(1, 2)
 	requireT.NoError(err)
 	requireT.Equal(format.Header{
-		PreviousTerm:     0,
-		PreviousChecksum: 3,
-		Term:             1,
-		NextLogIndex:     2,
-		HeaderChecksum:   6497390233957230078,
+		PreviousTerm:   0,
+		Term:           1,
+		NextLogIndex:   2,
+		HeaderChecksum: 11725894641885870814,
 	}, file.Header())
 
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3, 4)
+	file, err = r.Create(2, 3)
 	requireT.NoError(err)
 	requireT.Equal(format.Header{
-		PreviousTerm:     1,
-		PreviousChecksum: 4,
-		Term:             2,
-		NextLogIndex:     3,
-		HeaderChecksum:   17519384246767885116,
+		PreviousTerm:   1,
+		Term:           2,
+		NextLogIndex:   3,
+		HeaderChecksum: 9639843743847120848,
 	}, file.Header())
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -231,58 +228,54 @@ func TestRevertTermsToEqual(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 10)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1, 11)
+	file, err = r.Create(3, 1)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 2, 12)
+	file, err = r.Create(3, 2)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3, 13)
+	file, err = r.Create(5, 3)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4, 14)
+	file, err = r.Create(5, 4)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5, 15)
+	file, err = r.Create(6, 5)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
+	lastTerm, nextLogIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
-	requireT.EqualValues(13, previousChecksum)
 
 	requireT.Equal([]fileInfo{
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:             1,
-				PreviousChecksum: 10,
-				HeaderChecksum:   14468226675477782344,
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				Term:             3,
-				NextLogIndex:     1,
-				PreviousChecksum: 11,
-				HeaderChecksum:   13316530402584890802,
+				PreviousTerm:   1,
+				Term:           3,
+				NextLogIndex:   1,
+				HeaderChecksum: 1229607450597664475,
 			},
 		},
 		{
 			Index: 2,
 			Header: &format.Header{
-				PreviousTerm:     3,
-				Term:             3,
-				NextLogIndex:     2,
-				PreviousChecksum: 12,
-				HeaderChecksum:   18214685317474956878,
+				PreviousTerm:   3,
+				Term:           3,
+				NextLogIndex:   2,
+				HeaderChecksum: 10839254553578776291,
 			},
 		},
 	}, r.files)
@@ -292,58 +285,54 @@ func TestRevertTermsToLower(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 10)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(2, 1, 11)
+	file, err = r.Create(2, 1)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(2, 2, 12)
+	file, err = r.Create(2, 2)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 3, 13)
+	file, err = r.Create(5, 3)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(5, 4, 14)
+	file, err = r.Create(5, 4)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(6, 5, 15)
+	file, err = r.Create(6, 5)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
+	lastTerm, nextLogIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(2, lastTerm)
 	requireT.EqualValues(3, nextLogIndex)
-	requireT.EqualValues(13, previousChecksum)
 
 	requireT.Equal([]fileInfo{
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:             1,
-				PreviousChecksum: 10,
-				HeaderChecksum:   14468226675477782344,
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				Term:             2,
-				NextLogIndex:     1,
-				PreviousChecksum: 11,
-				HeaderChecksum:   9024393465275879002,
+				PreviousTerm:   1,
+				Term:           2,
+				NextLogIndex:   1,
+				HeaderChecksum: 15123016224832269261,
 			},
 		},
 		{
 			Index: 2,
 			Header: &format.Header{
-				PreviousTerm:     2,
-				Term:             2,
-				NextLogIndex:     2,
-				PreviousChecksum: 12,
-				HeaderChecksum:   12509700070668475227,
+				PreviousTerm:   2,
+				Term:           2,
+				NextLogIndex:   2,
+				HeaderChecksum: 10710426285935794252,
 			},
 		},
 	}, r.files)
@@ -353,7 +342,7 @@ func TestRevertTermsFailsIfEmpty(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	_, _, _, err := r.RevertTerms(1)
+	_, _, err := r.RevertTerms(1)
 	requireT.Error(err)
 }
 
@@ -361,11 +350,11 @@ func TestRevertTermsFailsIfNothingToRevert(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 
-	_, _, _, err = r.RevertTerms(1)
+	_, _, err = r.RevertTerms(1)
 	requireT.Error(err)
 }
 
@@ -373,25 +362,24 @@ func TestRevertTermsAndCreate(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 10)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(3, 1, 11)
+	file, err = r.Create(3, 1)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r.Create(4, 2, 12)
+	file, err = r.Create(4, 2)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	lastTerm, nextLogIndex, previousChecksum, err := r.RevertTerms(3)
+	lastTerm, nextLogIndex, err := r.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)
-	requireT.EqualValues(12, previousChecksum)
 	requireT.EqualValues(3, r.nextFileIndex)
 
-	file, err = r.Create(5, 3, 13)
+	file, err = r.Create(5, 3)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r.nextFileIndex)
@@ -400,29 +388,26 @@ func TestRevertTermsAndCreate(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:             1,
-				PreviousChecksum: 10,
-				HeaderChecksum:   14468226675477782344,
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				Term:             3,
-				NextLogIndex:     1,
-				PreviousChecksum: 11,
-				HeaderChecksum:   13316530402584890802,
+				PreviousTerm:   1,
+				Term:           3,
+				NextLogIndex:   1,
+				HeaderChecksum: 1229607450597664475,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:     3,
-				Term:             5,
-				NextLogIndex:     3,
-				PreviousChecksum: 13,
-				HeaderChecksum:   4745458999267866986,
+				PreviousTerm:   3,
+				Term:           5,
+				NextLogIndex:   3,
+				HeaderChecksum: 13274324415149675937,
 			},
 		},
 	}, r.files)
@@ -432,25 +417,24 @@ func TestRevertTermsAndOpen(t *testing.T) {
 	requireT := require.New(t)
 	r1, dir := newRepo(t, "")
 
-	file, err := r1.Create(1, 0, 10)
+	file, err := r1.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(3, 1, 11)
+	file, err = r1.Create(3, 1)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
-	file, err = r1.Create(4, 2, 12)
+	file, err = r1.Create(4, 2)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	lastTerm, nextLogIndex, previousChecksum, err := r1.RevertTerms(3)
+	lastTerm, nextLogIndex, err := r1.RevertTerms(3)
 	requireT.NoError(err)
 	requireT.EqualValues(3, lastTerm)
 	requireT.EqualValues(2, nextLogIndex)
-	requireT.EqualValues(12, previousChecksum)
 	requireT.EqualValues(3, r1.nextFileIndex)
 
-	file, err = r1.Create(5, 3, 13)
+	file, err = r1.Create(5, 3)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	requireT.EqualValues(4, r1.nextFileIndex)
@@ -461,29 +445,26 @@ func TestRevertTermsAndOpen(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:             1,
-				PreviousChecksum: 10,
-				HeaderChecksum:   14468226675477782344,
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				Term:             3,
-				NextLogIndex:     1,
-				PreviousChecksum: 11,
-				HeaderChecksum:   13316530402584890802,
+				PreviousTerm:   1,
+				Term:           3,
+				NextLogIndex:   1,
+				HeaderChecksum: 1229607450597664475,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:     3,
-				Term:             5,
-				NextLogIndex:     3,
-				PreviousChecksum: 13,
-				HeaderChecksum:   4745458999267866986,
+				PreviousTerm:   3,
+				Term:           5,
+				NextLogIndex:   3,
+				HeaderChecksum: 13274324415149675937,
 			},
 		},
 	}, r2.files)
@@ -492,29 +473,26 @@ func TestRevertTermsAndOpen(t *testing.T) {
 		{
 			Index: 0,
 			Header: &format.Header{
-				Term:             1,
-				PreviousChecksum: 10,
-				HeaderChecksum:   14468226675477782344,
+				Term:           1,
+				HeaderChecksum: 11339396051936363247,
 			},
 		},
 		{
 			Index: 1,
 			Header: &format.Header{
-				PreviousTerm:     1,
-				Term:             3,
-				NextLogIndex:     1,
-				PreviousChecksum: 11,
-				HeaderChecksum:   13316530402584890802,
+				PreviousTerm:   1,
+				Term:           3,
+				NextLogIndex:   1,
+				HeaderChecksum: 1229607450597664475,
 			},
 		},
 		{
 			Index: 3,
 			Header: &format.Header{
-				PreviousTerm:     3,
-				Term:             5,
-				NextLogIndex:     3,
-				PreviousChecksum: 13,
-				HeaderChecksum:   4745458999267866986,
+				PreviousTerm:   3,
+				Term:           5,
+				NextLogIndex:   3,
+				HeaderChecksum: 13274324415149675937,
 			},
 		},
 	}, r2.files)
@@ -526,14 +504,14 @@ func TestLastTerm(t *testing.T) {
 
 	requireT.Zero(r.LastTerm())
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
 	requireT.EqualValues(1, r.LastTerm())
 
-	file, err = r.Create(3, 0, 0)
+	file, err = r.Create(3, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -548,7 +526,7 @@ func TestPreviousTerm(t *testing.T) {
 	requireT.Zero(r.PreviousTerm(0))
 	requireT.Zero(r.PreviousTerm(100))
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -557,7 +535,7 @@ func TestPreviousTerm(t *testing.T) {
 	requireT.EqualValues(1, r.PreviousTerm(1))
 	requireT.EqualValues(1, r.PreviousTerm(100))
 
-	file, err = r.Create(2, 50, 0)
+	file, err = r.Create(2, 50)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -569,7 +547,7 @@ func TestPreviousTerm(t *testing.T) {
 	requireT.EqualValues(2, r.PreviousTerm(51))
 	requireT.EqualValues(2, r.PreviousTerm(100))
 
-	file, err = r.Create(4, 100, 0)
+	file, err = r.Create(4, 100)
 	requireT.NoError(err)
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
@@ -589,14 +567,17 @@ func TestOpenCurrent(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
-	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 0, 0)
+	file, err = r.Create(3, 0)
 	requireT.NoError(err)
 	requireT.NotNil(file)
+	requireT.NotNil(file)
+	data, err := file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
 	file, err = r.OpenCurrent()
@@ -605,8 +586,14 @@ func TestOpenCurrent(t *testing.T) {
 	requireT.Equal(format.Header{
 		PreviousTerm:   1,
 		Term:           3,
-		HeaderChecksum: 18311182628384496241,
+		HeaderChecksum: 13861199811570477881,
 	}, file.Header())
+
+	var b [3]byte
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x01, 0x02, 0x03}, b[:])
+
 	requireT.NoError(file.Close())
 }
 
@@ -619,11 +606,88 @@ func TestOpenCurrentReturnsNilIfRepoIsEmpty(t *testing.T) {
 	requireT.Nil(file)
 }
 
+func TestOpenByIndex(t *testing.T) {
+	requireT := require.New(t)
+	r, dir := newRepo(t, "")
+	file, err := r.Create(1, 0)
+	requireT.NoError(err)
+	data, err := file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x01, 0x02, 0x03})
+	requireT.NoError(file.Close())
+
+	file, err = r.Create(2, 3)
+	requireT.NoError(err)
+	data, err = file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x04, 0x05})
+	requireT.NoError(file.Close())
+
+	file, err = r.Create(3, 5)
+	requireT.NoError(err)
+	data, err = file.Map()
+	requireT.NoError(err)
+	copy(data, []byte{0x06})
+	requireT.NoError(file.Close())
+
+	r, _ = newRepo(t, dir)
+	var b [4]byte
+
+	file, err = r.OpenByIndex(0)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x01, 0x02, 0x03, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(1)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x02, 0x03, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(2)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x03, 0x00, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(3)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x04, 0x05, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(4)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x05, 0x00, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(5)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x06, 0x00, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+
+	file, err = r.OpenByIndex(6)
+	requireT.NoError(err)
+	_, err = io.ReadFull(file.Reader(), b[:])
+	requireT.NoError(err)
+	requireT.Equal([]byte{0x00, 0x00, 0x00, 0x00}, b[:])
+	requireT.NoError(file.Close())
+}
+
 func TestSync(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Sync())
 	requireT.NoError(file.Close())
@@ -633,7 +697,7 @@ func TestMapAndClose(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	_, err = file.Map()
 	requireT.NoError(err)
@@ -644,7 +708,7 @@ func TestMap(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -656,7 +720,7 @@ func TestCreateMapIsStored(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -674,7 +738,7 @@ func TestOpenCurrentMapIsStored(t *testing.T) {
 	requireT := require.New(t)
 	r, _ := newRepo(t, "")
 
-	file, err := r.Create(1, 0, 0)
+	file, err := r.Create(1, 0)
 	requireT.NoError(err)
 	requireT.NoError(file.Close())
 	file, err = r.OpenCurrent()

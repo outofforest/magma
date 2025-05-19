@@ -100,16 +100,11 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 }
 
 func size0(m *Header) uint64 {
-	var n uint64 = 5
+	var n uint64 = 4
 	{
 		// PreviousTerm
 
 		helpers.UInt64Size(m.PreviousTerm, &n)
-	}
-	{
-		// PreviousChecksum
-
-		helpers.UInt64Size(m.PreviousChecksum, &n)
 	}
 	{
 		// Term
@@ -137,11 +132,6 @@ func marshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Marshal(m.PreviousTerm, b, &o)
 	}
 	{
-		// PreviousChecksum
-
-		helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
-	}
-	{
 		// Term
 
 		helpers.UInt64Marshal(m.Term, b, &o)
@@ -166,11 +156,6 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		// PreviousTerm
 
 		helpers.UInt64Unmarshal(&m.PreviousTerm, b, &o)
-	}
-	{
-		// PreviousChecksum
-
-		helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
 	}
 	{
 		// Term
@@ -204,22 +189,12 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		}
 	}
 	{
-		// PreviousChecksum
-
-		if reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
-			b[0] &= 0xFD
-		} else {
-			b[0] |= 0x02
-			helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
-		}
-	}
-	{
 		// Term
 
 		if reflect.DeepEqual(m.Term, mSrc.Term) {
-			b[0] &= 0xFB
+			b[0] &= 0xFD
 		} else {
-			b[0] |= 0x04
+			b[0] |= 0x02
 			helpers.UInt64Marshal(m.Term, b, &o)
 		}
 	}
@@ -227,9 +202,9 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		// NextLogIndex
 
 		if reflect.DeepEqual(m.NextLogIndex, mSrc.NextLogIndex) {
-			b[0] &= 0xF7
+			b[0] &= 0xFB
 		} else {
-			b[0] |= 0x08
+			b[0] |= 0x04
 			helpers.UInt64Marshal(m.NextLogIndex, b, &o)
 		}
 	}
@@ -237,9 +212,9 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		// HeaderChecksum
 
 		if reflect.DeepEqual(m.HeaderChecksum, mSrc.HeaderChecksum) {
-			b[0] &= 0xEF
+			b[0] &= 0xF7
 		} else {
-			b[0] |= 0x10
+			b[0] |= 0x08
 			helpers.UInt64Marshal(m.HeaderChecksum, b, &o)
 		}
 	}
@@ -257,30 +232,23 @@ func applyPatch0(m *Header, b []byte) uint64 {
 		}
 	}
 	{
-		// PreviousChecksum
-
-		if b[0]&0x02 != 0 {
-			helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
-		}
-	}
-	{
 		// Term
 
-		if b[0]&0x04 != 0 {
+		if b[0]&0x02 != 0 {
 			helpers.UInt64Unmarshal(&m.Term, b, &o)
 		}
 	}
 	{
 		// NextLogIndex
 
-		if b[0]&0x08 != 0 {
+		if b[0]&0x04 != 0 {
 			helpers.UInt64Unmarshal(&m.NextLogIndex, b, &o)
 		}
 	}
 	{
 		// HeaderChecksum
 
-		if b[0]&0x10 != 0 {
+		if b[0]&0x08 != 0 {
 			helpers.UInt64Unmarshal(&m.HeaderChecksum, b, &o)
 		}
 	}
