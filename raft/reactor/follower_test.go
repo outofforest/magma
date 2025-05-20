@@ -58,7 +58,7 @@ func newState(t *testing.T, dir string) (*state.State, string) {
 	return s, dir
 }
 
-func newReactor(s *state.State) *Reactor {
+func newReactor(serverID magmatypes.ServerID, s *state.State) *Reactor {
 	activePeers := make([]magmatypes.ServerID, 0, len(config.Servers))
 	for _, s := range config.Servers {
 		if s.ID != serverID {
@@ -66,7 +66,7 @@ func newReactor(s *state.State) *Reactor {
 		}
 	}
 
-	return New(config.ServerID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
+	return New(serverID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
 }
 
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
@@ -119,7 +119,7 @@ func TestFollowerInitialRole(t *testing.T) {
 
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	requireT.Equal(types.RoleFollower, r.role)
 	requireT.EqualValues(0, r.electionTick)
@@ -131,7 +131,7 @@ func TestFollowerSetup(t *testing.T) {
 
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	r.role = types.RoleCandidate
 	r.leaderID = serverID
@@ -174,7 +174,7 @@ func TestFollowerAppendTxAppendToEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	txb := newTxBuilder()
@@ -213,7 +213,7 @@ func TestFollowerAppendTxAppendToNonEmptyLog(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, txb(0x03, 0x01, 0x02, 0x03))
@@ -246,7 +246,7 @@ func TestFollowerAppendTxDoesNothingIfNotFromLeader(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	txb := newTxBuilder()
@@ -275,7 +275,7 @@ func TestFollowerAppendTxFailsIfTxDoesNotContainChecksum(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, []byte{0x01, 0x01})
@@ -298,7 +298,7 @@ func TestFollowerLogACKDoesNothing(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.LogACK{
@@ -339,7 +339,7 @@ func TestFollowerLogSyncRequestOnFutureTerm(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:      3,
@@ -392,7 +392,7 @@ func TestFollowerLogSyncRequestDiscardEntries(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.syncedCount = 21
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
@@ -446,7 +446,7 @@ func TestFollowerLogSyncRequestDiscardAtSynced(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.syncedCount = 42
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
@@ -497,7 +497,7 @@ func TestFollowerLogSyncRequestTermMismatch(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.syncedCount = 43
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
@@ -548,7 +548,7 @@ func TestFollowerLogSyncRequestRejectIfNoPreviousEntry(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:      4,
@@ -595,7 +595,7 @@ func TestFollowerLogSyncRequestSendResponseIfLastTermIsLower(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:      4,
@@ -644,7 +644,7 @@ func TestFollowerLogSyncRequestSendResponseIfNextIndexIsLower(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:      4,
@@ -692,7 +692,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTerm(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer2ID, &types.LogSyncRequest{
 		Term:      3,
@@ -739,7 +739,7 @@ func TestFollowerLogSyncRequestDoNothingOnLowerTermAndNextLogItemBelowCommittedC
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	r.commitInfo = types.CommitInfo{
 		NextIndex:      43,
@@ -793,7 +793,7 @@ func TestFollowerLogSyncRequestErrorIfNextIndexEquals(t *testing.T) {
 		txb(0x02),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	_, err = r.Apply(peer1ID, &types.LogSyncRequest{
 		Term:           4,
@@ -815,7 +815,7 @@ func TestFollowerLogSyncRequestErrorIfNextLogItemBelowCommittedCount(t *testing.
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	r.commitInfo = types.CommitInfo{
 		NextIndex:      43,
@@ -844,7 +844,7 @@ func TestFollowerApplyVoteRequestGrantedOnEmptyLog(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      1,
@@ -893,7 +893,7 @@ func TestFollowerApplyVoteRequestGrantedOnEqualLog(t *testing.T) {
 		txb(0x02), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -943,7 +943,7 @@ func TestFollowerApplyVoteRequestGrantedOnLongerLog(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -986,7 +986,7 @@ func TestFollowerApplyVoteRequestGrantedOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      3,
@@ -1036,7 +1036,7 @@ func TestFollowerApplyVoteRequestGrantedTwice(t *testing.T) {
 		txb(0x02), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -1104,7 +1104,7 @@ func TestFollowerApplyVoteRequestGrantVoteToOtherCandidateInNextTerm(t *testing.
 	), true, true)
 	requireT.NoError(err)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -1164,7 +1164,7 @@ func TestFollowerApplyVoteRequestRejectedOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(2))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      1,
@@ -1210,7 +1210,7 @@ func TestFollowerApplyVoteRequestRejectedOnLowerLogTerm(t *testing.T) {
 		txb(0x02), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      3,
@@ -1256,7 +1256,7 @@ func TestFollowerApplyVoteRequestRejectedOnShorterLog(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -1302,7 +1302,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 		txb(0x02), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      2,
@@ -1361,7 +1361,7 @@ func TestFollowerApplyVoteRequestRejectOtherCandidates(t *testing.T) {
 func TestFollowerApplyElectionTickAfterElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, types.ElectionTick(1))
 	requireT.NoError(err)
@@ -1403,7 +1403,7 @@ func TestFollowerApplyElectionTickAfterElectionTime(t *testing.T) {
 func TestFollowerApplyElectionTickBeforeElectionTime(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	r.ignoreElectionTick = 2
 
@@ -1430,7 +1430,7 @@ func TestFollowerApplyElectionTickBeforeElectionTime(t *testing.T) {
 func TestFollowerApplyPeerConnectedDoesNothing(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(magmatypes.ServerID("PeerID"), nil)
 	requireT.NoError(err)
@@ -1442,7 +1442,7 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(magmatypes.ZeroServerID, &types.ClientRequest{
 		Data: []byte{0x01},
@@ -1473,7 +1473,7 @@ func TestFollowerApplyHeartbeatTickCommitToLeaderCommit(t *testing.T) {
 		txb(0x05),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 	r.leaderCommittedCount = 84
 
@@ -1514,7 +1514,7 @@ func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 	r.leaderCommittedCount = 94
 
@@ -1556,7 +1556,7 @@ func TestFollowerApplyHeartbeatTickNoLeader(t *testing.T) {
 		txb(0x05),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderCommittedCount = 94
 
 	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
@@ -1583,7 +1583,7 @@ func TestFollowerApplyHeartbeat(t *testing.T) {
 	_, _, err := s.Append(txb(0x05), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.Heartbeat{
@@ -1614,7 +1614,7 @@ func TestFollowerApplyHeartbeatIgnoreIfNotLeader(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	result, err := r.Apply(peer1ID, &types.Heartbeat{
 		Term:         5,
@@ -1644,7 +1644,7 @@ func TestFollowerApplyHeartbeatIgnoreLowerTerm(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 
 	result, err := r.Apply(peer1ID, &types.Heartbeat{
@@ -1675,7 +1675,7 @@ func TestFollowerApplyHeartbeatErrorIfNewLeaderCommitIsLower(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
 		NextIndex:      20,
@@ -1701,7 +1701,7 @@ func TestFollowerApplyHotEnd(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
 		NextIndex:      20,
@@ -1735,7 +1735,7 @@ func TestFollowerApplyHotEndIgnoreFromNonLeader(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	r.leaderID = peer1ID
 	r.commitInfo = types.CommitInfo{
 		NextIndex:      20,
