@@ -212,13 +212,22 @@ func (s *State) validate(
 		return 0, 0, false, errors.New("bug in protocol")
 	}
 
-	s.nextIndex = nextIndex
-	lastTerm = s.repo.Revert(s.nextIndex)
+	lastTerm = s.repo.Revert(nextIndex)
+	if nextIndex < s.nextIndex {
+		if s.currentFile != nil {
+			if err := s.currentFile.Close(); err != nil {
+				return 0, 0, false, err
+			}
+			s.currentFile = nil
+		}
 
-	var err error
-	s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
-	if err != nil {
-		return 0, 0, false, err
+		s.nextIndex = nextIndex
+
+		var err error
+		s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
+		if err != nil {
+			return 0, 0, false, err
+		}
 	}
 
 	return lastTerm, s.nextIndex, true, nil
@@ -263,38 +272,41 @@ func (s *State) appendTx(
 			return 0, 0, errors.New("tx size exceeds page size")
 		}
 
-		term, n2 := varuint64.Parse(data[n1:])
-		switch {
-		case n2 == sizeWithoutChecksum:
-			if !allowTermMark {
-				return 0, 0, errors.New("term mark not allowed")
-			}
+		//nolint:nestif
+		if varuint64.Contains(data[n1:]) {
+			term, n2 := varuint64.Parse(data[n1:])
+			if n2 == sizeWithoutChecksum {
+				if !allowTermMark {
+					return 0, 0, errors.New("term mark not allowed")
+				}
 
-			if rafttypes.Term(term) <= s.highestTermSeen {
-				return 0, 0, errors.New("bug in protocol")
-			}
-			if rafttypes.Term(term) > s.evState.Term {
-				return 0, 0, errors.New("bug in protocol")
-			}
+				if rafttypes.Term(term) <= s.highestTermSeen {
+					return 0, 0, errors.New("bug in protocol")
+				}
+				if rafttypes.Term(term) > s.evState.Term {
+					return 0, 0, errors.New("bug in protocol")
+				}
 
-			if s.currentFile != nil {
-				if err := s.currentFile.Close(); err != nil {
+				if s.currentFile != nil {
+					if err := s.currentFile.Close(); err != nil {
+						return 0, 0, err
+					}
+				}
+
+				var err error
+				s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextIndex)
+				if err != nil {
 					return 0, 0, err
 				}
+				s.log, err = s.currentFile.Map()
+				if err != nil {
+					return 0, 0, err
+				}
+				s.nextIndexInFile = 0
+				s.highestTermSeen = rafttypes.Term(term)
 			}
-
-			var err error
-			s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextIndex)
-			if err != nil {
-				return 0, 0, err
-			}
-			s.log, err = s.currentFile.Map()
-			if err != nil {
-				return 0, 0, err
-			}
-			s.nextIndexInFile = 0
-			s.highestTermSeen = rafttypes.Term(term)
-		case s.highestTermSeen == 0:
+		}
+		if s.highestTermSeen == 0 {
 			// FIXME (wojciech): This is not tested.
 			return 0, 0, errors.New("bug in protocol")
 		}
@@ -333,6 +345,19 @@ func (s *State) appendTx(
 }
 
 func (s *State) append(data []byte) error {
+	if s.currentFile == nil {
+		var err error
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex)
+		if err != nil {
+			return err
+		}
+		s.log, err = s.currentFile.Map()
+		if err != nil {
+			return err
+		}
+		s.nextIndexInFile = 0
+	}
+
 	//nolint:nestif
 	if len(data) > len(s.log[s.nextIndexInFile:]) {
 		if s.currentFile != nil {
