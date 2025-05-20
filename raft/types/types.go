@@ -19,6 +19,8 @@ type LogSyncRequest struct {
 	NextIndex types.Index
 	// LastTerm is the term of the last log entry.
 	LastTerm Term
+	// TermStartIndex is the index where term referenced by next index starts.
+	TermStartIndex types.Index
 }
 
 // LogSyncResponse is sent to leader pointing to current log tail.

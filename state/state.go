@@ -130,7 +130,7 @@ func (s *State) NextIndex() types.Index {
 }
 
 // PreviousTerm returns term of previous log item.
-func (s *State) PreviousTerm(index types.Index) rafttypes.Term {
+func (s *State) PreviousTerm(index types.Index) (rafttypes.Term, types.Index) {
 	return s.repo.PreviousTerm(index)
 }
 
@@ -146,34 +146,26 @@ func (s *State) AppendTerm() (rafttypes.Term, types.Index, error) {
 }
 
 // Validate validates the common point in log.
-func (s *State) Validate(nextIndex types.Index, lastTerm rafttypes.Term) (rafttypes.Term, types.Index, error) {
+func (s *State) Validate(
+	lastTerm rafttypes.Term,
+	nextIndex types.Index,
+) (rafttypes.Term, types.Index, bool, error) {
 	if nextIndex == 0 {
-		return s.validate(nextIndex, lastTerm)
+		return s.validate(lastTerm, nextIndex)
 	}
 	if lastTerm == 0 {
-		return 0, 0, errors.New("bug in protocol")
+		return 0, 0, false, errors.New("bug in protocol")
 	}
 
-	if nextIndex > s.nextIndex {
-		return s.PreviousTerm(s.nextIndex), s.nextIndex, nil
+	if nextIndex <= s.nextIndex {
+		previousTerm, _ := s.PreviousTerm(nextIndex)
+		if previousTerm == lastTerm {
+			return s.validate(lastTerm, nextIndex)
+		}
 	}
 
-	if s.PreviousTerm(nextIndex) == lastTerm {
-		return s.validate(nextIndex, lastTerm)
-	}
-
-	var err error
-	lastTerm, s.nextIndex, err = s.repo.RevertTerms(s.PreviousTerm(nextIndex) - 1)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return lastTerm, s.nextIndex, nil
+	previousTerm, _ := s.PreviousTerm(s.nextIndex)
+	return previousTerm, s.nextIndex, false, nil
 }
 
 // Append appends data to log.
@@ -196,45 +188,40 @@ func (s *State) Sync() (types.Index, error) {
 }
 
 func (s *State) validate(
-	nextIndex types.Index,
 	lastTerm rafttypes.Term,
-) (_ rafttypes.Term, _ types.Index, retErr error) {
+	nextIndex types.Index,
+) (rafttypes.Term, types.Index, bool, error) {
 	if s.evState.Term == 0 {
-		return 0, 0, errors.New("bug in protocol")
+		return 0, 0, false, errors.New("bug in protocol")
 	}
 	if nextIndex > s.nextIndex {
 		// FIXME (wojciech): This is not tested.
-		return 0, 0, errors.New("bug in protocol")
+		return 0, 0, false, errors.New("bug in protocol")
 	}
 	if nextIndex == 0 && lastTerm != 0 {
 		// FIXME (wojciech): This is not tested.
-		return 0, 0, errors.New("bug in protocol")
+		return 0, 0, false, errors.New("bug in protocol")
 	}
 	if nextIndex != 0 && lastTerm == 0 {
 		// FIXME (wojciech): This is not tested.
-		return 0, 0, errors.New("bug in protocol")
+		return 0, 0, false, errors.New("bug in protocol")
 	}
-	if s.PreviousTerm(nextIndex) != lastTerm {
+	previousTerm, _ := s.PreviousTerm(nextIndex)
+	if previousTerm != lastTerm {
 		// FIXME (wojciech): This is not tested.
-		return 0, 0, errors.New("bug in protocol")
-	}
-	if nextIndex < s.nextIndex {
-		if s.PreviousTerm(nextIndex+1) == lastTerm {
-			// FIXME (wojciech): This is not tested.
-			return 0, 0, errors.New("bug in protocol")
-		}
-		var err error
-		if _, s.nextIndex, err = s.repo.RevertTerms(lastTerm); err != nil {
-			return 0, 0, err
-		}
-
-		s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
-		if err != nil {
-			return 0, 0, err
-		}
+		return 0, 0, false, errors.New("bug in protocol")
 	}
 
-	return lastTerm, s.nextIndex, nil
+	s.nextIndex = nextIndex
+	lastTerm = s.repo.Revert(s.nextIndex)
+
+	var err error
+	s.previousChecksum, err = readChecksum(s.repo, s.nextIndex)
+	if err != nil {
+		return 0, 0, false, err
+	}
+
+	return lastTerm, s.nextIndex, true, nil
 }
 
 func (s *State) appendTx(

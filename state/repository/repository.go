@@ -124,10 +124,14 @@ func (r *Repository) Create(term types.Term, nextIndex magmatypes.Index) (_ *Fil
 	}
 
 	if len(r.files) > 0 {
-		if term < r.files[len(r.files)-1].Header.Term {
+		h := r.files[len(r.files)-1].Header
+		if term < h.Term {
 			return nil, errors.New("cannot create file with past term")
 		}
-		header.PreviousTerm = r.files[len(r.files)-1].Header.Term
+		if nextIndex <= h.NextIndex {
+			return nil, errors.New("cannot create file with same or lower index")
+		}
+		header.PreviousTerm = h.Term
 	} else if err := os.MkdirAll(r.dir, 0o700); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -244,21 +248,21 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 	}
 }
 
-// RevertTerms reverts repository to previous term.
-func (r *Repository) RevertTerms(term types.Term) (types.Term, magmatypes.Index, error) {
+// Revert reverts repository to previous term.
+func (r *Repository) Revert(nextIndex magmatypes.Index) types.Term {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.files) > 0 && term < r.files[len(r.files)-1].Header.Term {
-		for i := len(r.files) - 1; i >= 0; i-- {
-			if h := r.files[i].Header; h.PreviousTerm <= term {
-				r.files = r.files[:i]
-				return h.PreviousTerm, h.NextIndex, nil
-			}
+	for i := len(r.files) - 1; i >= 0; i-- {
+		h := r.files[i].Header
+		if h.NextIndex < nextIndex {
+			r.files = r.files[:i+1]
+			return h.Term
 		}
 	}
 
-	return 0, 0, errors.New("nothing to revert")
+	r.files = r.files[:0]
+	return 0
 }
 
 // LastTerm returns last stored term.
@@ -274,17 +278,28 @@ func (r *Repository) LastTerm() types.Term {
 }
 
 // PreviousTerm returns term of the previous index.
-func (r *Repository) PreviousTerm(index magmatypes.Index) types.Term {
+func (r *Repository) PreviousTerm(index magmatypes.Index) (types.Term, magmatypes.Index) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	var term types.Term
+	var startTerm types.Term
+	var termStartIndex magmatypes.Index
 	for i := len(r.files) - 1; i >= 0; i-- {
-		if h := r.files[i].Header; h.NextIndex < index {
-			return h.Term
+		h := r.files[i].Header
+		if h.NextIndex < index && h.Term >= startTerm {
+			startTerm = h.Term
+			termStartIndex = h.NextIndex
+		}
+		if h.NextIndex < index && term == 0 {
+			term = h.Term
+		}
+		if h.PreviousTerm < startTerm && term > 0 {
+			break
 		}
 	}
 
-	return 0
+	return term, termStartIndex
 }
 
 func (r *Repository) open(fileIndex, offset uint64) (*File, error) {

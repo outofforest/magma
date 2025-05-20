@@ -870,7 +870,6 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 }
 
 func TestSplitAndResync(t *testing.T) {
-	t.Skip()
 	t.Parallel()
 
 	requireT := require.New(t)
@@ -884,17 +883,19 @@ func TestSplitAndResync(t *testing.T) {
 
 	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
 	c3 := system.NewClient(t, peer3, "client1", partitionDefault, nil)
+	tr1 := c1.NewTransactor()
+	tr3 := c3.NewTransactor()
 
 	cluster.StartPeers(peer1, peer2, peer3)
 	cluster.StartClients(c1, c3)
 
 	acc1ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc1ID})
 		return nil
 	}))
 	acc3ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+	requireT.NoError(tr3.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc3ID})
 		return nil
 	}))
@@ -904,12 +905,12 @@ func TestSplitAndResync(t *testing.T) {
 	cluster.DisableLink(peer3, peer2)
 
 	acc4ID := memdb.NewID[entities.AccountID]()
-	requireT.ErrorIs(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+	requireT.ErrorIs(tr3.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc4ID})
 		return nil
 	}), client.ErrAwaitTimeout)
 	acc5ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc5ID})
 		return nil
 	}))
@@ -918,12 +919,31 @@ func TestSplitAndResync(t *testing.T) {
 	cluster.EnableLink(peer3, peer2)
 
 	acc6ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: acc6ID})
-		return nil
-	}))
-	requireT.NoError(c1.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+	var err error
+	for range 5 {
+		err = c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(entities.Account{ID: acc6ID})
+			return nil
+		})
+		if err == nil {
+			break
+		}
+	}
+	requireT.NoError(err)
+	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
 		return nil
 	}))
+
+	v := c1.View()
+	_, exists := client.Get[entities.Account](v, acc1ID)
+	requireT.True(exists)
+	_, exists = client.Get[entities.Account](v, acc3ID)
+	requireT.True(exists)
+	_, exists = client.Get[entities.Account](v, acc4ID)
+	requireT.False(exists)
+	_, exists = client.Get[entities.Account](v, acc5ID)
+	requireT.True(exists)
+	_, exists = client.Get[entities.Account](v, acc6ID)
+	requireT.True(exists)
 }

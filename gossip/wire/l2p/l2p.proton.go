@@ -362,7 +362,7 @@ func applyPatch2(m *types.LogSyncResponse, b []byte) uint64 {
 }
 
 func size3(m *types.LogSyncRequest) uint64 {
-	var n uint64 = 3
+	var n uint64 = 4
 	{
 		// Term
 
@@ -377,6 +377,11 @@ func size3(m *types.LogSyncRequest) uint64 {
 		// LastTerm
 
 		helpers.UInt64Size(m.LastTerm, &n)
+	}
+	{
+		// TermStartIndex
+
+		helpers.UInt64Size(m.TermStartIndex, &n)
 	}
 	return n
 }
@@ -398,6 +403,11 @@ func marshal3(m *types.LogSyncRequest, b []byte) uint64 {
 
 		helpers.UInt64Marshal(m.LastTerm, b, &o)
 	}
+	{
+		// TermStartIndex
+
+		helpers.UInt64Marshal(m.TermStartIndex, b, &o)
+	}
 
 	return o
 }
@@ -418,6 +428,11 @@ func unmarshal3(m *types.LogSyncRequest, b []byte) uint64 {
 		// LastTerm
 
 		helpers.UInt64Unmarshal(&m.LastTerm, b, &o)
+	}
+	{
+		// TermStartIndex
+
+		helpers.UInt64Unmarshal(&m.TermStartIndex, b, &o)
 	}
 
 	return o
@@ -455,6 +470,16 @@ func makePatch3(m, mSrc *types.LogSyncRequest, b []byte) uint64 {
 			helpers.UInt64Marshal(m.LastTerm, b, &o)
 		}
 	}
+	{
+		// TermStartIndex
+
+		if reflect.DeepEqual(m.TermStartIndex, mSrc.TermStartIndex) {
+			b[0] &= 0xF7
+		} else {
+			b[0] |= 0x08
+			helpers.UInt64Marshal(m.TermStartIndex, b, &o)
+		}
+	}
 
 	return o
 }
@@ -480,6 +505,13 @@ func applyPatch3(m *types.LogSyncRequest, b []byte) uint64 {
 
 		if b[0]&0x04 != 0 {
 			helpers.UInt64Unmarshal(&m.LastTerm, b, &o)
+		}
+	}
+	{
+		// TermStartIndex
+
+		if b[0]&0x08 != 0 {
+			helpers.UInt64Unmarshal(&m.TermStartIndex, b, &o)
 		}
 	}
 
