@@ -188,6 +188,7 @@ func (c *Client) Run(ctx context.Context) error {
 	var awaitedTxsToClean []memdb.ID
 
 	cMarshaller := c2p.NewMarshaller()
+	commitCh := make(chan struct{})
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
@@ -216,7 +217,6 @@ func (c *Client) Run(ctx context.Context) error {
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
 
-						var commitCh chan struct{}
 						var tx *memdb.Txn
 						defer func() {
 							if tx != nil {
@@ -234,7 +234,6 @@ func (c *Client) Run(ctx context.Context) error {
 							case *gossipwire.StartLogStream:
 								if tx == nil {
 									tx = c.db.Txn(true)
-									commitCh = make(chan struct{})
 								}
 								var length uint64
 								for length < msg.Length {
@@ -262,7 +261,7 @@ func (c *Client) Run(ctx context.Context) error {
 								close(commitCh)
 
 								tx = nil
-								commitCh = nil
+								commitCh = make(chan struct{})
 
 								c.applyHotEnd(triggerCh)
 							default:
