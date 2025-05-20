@@ -16,13 +16,12 @@ func TestScenarioA(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 6, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x04), txb(0x04, 0x01),
 		txb(0x05), txb(0x05, 0x01),
 		txb(0x06), txb(0x06, 0x01),
-	)
-	fID, f, dir := followerReactor(t, 6, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -40,7 +39,6 @@ func TestScenarioA(t *testing.T) {
 			NextIndex: 95,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -80,7 +78,6 @@ func TestScenarioA(t *testing.T) {
 			NextIndex: 95,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog[:95])
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -99,6 +96,18 @@ func TestScenarioA(t *testing.T) {
 			NextIndex: 95,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastTerm)
+	requireT.EqualValues(106, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
+		txb(0x04), txb(0x04, 0x01),
+		txb(0x05), txb(0x05, 0x01),
+		txb(0x06), txb(0x06, 0x01), txb(0xff, 0xff),
+	))
 }
 
 func TestScenarioB(t *testing.T) {
@@ -108,11 +117,10 @@ func TestScenarioB(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 4, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x04),
-	)
-	fID, f, dir := followerReactor(t, 4, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -130,7 +138,6 @@ func TestScenarioB(t *testing.T) {
 			NextIndex: 42,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -170,7 +177,6 @@ func TestScenarioB(t *testing.T) {
 			NextIndex: 42,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog[:42])
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -189,6 +195,16 @@ func TestScenarioB(t *testing.T) {
 			NextIndex: 42,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(4, lastTerm)
+	requireT.EqualValues(53, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
+		txb(0x04), txb(0xff, 0xff),
+	))
 }
 
 func TestScenarioC(t *testing.T) {
@@ -198,13 +214,12 @@ func TestScenarioC(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 6, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x04), txb(0x04, 0x01),
 		txb(0x05), txb(0x05, 0x01),
 		txb(0x06), txb(0x06, 0x01), txb(0x06, 0x02), txb(0x06, 0x03),
-	)
-	fID, f, dir := followerReactor(t, 6, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -223,7 +238,6 @@ func TestScenarioC(t *testing.T) {
 			NextIndex: 106,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog[:106])
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -242,6 +256,18 @@ func TestScenarioC(t *testing.T) {
 			NextIndex: 106,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(6, lastTerm)
+	requireT.EqualValues(117, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
+		txb(0x04), txb(0x04, 0x01),
+		txb(0x05), txb(0x05, 0x01),
+		txb(0x06), txb(0x06, 0x01), txb(0x06, 0x02), txb(0xff, 0xff),
+	))
 }
 
 func TestScenarioD(t *testing.T) {
@@ -251,14 +277,13 @@ func TestScenarioD(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 7, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x04), txb(0x04, 0x01),
 		txb(0x05), txb(0x05, 0x01),
 		txb(0x06), txb(0x06, 0x01), txb(0x06, 0x02),
 		txb(0x07), txb(0x07, 0x01),
-	)
-	fID, f, dir := followerReactor(t, 7, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -276,7 +301,6 @@ func TestScenarioD(t *testing.T) {
 			NextIndex: 127,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -286,6 +310,19 @@ func TestScenarioD(t *testing.T) {
 			NextIndex: 106,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(7, lastTerm)
+	requireT.EqualValues(138, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
+		txb(0x04), txb(0x04, 0x01),
+		txb(0x05), txb(0x05, 0x01),
+		txb(0x06), txb(0x06, 0x01), txb(0x06, 0x02),
+		txb(0x07), txb(0x07, 0x01), txb(0xff, 0xff),
+	))
 }
 
 func TestScenarioE(t *testing.T) {
@@ -295,11 +332,10 @@ func TestScenarioE(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 4, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x04), txb(0x04, 0x01), txb(0x04, 0x02), txb(0x04, 0x03),
-	)
-	fID, f, dir := followerReactor(t, 4, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -317,7 +353,6 @@ func TestScenarioE(t *testing.T) {
 			NextIndex: 75,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -356,7 +391,6 @@ func TestScenarioE(t *testing.T) {
 			NextIndex: 74,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -395,7 +429,6 @@ func TestScenarioE(t *testing.T) {
 			NextIndex: 53,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -435,7 +468,6 @@ func TestScenarioE(t *testing.T) {
 			NextIndex: 53,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog[:32])
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -454,6 +486,16 @@ func TestScenarioE(t *testing.T) {
 			NextIndex: 53,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(4, lastTerm)
+	requireT.EqualValues(64, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
+		txb(0x04), txb(0x04, 0x01), txb(0xff, 0xff),
+	))
 }
 
 func TestScenarioF(t *testing.T) {
@@ -463,12 +505,11 @@ func TestScenarioF(t *testing.T) {
 
 	lID, l, initMsg := leaderReactor(t)
 	txb := newTxBuilder()
-	initLog := txs(
+	fID, f, dir := followerReactor(t, 3, txs(
 		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02),
 		txb(0x02), txb(0x02, 0x01), txb(0x02, 0x02),
 		txb(0x03), txb(0x03, 0x01), txb(0x03, 0x02), txb(0x03, 0x03), txb(0x03, 0x04),
-	)
-	fID, f, dir := followerReactor(t, 3, initLog)
+	))
 
 	result, err := f.Apply(lID, initMsg)
 	requireT.NoError(err)
@@ -486,7 +527,6 @@ func TestScenarioF(t *testing.T) {
 			NextIndex: 74,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -525,7 +565,6 @@ func TestScenarioF(t *testing.T) {
 			NextIndex: 53,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -564,7 +603,6 @@ func TestScenarioF(t *testing.T) {
 			NextIndex: 32,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog)
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -604,7 +642,6 @@ func TestScenarioF(t *testing.T) {
 			NextIndex: 32,
 		},
 	}, result)
-	logEqual(requireT, dir, initLog[:32])
 
 	result, err = l.Apply(fID, result.Message)
 	requireT.NoError(err)
@@ -623,6 +660,15 @@ func TestScenarioF(t *testing.T) {
 			NextIndex: 32,
 		},
 	}, result)
+
+	lastTerm, nextIndex, err := f.state.Append([]byte{0x02, 0xff, 0xff}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, lastTerm)
+	requireT.EqualValues(43, nextIndex)
+	txb = newTxBuilder()
+	logEqual(requireT, dir, txs(
+		txb(0x01), txb(0x01, 0x01), txb(0x01, 0x02), txb(0xff, 0xff),
+	))
 }
 
 func leaderReactor(t *testing.T) (magmatypes.ServerID, *Reactor, *types.LogSyncRequest) {
