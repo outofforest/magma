@@ -22,7 +22,7 @@ func TestLeaderSetup(t *testing.T) {
 		txb(0x02), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 
 	r.role = types.RoleCandidate
 	r.leaderID = peer1ID
@@ -112,7 +112,7 @@ func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T)
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -167,7 +167,7 @@ func TestLeaderApplyLogSyncRequestErrorIfThereIsAnotherLeader(t *testing.T) {
 	), true, true)
 	requireT.NoError(err)
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(3, s.CurrentTerm())
@@ -188,7 +188,7 @@ func TestLeaderApplyLogSyncResponseTransitionToFollowerOnFutureTerm(t *testing.T
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -217,7 +217,7 @@ func TestLeaderApplyLogACKTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -247,7 +247,7 @@ func TestLeaderApplyLogACKErrorIfReportedIndexIsGreater(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -269,7 +269,7 @@ func TestLeaderApplyLogACKErrorIfSyncIndexIsGreater(t *testing.T) {
 	requireT := require.New(t)
 	s, dir := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -297,7 +297,7 @@ func TestLeaderApplyLogACKUpdateNextIndex(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -338,7 +338,7 @@ func TestLeaderApplyLogACKUpdateSyncIndex(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -379,7 +379,7 @@ func TestLeaderApplyLogACKDoNothingIfNextIndexIsLower(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -422,7 +422,7 @@ func TestLeaderApplyLogACKDoNothingIfSyncIndexIsLower(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -465,7 +465,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentTerm(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -532,7 +532,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfBelowCurrentCommit(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -605,7 +605,7 @@ func TestLeaderApplyLogACKCommitNotUpdatedIfPeerIsPassive(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -686,7 +686,7 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 		txb(0x01), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -761,7 +761,7 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(1))
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(1, s.CurrentTerm())
@@ -816,7 +816,7 @@ func TestLeaderApplyLogSyncResponseErrorIfReplicatedMore(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -844,7 +844,7 @@ func TestLeaderApplyLogSyncResponseErrorIfSyncIsAheadLog(t *testing.T) {
 		txb(0x01), txb(0x03, 0x01, 0x02, 0x03),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -871,7 +871,7 @@ func TestLeaderApplyLogSyncResponseIgnorePastTerm(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -919,7 +919,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFound(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -980,7 +980,7 @@ func TestLeaderApplyLogSyncResponseCommonPointFoundWithPassivePeer(t *testing.T)
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1041,7 +1041,7 @@ func TestLeaderApplyLogSyncResponseNextIndexEqualsTermStartIndex(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1099,7 +1099,7 @@ func TestLeaderApplyHeartbeatTickAfterHeartbeatTime(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1151,7 +1151,7 @@ func TestLeaderApplyHeartbeatTickBeforeHeartbeatTime(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1192,7 +1192,7 @@ func TestLeaderApplyHeartbeatTickCommit(t *testing.T) {
 		txb(0x04), txb(0x01, 0x04),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1247,7 +1247,7 @@ func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
 		txb(0x03), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1295,7 +1295,7 @@ func TestLeaderApplyClientRequestNoTermMarkAllowed(t *testing.T) {
 		txb(0x03), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1326,7 +1326,7 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 		txb(0x03), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1387,7 +1387,7 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 		txb(0x03), txb(0x02, 0x00, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1449,7 +1449,7 @@ func TestLeaderApplyActivePeerConnected(t *testing.T) {
 		txb(0x04), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1516,7 +1516,7 @@ func TestLeaderApplyPassivePeerConnected(t *testing.T) {
 		txb(0x04), txb(0x01, 0x00),
 	), true, true)
 	requireT.NoError(err)
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1577,7 +1577,7 @@ func TestLeaderApplyHeartbeatErrorIfThereIsAnotherLeader(t *testing.T) {
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
@@ -1593,7 +1593,7 @@ func TestLeaderApplyHeartbeatChangeToFollowerOnFutureTerm(t *testing.T) {
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
 
-	r := newReactor(s)
+	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
 
