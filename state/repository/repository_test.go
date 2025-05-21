@@ -84,7 +84,7 @@ func TestCreateFirstTerm(t *testing.T) {
 	requireT.NotNil(file)
 	requireT.NoError(file.Close())
 
-	data, err := os.ReadFile(filepath.Join(dir, "0"))
+	data, err := os.ReadFile(filepath.Join(dir, "0/0"))
 	requireT.NoError(err)
 	requireT.Len(data, int(pageSize))
 
@@ -131,7 +131,7 @@ func TestCreateFollowingTerm(t *testing.T) {
 	id, err := m.ID(&format.Header{})
 	requireT.NoError(err)
 
-	data, err := os.ReadFile(filepath.Join(dir, "0"))
+	data, err := os.ReadFile(filepath.Join(dir, "0/0"))
 	requireT.NoError(err)
 	requireT.Len(data, int(pageSize))
 
@@ -142,7 +142,7 @@ func TestCreateFollowingTerm(t *testing.T) {
 		HeaderChecksum: 11339396051936363247,
 	}, h)
 
-	data, err = os.ReadFile(filepath.Join(dir, "1"))
+	data, err = os.ReadFile(filepath.Join(dir, "0/1"))
 	requireT.NoError(err)
 	requireT.Len(data, int(pageSize))
 

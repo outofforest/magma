@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 	var highestTermSeen rafttypes.Term
 
 	var log []byte
+	//nolint:nestif
 	if currentFile != nil {
 		log, err = currentFile.Map()
 		if err != nil {
@@ -44,8 +46,16 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 		}
 
 		highestTermSeen = header.Term
-		nextIndexInFile, previousChecksum = initialize(log, prevChecksum)
+		var fileOk bool
+		nextIndexInFile, previousChecksum, fileOk = initialize(log, prevChecksum)
 		nextIndex = header.NextIndex + nextIndexInFile
+		if !fileOk {
+			if err := currentFile.Close(); err != nil {
+				return nil, nil, err
+			}
+			currentFile = nil
+			nextIndexInFile = 0
+		}
 	}
 
 	s := &State{
@@ -398,31 +408,47 @@ func appendDefer(err *error) {
 	}
 }
 
-func initialize(log []byte, previousChecksum uint64) (types.Index, uint64) {
+func initialize(log []byte, previousChecksum uint64) (types.Index, uint64, bool) {
+	const maxTestSize = 1024
+
 	var index types.Index
 	for {
 		if !varuint64.Contains(log[index:]) {
-			return index, previousChecksum
+			return index, previousChecksum, false
 		}
 		size, n := varuint64.Parse(log[index:])
 		if size == 0 {
-			return index, previousChecksum
+			remainingSize := types.Index(len(log[index:]))
+			if remainingSize > maxTestSize {
+				remainingSize = maxTestSize
+			}
+
+			// Here we do a test where we compare if next 1KB of logs is zero.
+			// If this is true we assume the rest of the log is empty, and we may continue from there.
+			// Otherwise, that could mean that corruption happened on disk, and we decide to start fresh file.
+			// We assume that probability of getting 1KB of zeros as a result of data corruption is low enough.
+			var testZeros [maxTestSize]byte
+			if !bytes.Equal(log[index:index+remainingSize], testZeros[:remainingSize]) {
+				return index, previousChecksum, false
+			}
+
+			return index, previousChecksum, true
 		}
 		size += n
 		if index+types.Index(size) > types.Index(len(log)) {
-			return index, previousChecksum
+			return index, previousChecksum, false
 		}
 
 		txRaw := log[index : index+types.Index(size)]
 		i := len(txRaw) - format.ChecksumSize
 		checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
 		if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-			return index, previousChecksum
+			return index, previousChecksum, false
 		}
 		index += types.Index(size)
 		previousChecksum = checksum
 		if index == types.Index(len(log)) {
-			return index, previousChecksum
+			return index, previousChecksum, false
 		}
 	}
 }
