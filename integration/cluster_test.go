@@ -25,7 +25,6 @@ const (
 )
 
 func TestBenchmark(t *testing.T) {
-	t.Skip()
 	t.Parallel()
 
 	const (

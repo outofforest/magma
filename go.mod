@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/outofforest/logger v0.6.0
-	github.com/outofforest/memdb v1.6.0
+	github.com/outofforest/memdb v1.7.1
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.15.0
 	github.com/outofforest/resonance v0.20.0
@@ -22,7 +22,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/outofforest/ioc/v2 v2.5.2 // indirect
-	github.com/outofforest/iradix v1.5.0 // indirect
+	github.com/outofforest/iradix v1.6.0 // indirect
 	github.com/outofforest/mass v0.2.1 // indirect
 	github.com/outofforest/run v0.8.0 // indirect
 	github.com/outofforest/spin v0.3.1 // indirect
