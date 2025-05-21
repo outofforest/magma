@@ -77,6 +77,9 @@ func Open(dir string, pageSize uint64) (*Repository, error) {
 		return nil, errors.New("invalid page size")
 	}
 
+	// This is done to allow implement versioning later without moving the files.
+	dir = filepath.Join(dir, "0")
+
 	m := format.NewMarshaller()
 
 	files, nextFileIndex, err := listFiles(dir, m)

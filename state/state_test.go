@@ -2168,19 +2168,27 @@ func TestNewWithTxExceedingPageCapacity(t *testing.T) {
 	requireT.EqualValues(2, varuint64.Put(b, uint64(len(b)-2)))
 	_, _, err = s1.Append(b, false, false)
 	requireT.NoError(err)
+	requireT.EqualValues(s1.repo.PageCapacity()+10, s1.NextIndex())
+	requireT.EqualValues(s1.repo.PageCapacity(), s1.nextIndexInFile)
 
 	s2, _ := newState(t, dir)
 	requireT.EqualValues(1, s2.CurrentTerm())
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(s2.repo.PageCapacity()+10, s2.NextIndex())
-	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextIndexInFile)
+	requireT.Zero(s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+
+	term, nextIndex, err := s2.Append([]byte{0x02, 0x11, 0x11}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, term)
+	requireT.EqualValues(s2.repo.PageCapacity()+21, nextIndex)
 }
 
 func TestNewWithValidData(t *testing.T) {
 	requireT := require.New(t)
 
-	s1, _ := newState(t, "")
+	s1, dir := newState(t, "")
 
 	requireT.NoError(s1.SetCurrentTerm(1))
 	_, _, err := s1.Append([]byte{
@@ -2204,6 +2212,27 @@ func TestNewWithValidData(t *testing.T) {
 		0x0a, 0x01, 0x00, 0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6,
 	}, data[:21])
 	requireT.NoError(file.Close())
+
+	s2, _ := newState(t, dir)
+	requireT.EqualValues(1, s2.CurrentTerm())
+	requireT.EqualValues(1, s2.LastTerm())
+	requireT.EqualValues(1, s2.highestTermSeen)
+	requireT.EqualValues(21, s2.NextIndex())
+	requireT.NotNil(s2.currentFile)
+	requireT.EqualValues(21, s2.nextIndexInFile)
+
+	term, nextIndex, err := s2.Append([]byte{0x02, 0x11, 0x11}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, term)
+	requireT.EqualValues(32, nextIndex)
+	requireT.Equal(binary.LittleEndian.Uint64([]byte{
+		0xe0, 0xa7, 0x7c, 0xdc, 0x5a, 0xd3, 0x9d, 0x47,
+	}), s2.previousChecksum)
+	s3, _ := newState(t, dir)
+	logEqual(requireT, s3,
+		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20,
+		0x0a, 0x01, 0x00, 0x64, 0xe7, 0x0, 0x69, 0xd0, 0xe7, 0xe2, 0xe6, 0xa, 0x11, 0x11, 0xe0, 0xa7, 0x7c, 0xdc, 0x5a, 0xd3, 0x9d, 0x47,
+	)
 }
 
 func TestNewWithInvalidChecksum(t *testing.T) {
@@ -2230,7 +2259,20 @@ func TestNewWithInvalidChecksum(t *testing.T) {
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(10, s2.NextIndex())
-	requireT.EqualValues(10, s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+	requireT.Zero(s2.nextIndexInFile)
+
+	term, nextIndex, err := s2.Append([]byte{0x02, 0x11, 0x11}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, term)
+	requireT.EqualValues(21, nextIndex)
+	requireT.Equal(binary.LittleEndian.Uint64([]byte{
+		0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	}), s2.previousChecksum)
+	s3, _ := newState(t, dir)
+	logEqual(requireT, s3,
+		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20, 0xa, 0x11, 0x11, 0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	)
 }
 
 func TestNewWithInvalidSize(t *testing.T) {
@@ -2259,10 +2301,23 @@ func TestNewWithInvalidSize(t *testing.T) {
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(10, s2.NextIndex())
-	requireT.EqualValues(10, s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+	requireT.Zero(s2.nextIndexInFile)
+
+	term, nextIndex, err := s2.Append([]byte{0x02, 0x11, 0x11}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, term)
+	requireT.EqualValues(21, nextIndex)
+	requireT.Equal(binary.LittleEndian.Uint64([]byte{
+		0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	}), s2.previousChecksum)
+	s3, _ := newState(t, dir)
+	logEqual(requireT, s3,
+		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20, 0xa, 0x11, 0x11, 0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	)
 }
 
-func TestNewWithZeroSize(t *testing.T) {
+func TestNewWithZeroSizeAndFollowingNonZeroBytes(t *testing.T) {
 	requireT := require.New(t)
 
 	s1, dir := newState(t, "")
@@ -2286,7 +2341,20 @@ func TestNewWithZeroSize(t *testing.T) {
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(10, s2.NextIndex())
-	requireT.EqualValues(10, s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+	requireT.Zero(s2.nextIndexInFile)
+
+	term, nextIndex, err := s2.Append([]byte{0x02, 0x11, 0x11}, false, false)
+	requireT.NoError(err)
+	requireT.EqualValues(1, term)
+	requireT.EqualValues(21, nextIndex)
+	requireT.Equal(binary.LittleEndian.Uint64([]byte{
+		0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	}), s2.previousChecksum)
+	s3, _ := newState(t, dir)
+	logEqual(requireT, s3,
+		0x09, 0x01, 0x8a, 0xa5, 0x40, 0x7e, 0x4a, 0x41, 0x9e, 0x20, 0xa, 0x11, 0x11, 0x48, 0xf4, 0xd3, 0xe5, 0x25, 0x93, 0x48, 0x29,
+	)
 }
 
 func TestNewWithFullFile(t *testing.T) {
@@ -2310,7 +2378,8 @@ func TestNewWithFullFile(t *testing.T) {
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(s2.repo.PageCapacity(), s2.NextIndex())
-	requireT.EqualValues(s2.repo.PageCapacity(), s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+	requireT.Zero(s2.nextIndexInFile)
 }
 
 func TestNewWithBrokenSize(t *testing.T) {
@@ -2338,7 +2407,8 @@ func TestNewWithBrokenSize(t *testing.T) {
 	requireT.EqualValues(1, s2.LastTerm())
 	requireT.EqualValues(1, s2.highestTermSeen)
 	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.NextIndex())
-	requireT.EqualValues(s2.repo.PageCapacity()-1, s2.nextIndexInFile)
+	requireT.Nil(s2.currentFile)
+	requireT.Zero(s2.nextIndexInFile)
 }
 
 func TestSync(t *testing.T) {
