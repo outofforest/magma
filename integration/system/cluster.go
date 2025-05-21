@@ -48,6 +48,11 @@ type Peer struct {
 	group       *parallel.Group
 }
 
+// ClientListenAddr returns address of client endpoint listener.
+func (p *Peer) ClientListenAddr() string {
+	return p.c2pListener.Addr().String()
+}
+
 // DropData drops data directory of the peer.
 func (p *Peer) DropData() {
 	if err := os.RemoveAll(p.dir); err != nil && !errors.Is(err, os.ErrNotExist) {
