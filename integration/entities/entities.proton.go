@@ -3,6 +3,7 @@ package entities
 import (
 	"reflect"
 	"time"
+	"unsafe"
 
 	"github.com/outofforest/proton"
 	"github.com/outofforest/proton/helpers"
@@ -116,7 +117,7 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 }
 
 func sizei0(m *Fields) uint64 {
-	var n uint64 = 11
+	var n uint64 = 27
 	{
 		// Time
 
@@ -215,6 +216,12 @@ func marshali0(m *Fields, b []byte) uint64 {
 
 		helpers.UInt64Marshal(m.Uint64, b, &o)
 	}
+	{
+		// EntityID
+
+		copy(b[o:o+16], unsafe.Slice(&m.EntityID[0], 16))
+		o += 16
+	}
 
 	return o
 }
@@ -276,6 +283,12 @@ func unmarshali0(m *Fields, b []byte) uint64 {
 		// Uint64
 
 		helpers.UInt64Unmarshal(&m.Uint64, b, &o)
+	}
+	{
+		// EntityID
+
+		copy(unsafe.Slice(&m.EntityID[0], 16), b[o:o+16])
+		o += 16
 	}
 
 	return o
@@ -385,6 +398,17 @@ func makePatchi0(m, mSrc *Fields, b []byte) uint64 {
 			helpers.UInt64Marshal(m.Uint64, b, &o)
 		}
 	}
+	{
+		// EntityID
+
+		if reflect.DeepEqual(m.EntityID, mSrc.EntityID) {
+			b[1] &= 0xFD
+		} else {
+			b[1] |= 0x02
+			copy(b[o:o+16], unsafe.Slice(&m.EntityID[0], 16))
+			o += 16
+		}
+	}
 
 	return o
 }
@@ -465,6 +489,14 @@ func applyPatchi0(m *Fields, b []byte) uint64 {
 
 		if b[1]&0x01 != 0 {
 			helpers.UInt64Unmarshal(&m.Uint64, b, &o)
+		}
+	}
+	{
+		// EntityID
+
+		if b[1]&0x02 != 0 {
+			copy(unsafe.Slice(&m.EntityID[0], 16), b[o:o+16])
+			o += 16
 		}
 	}
 
