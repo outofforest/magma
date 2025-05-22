@@ -1224,6 +1224,106 @@ func TestFieldIndexUInt64(t *testing.T) {
 	requireT.False(ok)
 }
 
+func TestFieldIndexID(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	var e entities.Fields
+	index := indices.NewFieldIndex(&e, &e.EntityID)
+
+	c := newTestClient(t, index)
+
+	es := []entities.Fields{
+		{
+			ID:       memdb.NewID[memdb.ID](),
+			EntityID: entities.AccountID{0x02},
+		},
+		{
+			ID:       memdb.NewID[memdb.ID](),
+			EntityID: entities.AccountID{0x00, 0x01},
+		},
+		{
+			ID:       memdb.NewID[memdb.ID](),
+			EntityID: entities.AccountID{0x00, 0x00},
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, e := range es {
+			tx.Set(e)
+		}
+		return nil
+	}))
+
+	for i := range es {
+		es[i].Revision = 1
+	}
+
+	v := c.View()
+	e, exists := First[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[2], e)
+
+	e, exists = Last[entities.Fields](v, index)
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = First[entities.Fields](v, index, entities.AccountID{0x02})
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	e, exists = Last[entities.Fields](v, index, entities.AccountID{0x02})
+	requireT.True(exists)
+	requireT.Equal(es[0], e)
+
+	_, exists = First[entities.Fields](v, index, entities.AccountID{0x03})
+	requireT.False(exists)
+
+	_, exists = Last[entities.Fields](v, index, entities.AccountID{0x00, 0x02})
+	requireT.False(exists)
+
+	it := ForwardIterator[entities.Fields](v, index)
+	e, ok := it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Fields](v, index)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[0], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[2], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Fields](v, index, entities.AccountID{0x00, 0x01})
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Fields](v, index, entities.AccountID{0x00, 0x01})
+	e, ok = it()
+	requireT.True(ok)
+	requireT.Equal(es[1], e)
+	_, ok = it()
+	requireT.False(ok)
+}
+
 func TestIfIndex(t *testing.T) {
 	t.Parallel()
 
