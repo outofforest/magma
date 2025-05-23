@@ -35,9 +35,9 @@ func TestBenchmark(t *testing.T) {
 	requireT := require.New(t)
 
 	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
 	var e entities.Account
@@ -83,7 +83,7 @@ func TestSinglePeer(t *testing.T) {
 
 	requireT := require.New(t)
 
-	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
+	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	c := system.NewClient(t, p, "client", partitionDefault, nil)
 
 	cluster, ctx := system.NewCluster(t, p)
@@ -118,9 +118,9 @@ func Test3Peers3Clients(t *testing.T) {
 	requireT := require.New(t)
 
 	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
 	ids := make([]entities.AccountID, 0, len(peers))
@@ -206,9 +206,9 @@ func TestPeerRestart(t *testing.T) {
 	requireT := require.New(t)
 
 	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: true}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: true}),
+		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
 	clients := make([]*system.Client, 0, len(peers))
@@ -260,9 +260,9 @@ func TestPassivePeer(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
-	peerObserver := system.NewPeer(t, "PO", types.Partitions{partitionDefault: false})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peerObserver := system.NewPeer(t, "PO", types.Partitions{partitionDefault: types.PartitionRolePassive})
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
@@ -316,9 +316,9 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
@@ -436,9 +436,9 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
@@ -570,9 +570,18 @@ func TestPartitions(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partition1: true, partition2: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partition2: true, partition3: true})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partition3: true, partition1: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{
+		partition1: types.PartitionRoleActive,
+		partition2: types.PartitionRoleActive,
+	})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{
+		partition2: types.PartitionRoleActive,
+		partition3: types.PartitionRoleActive,
+	})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{
+		partition3: types.PartitionRoleActive,
+		partition1: types.PartitionRoleActive,
+	})
 
 	c1 := system.NewClient(t, peer1, "client1", partition1, nil)
 	c2 := system.NewClient(t, peer2, "client2", partition2, nil)
@@ -684,8 +693,8 @@ func TestTimeouts(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
 	cluster, ctx := system.NewCluster(t, peer1, peer2)
@@ -731,8 +740,8 @@ func TestOutdatedTx(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
 	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
 
@@ -785,7 +794,7 @@ func TestEmptyTx(t *testing.T) {
 
 	requireT := require.New(t)
 
-	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: true})
+	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	c := system.NewClient(t, p, "client", partitionDefault, nil)
 
 	cluster, ctx := system.NewCluster(t, p)
@@ -803,9 +812,9 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
@@ -873,9 +882,9 @@ func TestSplitAndResync(t *testing.T) {
 
 	requireT := require.New(t)
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: true})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: true})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: true})
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
 	cluster.ForceLeader(peer3)
