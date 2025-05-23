@@ -1430,6 +1430,46 @@ func TestIfIndex(t *testing.T) {
 	requireT.False(ok)
 }
 
+func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	acc := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First1",
+		LastName:  "Last1",
+	}
+
+	indexLastName := indices.NewIfIndex[entities.Account](
+		indices.NewFieldIndex(&acc, &acc.LastName),
+		func(acc *entities.Account) bool {
+			return acc.FirstName == "First1"
+		},
+	)
+
+	c := newTestClient(t, indexLastName)
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		tx.Set(acc)
+		return nil
+	}))
+
+	v := c.View()
+	acc, exists := First[entities.Account](v, indexLastName)
+	requireT.True(exists)
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		acc.FirstName = "First2"
+		tx.Set(acc)
+		return nil
+	}))
+
+	v = c.View()
+	_, exists = First[entities.Account](v, indexLastName)
+	requireT.False(exists)
+}
+
 func TestMultiIndex(t *testing.T) {
 	t.Parallel()
 
