@@ -291,7 +291,7 @@ func (c *Client) Run(ctx context.Context) error {
 							select {
 							case <-ctx.Done():
 								return errors.WithStack(ctx.Err())
-							case <-time.After(2 * c.config.AwaitTimeout):
+							case <-time.After(c.config.AwaitTimeout):
 								c.mu.Lock()
 								for _, id := range awaitedTxsToClean {
 									delete(c.awaitedTxs, id)
