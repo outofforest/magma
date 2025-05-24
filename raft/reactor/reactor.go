@@ -241,11 +241,6 @@ func (r *Reactor) applyLogSyncResponse(
 }
 
 func (r *Reactor) applyVoteRequest(peerID magmatypes.ServerID, m *types.VoteRequest) (Result, error) {
-	if r.role == types.RoleLeader && m.Term == r.state.CurrentTerm() {
-		// FIXME (wojciech): This is not tested.
-		return r.resultError(errors.New("bug in protocol"))
-	}
-
 	if err := r.maybeTransitionToFollower(m.Term); err != nil {
 		return r.resultError(err)
 	}
@@ -556,7 +551,7 @@ func (r *Reactor) handleVoteRequest(
 	candidateID magmatypes.ServerID,
 	req *types.VoteRequest,
 ) (*types.VoteResponse, error) {
-	if req.Term < r.state.CurrentTerm() || r.lastTerm > req.LastTerm ||
+	if r.role == types.RoleLeader || req.Term < r.state.CurrentTerm() || r.lastTerm > req.LastTerm ||
 		(r.lastTerm == req.LastTerm && r.commitInfo.NextIndex > req.NextIndex) {
 		return &types.VoteResponse{
 			Term: r.state.CurrentTerm(),
