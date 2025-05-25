@@ -15,6 +15,9 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+// ErrInvalidTransaction is returned if transaction is invalid.
+var ErrInvalidTransaction = errors.New("invalid transaction")
+
 // Closer represents function closing the state.
 type Closer func() error
 
@@ -259,17 +262,17 @@ func (s *State) appendTx(
 		size, n1 := varuint64.Parse(data)
 		if size == 0 {
 			// FIXME (wojciech): This is not tested.
-			return 0, 0, errors.New("bug in protocol")
+			return 0, 0, errors.Wrap(ErrInvalidTransaction, "transaction size is 0")
 		}
 		if size > uint64(len(data[n1:])) {
 			// FIXME (wojciech): This is not tested.
-			return 0, 0, errors.New("bug in protocol")
+			return 0, 0, errors.Wrap(ErrInvalidTransaction, "transaction size exceeds transaction data")
 		}
 
 		var sizeWithChecksum, sizeWithoutChecksum uint64
 		if containsChecksum {
 			if size < format.ChecksumSize {
-				return 0, 0, errors.New("bad size")
+				return 0, 0, errors.Wrap(ErrInvalidTransaction, "bad size")
 			}
 			sizeWithChecksum = size
 			sizeWithoutChecksum = size - format.ChecksumSize
@@ -279,7 +282,7 @@ func (s *State) appendTx(
 		}
 
 		if sizeWithChecksum > s.repo.PageCapacity() {
-			return 0, 0, errors.New("tx size exceeds page size")
+			return 0, 0, errors.Wrap(ErrInvalidTransaction, "tx size exceeds page size")
 		}
 
 		//nolint:nestif
@@ -287,7 +290,7 @@ func (s *State) appendTx(
 			term, n2 := varuint64.Parse(data[n1:])
 			if n2 == sizeWithoutChecksum {
 				if !allowTermMark {
-					return 0, 0, errors.New("term mark not allowed")
+					return 0, 0, errors.Wrap(ErrInvalidTransaction, "term mark not allowed")
 				}
 
 				if rafttypes.Term(term) <= s.highestTermSeen {

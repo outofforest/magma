@@ -4,12 +4,15 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/gossip"
 	"github.com/outofforest/magma/raft/partition"
 	"github.com/outofforest/magma/raft/reactor"
 	"github.com/outofforest/magma/raft/timeouts"
 	"github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/state"
 	magmatypes "github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 )
@@ -105,6 +108,8 @@ func runReactor(
 	resultCh chan<- reactor.Result,
 	roleCh chan types.Role,
 ) error {
+	log := logger.Get(ctx)
+
 	role := types.RoleFollower
 	roleCh <- role
 
@@ -119,6 +124,12 @@ func runReactor(
 
 		res, err := r.Apply(cmd.PeerID, cmd.Cmd)
 		if err != nil {
+			if cmd.Cmd != nil {
+				if _, ok := cmd.Cmd.(*types.ClientRequest); ok && errors.Is(err, state.ErrInvalidTransaction) {
+					log.Error("Invalid transaction received from client.", zap.Error(err))
+					continue
+				}
+			}
 			return err
 		}
 
