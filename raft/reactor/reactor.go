@@ -306,12 +306,13 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 		return r.resultEmpty()
 	}
 
-	var err error
-	r.lastTerm, r.commitInfo.NextIndex, err = r.state.Append(m.Data, false, false)
+	lastTerm, nextIndex, err := r.state.Append(m.Data, false, false)
 	if err != nil {
 		return r.resultError(err)
 	}
 
+	r.lastTerm = lastTerm
+	r.commitInfo.NextIndex = nextIndex
 	r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
 
 	return r.resultEmpty()
