@@ -757,14 +757,14 @@ func TestLeaderApplyLogACKUpdateLeaderCommitToCommonPoint(t *testing.T) {
 	}, r.commitInfo)
 }
 
-func TestLeaderApplyVoteRequestRejectIfLeader(t *testing.T) {
+func TestLeaderApplyVoteRequestRejectOnPastTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	requireT.NoError(s.SetCurrentTerm(1))
+	requireT.NoError(s.SetCurrentTerm(2))
 	r := newReactor(serverID, s)
 	_, err := r.transitionToLeader()
 	requireT.NoError(err)
-	requireT.EqualValues(1, s.CurrentTerm())
+	requireT.EqualValues(2, s.CurrentTerm())
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
 		Term:      1,
@@ -786,27 +786,29 @@ func TestLeaderApplyVoteRequestRejectIfLeader(t *testing.T) {
 			peer1ID,
 		},
 		Message: &types.VoteResponse{
-			Term:        1,
+			Term:        2,
 			VoteGranted: false,
 		},
 	}, result)
 
-	requireT.EqualValues(1, s.CurrentTerm())
+	requireT.EqualValues(2, s.CurrentTerm())
 }
 
-func TestLeaderApplyVoteRequestRejectOnPastTerm(t *testing.T) {
+func TestLeaderApplyVoteRequestIfLeaderAndSameTerm(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
-	requireT.NoError(s.SetCurrentTerm(2))
+	requireT.NoError(s.SetCurrentTerm(1))
 	r := newReactor(serverID, s)
-	_, err := r.transitionToLeader()
+	_, err := r.transitionToCandidate()
+	requireT.NoError(err)
+	_, err = r.transitionToLeader()
 	requireT.NoError(err)
 	requireT.EqualValues(2, s.CurrentTerm())
 
 	result, err := r.Apply(peer1ID, &types.VoteRequest{
-		Term:      1,
+		Term:      2,
 		NextIndex: 10,
-		LastTerm:  1,
+		LastTerm:  2,
 	})
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
@@ -875,6 +877,43 @@ func TestLeaderApplyVoteRequestTransitionToFollowerOnFutureTerm(t *testing.T) {
 	granted, err = s.VoteFor(peer1ID)
 	requireT.NoError(err)
 	requireT.True(granted)
+}
+
+func TestLeaderApplyVoteRequestIfLeader(t *testing.T) {
+	requireT := require.New(t)
+	s, _ := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(1))
+	r := newReactor(serverID, s)
+	_, err := r.transitionToLeader()
+	requireT.NoError(err)
+	requireT.EqualValues(1, s.CurrentTerm())
+
+	result, err := r.Apply(peer1ID, &types.VoteRequest{
+		Term:      1,
+		NextIndex: 10,
+		LastTerm:  1,
+	})
+	requireT.NoError(err)
+	requireT.Equal(types.RoleLeader, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleLeader,
+		LeaderID: serverID,
+		CommitInfo: types.CommitInfo{
+			NextIndex:      10,
+			CommittedCount: 0,
+			HotEndIndex:    10,
+		},
+		Channel: ChannelP2P,
+		Recipients: []magmatypes.ServerID{
+			peer1ID,
+		},
+		Message: &types.VoteResponse{
+			Term:        1,
+			VoteGranted: true,
+		},
+	}, result)
+
+	requireT.EqualValues(1, s.CurrentTerm())
 }
 
 func TestLeaderApplyLogSyncResponseErrorIfReplicatedMore(t *testing.T) {
