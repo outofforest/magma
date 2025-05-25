@@ -551,7 +551,7 @@ func (r *Reactor) handleVoteRequest(
 	candidateID magmatypes.ServerID,
 	req *types.VoteRequest,
 ) (*types.VoteResponse, error) {
-	if r.role == types.RoleLeader || req.Term < r.state.CurrentTerm() || r.lastTerm > req.LastTerm ||
+	if req.Term < r.state.CurrentTerm() || r.lastTerm > req.LastTerm ||
 		(r.lastTerm == req.LastTerm && r.commitInfo.NextIndex > req.NextIndex) {
 		return &types.VoteResponse{
 			Term: r.state.CurrentTerm(),
