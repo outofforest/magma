@@ -240,8 +240,8 @@ func TestPeerRestart(t *testing.T) {
 			switch {
 			case err == nil:
 				break loop
-			case errors.Is(err, client.ErrBroadcastTimeout):
-			case errors.Is(err, client.ErrAwaitTimeout):
+			case errors.Is(err, client.ErrTxBroadcastTimeout):
+			case errors.Is(err, client.ErrTxAwaitTimeout):
 			default:
 				requireT.NoError(err)
 			}
@@ -712,7 +712,7 @@ func TestTimeouts(t *testing.T) {
 			LastName:  "LastName",
 		})
 		return nil
-	}), client.ErrAwaitTimeout)
+	}), client.ErrTxAwaitTimeout)
 
 	cluster.StopPeers(peer1)
 
@@ -732,7 +732,7 @@ func TestTimeouts(t *testing.T) {
 			LastName:  "LastName",
 		})
 		return nil
-	}), client.ErrBroadcastTimeout)
+	}), client.ErrTxBroadcastTimeout)
 }
 
 func TestOutdatedTx(t *testing.T) {
@@ -768,7 +768,7 @@ func TestOutdatedTx(t *testing.T) {
 		}))
 
 		return nil
-	}), client.ErrOutdatedTx)
+	}), client.ErrTxOutdatedTx)
 
 	acc, exists := client.Get[entities.Account](c1.View(), accountID)
 	requireT.True(exists)
@@ -916,7 +916,7 @@ func TestSplitAndResync(t *testing.T) {
 	requireT.ErrorIs(tr3.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc4ID})
 		return nil
-	}), client.ErrAwaitTimeout)
+	}), client.ErrTxAwaitTimeout)
 	acc5ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: acc5ID})

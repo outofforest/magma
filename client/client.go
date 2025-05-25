@@ -27,14 +27,20 @@ import (
 )
 
 var (
-	// ErrBroadcastTimeout means that client was not able to broadcast the transaction before timeout.
-	ErrBroadcastTimeout = errors.New("broadcast timeout")
+	// ErrTxFailure is a general error meaning that transaction failed.
+	ErrTxFailure = errors.New("transaction failed")
 
-	// ErrAwaitTimeout means that client hasn't received broadcasted transaction before timeout.
-	ErrAwaitTimeout = errors.New("await timeout")
+	// ErrTxTimeout means timeout has occurred when sending transaction.
+	ErrTxTimeout = errors.Wrap(ErrTxFailure, "transaction timeout")
 
-	// ErrOutdatedTx means that awaited transaction is outdated and hasn't been applied.
-	ErrOutdatedTx = errors.New("outdated transaction")
+	// ErrTxBroadcastTimeout means that client was not able to broadcast the transaction before timeout.
+	ErrTxBroadcastTimeout = errors.Wrap(ErrTxTimeout, "broadcast timeout")
+
+	// ErrTxAwaitTimeout means that client hasn't received broadcasted transaction before timeout.
+	ErrTxAwaitTimeout = errors.Wrap(ErrTxTimeout, "await timeout")
+
+	// ErrTxOutdatedTx means that awaited transaction is outdated and hasn't been applied.
+	ErrTxOutdatedTx = errors.Wrap(ErrTxFailure, "outdated transaction")
 )
 
 var idType = reflect.TypeOf(memdb.ID{})
@@ -407,7 +413,7 @@ func (c *Client) applyTx(
 	meta := metaAny.(*wire.TxMetadata)
 
 	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:])
-	if err != nil && !errors.Is(err, ErrOutdatedTx) {
+	if err != nil && !errors.Is(err, ErrTxOutdatedTx) {
 		return 0, err
 	}
 
@@ -453,7 +459,7 @@ func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retE
 		} else {
 			oV2 := *o
 			if entityMeta.Revision <= revisionFromEntity(oV2) {
-				return ErrOutdatedTx
+				return ErrTxOutdatedTx
 			}
 			oV.Elem().Set(oV2.Elem())
 			setRevisionInEntity(oV, &entityMeta.Revision)
@@ -622,7 +628,7 @@ func (t *Transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.BroadcastTimeout):
-		return ErrBroadcastTimeout
+		return ErrTxBroadcastTimeout
 	case t.client.txCh <- tx:
 	}
 
@@ -635,7 +641,7 @@ func (t *Transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.AwaitTimeout):
-		return ErrAwaitTimeout
+		return ErrTxAwaitTimeout
 	case result := <-tx.ReceivedCh:
 		switch r := result.(type) {
 		case error:
