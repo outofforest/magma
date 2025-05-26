@@ -1846,6 +1846,125 @@ func TestMultiIfIndex(t *testing.T) {
 	requireT.False(ok)
 }
 
+func TestReverseIndex(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	var acc entities.Account
+	indexLastName := indices.NewReverseIndex(indices.NewFieldIndex(&acc, &acc.LastName))
+
+	c := newTestClient(t, indexLastName)
+
+	accs := []entities.Account{
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First3",
+			LastName:  "Last3",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First2",
+			LastName:  "Last2",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First1",
+			LastName:  "Last1",
+		},
+	}
+
+	requireT.NoError(c.Tx(func(tx *Tx) error {
+		for _, acc := range accs {
+			tx.Set(acc)
+		}
+		return nil
+	}))
+
+	for i := range accs {
+		accs[i].Revision = 1
+	}
+
+	v := c.View()
+	acc, exists := First[entities.Account](v, indexLastName)
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	acc, exists = First[entities.Account](v, indexLastName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[1], acc)
+
+	_, exists = First[entities.Account](v, indexLastName, "Missing")
+	requireT.False(exists)
+
+	i := 0
+	for acc := range IterateForward[entities.Account](v, indexLastName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		case 1:
+			requireT.Equal(accs[1], acc)
+		case 2:
+			requireT.Equal(accs[2], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	i = 0
+	for acc := range IterateForward[entities.Account](v, indexLastName, "Last3") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
+	for range IterateForward[entities.Account](v, indexLastName, "Missing") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	it := ForwardIterator[entities.Account](v, indexLastName)
+	acc, ok := it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[2], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexLastName, "Last2")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = ForwardIterator[entities.Account](v, indexLastName, "Missing")
+	_, ok = it()
+	requireT.False(ok)
+
+	it = BackwardIterator[entities.Account](v, indexLastName)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[2], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+}
+
 const maxMsgSize = 4 * 1024
 
 func newTestClient(t *testing.T, indices ...memdb.Index) testClient {
