@@ -27,8 +27,6 @@ func TestLeaderSetup(t *testing.T) {
 	r.role = types.RoleCandidate
 	r.leaderID = peer1ID
 	r.votedForMe = 10
-	r.heartbeatTick = 1
-	r.ignoreHeartbeatTick = 0
 	r.indexTermStarted = 12
 	r.nextIndex[peer1ID] = 100
 	r.matchIndex[peer1ID] = 100
@@ -46,8 +44,6 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.Equal(serverID, r.leaderID)
 	requireT.Equal(10, r.votedForMe)
-	requireT.EqualValues(1, r.heartbeatTick)
-	requireT.EqualValues(2, r.ignoreHeartbeatTick)
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
 		LeaderID: serverID,
@@ -1199,7 +1195,7 @@ func TestLeaderApplyLogSyncResponseNextIndexEqualsTermStartIndex(t *testing.T) {
 	))
 }
 
-func TestLeaderApplyHeartbeatTickAfterHeartbeatTime(t *testing.T) {
+func TestLeaderApplyHeartbeatTick(t *testing.T) {
 	requireT := require.New(t)
 	s, _ := newState(t, "")
 	requireT.NoError(s.SetCurrentTerm(5))
@@ -1248,48 +1244,6 @@ func TestLeaderApplyHeartbeatTickAfterHeartbeatTime(t *testing.T) {
 		},
 		Force: true,
 	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
-}
-
-func TestLeaderApplyHeartbeatTickBeforeHeartbeatTime(t *testing.T) {
-	requireT := require.New(t)
-	s, _ := newState(t, "")
-	requireT.NoError(s.SetCurrentTerm(5))
-
-	txb := newTxBuilder()
-	_, _, err := s.Append(txs(
-		txb(0x01), txb(0x01, 0x01),
-		txb(0x02), txb(0x01, 0x02),
-		txb(0x03), txb(0x01, 0x03),
-		txb(0x04), txb(0x01, 0x04),
-	), true, true)
-	requireT.NoError(err)
-	r := newReactor(serverID, s)
-	_, err = r.transitionToLeader()
-	requireT.NoError(err)
-
-	r.nextIndex = map[magmatypes.ServerID]magmatypes.Index{
-		peer1ID: 94,
-		peer2ID: 94,
-		peer3ID: 94,
-		peer4ID: 94,
-	}
-	r.ignoreHeartbeatTick = 20
-
-	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(20))
-	requireT.NoError(err)
-	requireT.Equal(types.RoleLeader, r.role)
-	requireT.Equal(Result{
-		Role:     types.RoleLeader,
-		LeaderID: serverID,
-		CommitInfo: types.CommitInfo{
-			NextIndex:      94,
-			CommittedCount: 0,
-			HotEndIndex:    94,
-		},
-		Force: true,
-	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
 }
 
 func TestLeaderApplyHeartbeatTickCommit(t *testing.T) {
@@ -1345,7 +1299,6 @@ func TestLeaderApplyHeartbeatTickCommit(t *testing.T) {
 		},
 		Force: true,
 	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
 }
 
 func TestLeaderApplyClientRequestIgnoreEmptyData(t *testing.T) {
@@ -1464,7 +1417,6 @@ func TestLeaderApplyClientRequestAppend(t *testing.T) {
 			HotEndIndex:    86,
 		},
 	}, result)
-	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,
@@ -1525,7 +1477,6 @@ func TestLeaderApplyClientRequestAppendMany(t *testing.T) {
 			HotEndIndex:    87,
 		},
 	}, result)
-	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.Equal(map[magmatypes.ServerID]magmatypes.Index{
 		peer1ID: 75,
 		peer2ID: 75,

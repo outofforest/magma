@@ -82,7 +82,6 @@ type Reactor struct {
 	leaderCommittedCount magmatypes.Index
 	commitInfo           types.CommitInfo
 	ignoreElectionTick   types.ElectionTick
-	ignoreHeartbeatTick  types.HeartbeatTick
 
 	// Follower and candidate specific.
 	electionTick types.ElectionTick
@@ -94,7 +93,6 @@ type Reactor struct {
 	indexTermStarted magmatypes.Index
 	nextIndex        map[magmatypes.ServerID]magmatypes.Index
 	matchIndex       map[magmatypes.ServerID]magmatypes.Index
-	heartbeatTick    types.HeartbeatTick
 }
 
 // Apply applies command to the state machine.
@@ -324,8 +322,6 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		return r.resultError(errors.New("bug in protocol"))
 	}
 
-	r.heartbeatTick = tick
-
 	//nolint:nestif
 	if r.commitInfo.NextIndex > r.syncedCount && tick%5 == 0 {
 		var err error
@@ -358,7 +354,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		}
 	}
 
-	if r.role != types.RoleLeader || tick <= r.ignoreHeartbeatTick || tick%20 != 0 {
+	if r.role != types.RoleLeader || tick%20 != 0 {
 		return r.resultEmpty()
 	}
 
@@ -468,8 +464,6 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 		return r.resultError(err)
 	}
 	r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
-
-	r.ignoreHeartbeatTick = r.heartbeatTick + 1
 
 	if r.majority == 1 {
 		r.commitInfo.CommittedCount = r.commitInfo.NextIndex

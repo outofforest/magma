@@ -1455,7 +1455,6 @@ func TestFollowerApplyClientRequestIgnoreIfNotLeader(t *testing.T) {
 			CommittedCount: 0,
 		},
 	}, result)
-	requireT.Zero(r.ignoreHeartbeatTick)
 	requireT.Empty(r.matchIndex)
 }
 
@@ -1498,7 +1497,6 @@ func TestFollowerApplyHeartbeatTickCommitToLeaderCommit(t *testing.T) {
 		},
 		Force: true,
 	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
 }
 
 func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
@@ -1539,7 +1537,6 @@ func TestFollowerApplyHeartbeatTickCommitToNextLog(t *testing.T) {
 		},
 		Force: true,
 	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
 }
 
 func TestFollowerApplyHeartbeatTickNoLeader(t *testing.T) {
@@ -1571,7 +1568,6 @@ func TestFollowerApplyHeartbeatTickNoLeader(t *testing.T) {
 		},
 		Force: true,
 	}, result)
-	requireT.EqualValues(20, r.heartbeatTick)
 }
 
 func TestFollowerApplyHeartbeat(t *testing.T) {
