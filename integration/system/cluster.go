@@ -135,7 +135,7 @@ func (c *Client) View() *client.View {
 }
 
 // NewTransactor returns new transactor.
-func (c *Client) NewTransactor() *client.Transactor {
+func (c *Client) NewTransactor() client.Transactor {
 	return c.client.NewTransactor()
 }
 

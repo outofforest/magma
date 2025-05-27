@@ -31,9 +31,11 @@ func TestMetaLayout(t *testing.T) {
 func TestIDIndex(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
-	c := newTestClient(t)
+	c := NewTestClient(t, entities.NewMarshaller(), nil)
 
 	id0 := entities.AccountID{0x02}
 	id1 := entities.AccountID{0x01}
@@ -43,7 +45,7 @@ func TestIDIndex(t *testing.T) {
 		{ID: id1},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
