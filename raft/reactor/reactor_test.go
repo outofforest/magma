@@ -21,7 +21,7 @@ func TestUnknownCommand(t *testing.T) {
 	}
 
 	s, _ := newState(t, "")
-	r := New(config.ServerID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
+	r := New(config.ServerID, activePeers, []magmatypes.ServerID{passivePeerID}, 4096, s)
 	result, err := r.Apply(magmatypes.ZeroServerID, "aaa")
 	requireT.Error(err)
 	requireT.Equal(Result{}, result)

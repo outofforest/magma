@@ -5,6 +5,7 @@ import (
 	"net"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/outofforest/magma/gossip"
@@ -38,6 +39,19 @@ func Run(
 	dir string,
 	pageSize uint64,
 ) (retErr error) {
+	if config.ServerID == types.ZeroServerID {
+		return errors.New("server ID is not set")
+	}
+	if len(config.Servers) == 0 {
+		return errors.New("list of servers is empty")
+	}
+	if config.MaxMessageSize == 0 {
+		return errors.New("max message size is not set")
+	}
+	if config.MaxUncommittedLog == 0 {
+		return errors.New("max uncommitted log is not set")
+	}
+
 	pStates := map[types.PartitionID]partition.State{}
 	var partitions []types.PartitionID
 	for _, s := range config.Servers {
@@ -85,7 +99,7 @@ func Run(
 
 		pStates[pID] = partition.State{
 			Repo:          repo,
-			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, s),
+			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, config.MaxUncommittedLog, s),
 			Peers:         peers,
 			PartitionRole: role,
 			CmdP2PCh:      make(chan rafttypes.Command, queueCapacity),

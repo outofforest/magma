@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	id1 uint64 = iota + 1
+	id2 uint64 = iota + 1
+	id1
 	id0
 )
 
@@ -31,6 +32,7 @@ func (m Marshaller) Messages() []any {
 	return []any {
 		Account{},
 		Fields{},
+		Blob{},
 	}
 }
 
@@ -38,8 +40,10 @@ func (m Marshaller) Messages() []any {
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
 	case *Account:
-		return id1, nil
+		return id2, nil
 	case *Fields:
+		return id1, nil
+	case *Blob:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -50,8 +54,10 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *Account:
-		return sizei1(msg2), nil
+		return sizei2(msg2), nil
 	case *Fields:
+		return sizei1(msg2), nil
+	case *Blob:
 		return sizei0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -64,8 +70,10 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 	switch msg2 := msg.(type) {
 	case *Account:
-		return id1, marshali1(msg2, buf), nil
+		return id2, marshali2(msg2, buf), nil
 	case *Fields:
+		return id1, marshali1(msg2, buf), nil
+	case *Blob:
 		return id0, marshali0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -77,11 +85,14 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
-	case id1:
+	case id2:
 		msg := &Account{}
+		return msg, unmarshali2(msg, buf), nil
+	case id1:
+		msg := &Fields{}
 		return msg, unmarshali1(msg, buf), nil
 	case id0:
-		msg := &Fields{}
+		msg := &Blob{}
 		return msg, unmarshali0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
@@ -94,9 +105,11 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 
 	switch msg2 := msgDst.(type) {
 	case *Account:
-		return id1, makePatchi1(msg2, msgSrc.(*Account), buf), nil
+		return id2, makePatchi2(msg2, msgSrc.(*Account), buf), nil
 	case *Fields:
-		return id0, makePatchi0(msg2, msgSrc.(*Fields), buf), nil
+		return id1, makePatchi1(msg2, msgSrc.(*Fields), buf), nil
+	case *Blob:
+		return id0, makePatchi0(msg2, msgSrc.(*Blob), buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
 	}
@@ -108,15 +121,102 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 
 	switch msg2 := msg.(type) {
 	case *Account:
-		return applyPatchi1(msg2, buf), nil
+		return applyPatchi2(msg2, buf), nil
 	case *Fields:
+		return applyPatchi1(msg2, buf), nil
+	case *Blob:
 		return applyPatchi0(msg2, buf), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
 	}
 }
 
-func sizei0(m *Fields) uint64 {
+func sizei0(m *Blob) uint64 {
+	var n uint64 = 1
+	{
+		// Data
+
+		l := uint64(len(m.Data))
+		helpers.UInt64Size(l, &n)
+		n += l
+	}
+	return n
+}
+
+func marshali0(m *Blob, b []byte) uint64 {
+	var o uint64
+	{
+		// Data
+
+		l := uint64(len(m.Data))
+		helpers.UInt64Marshal(l, b, &o)
+		if l > 0 {
+			copy(b[o:o+l], unsafe.Slice(&m.Data[0], l))
+			o += l
+		}
+	}
+
+	return o
+}
+
+func unmarshali0(m *Blob, b []byte) uint64 {
+	var o uint64
+	{
+		// Data
+
+		var l uint64
+		helpers.UInt64Unmarshal(&l, b, &o)
+		if l > 0 {
+			m.Data = make([]uint8, l)
+			copy(m.Data, b[o:o+l])
+			o += l
+		}
+	}
+
+	return o
+}
+
+func makePatchi0(m, mSrc *Blob, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Data
+
+		if reflect.DeepEqual(m.Data, mSrc.Data) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			l := uint64(len(m.Data))
+			helpers.UInt64Marshal(l, b, &o)
+			if l > 0 {
+				copy(b[o:o+l], unsafe.Slice(&m.Data[0], l))
+				o += l
+			}
+		}
+	}
+
+	return o
+}
+
+func applyPatchi0(m *Blob, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Data
+
+		if b[0]&0x01 != 0 {
+			var l uint64
+			helpers.UInt64Unmarshal(&l, b, &o)
+			if l > 0 {
+				m.Data = make([]uint8, l)
+				copy(m.Data, b[o:o+l])
+				o += l
+			}
+		}
+	}
+
+	return o
+}
+
+func sizei1(m *Fields) uint64 {
 	var n uint64 = 27
 	{
 		// Time
@@ -157,7 +257,7 @@ func sizei0(m *Fields) uint64 {
 	return n
 }
 
-func marshali0(m *Fields, b []byte) uint64 {
+func marshali1(m *Fields, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// Bool
@@ -226,7 +326,7 @@ func marshali0(m *Fields, b []byte) uint64 {
 	return o
 }
 
-func unmarshali0(m *Fields, b []byte) uint64 {
+func unmarshali1(m *Fields, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// Bool
@@ -294,7 +394,7 @@ func unmarshali0(m *Fields, b []byte) uint64 {
 	return o
 }
 
-func makePatchi0(m, mSrc *Fields, b []byte) uint64 {
+func makePatchi1(m, mSrc *Fields, b []byte) uint64 {
 	var o uint64 = 3
 	{
 		// Bool
@@ -413,7 +513,7 @@ func makePatchi0(m, mSrc *Fields, b []byte) uint64 {
 	return o
 }
 
-func applyPatchi0(m *Fields, b []byte) uint64 {
+func applyPatchi1(m *Fields, b []byte) uint64 {
 	var o uint64 = 3
 	{
 		// Bool
@@ -503,7 +603,7 @@ func applyPatchi0(m *Fields, b []byte) uint64 {
 	return o
 }
 
-func sizei1(m *Account) uint64 {
+func sizei2(m *Account) uint64 {
 	var n uint64 = 2
 	{
 		// FirstName
@@ -526,7 +626,7 @@ func sizei1(m *Account) uint64 {
 	return n
 }
 
-func marshali1(m *Account, b []byte) uint64 {
+func marshali2(m *Account, b []byte) uint64 {
 	var o uint64
 	{
 		// FirstName
@@ -552,7 +652,7 @@ func marshali1(m *Account, b []byte) uint64 {
 	return o
 }
 
-func unmarshali1(m *Account, b []byte) uint64 {
+func unmarshali2(m *Account, b []byte) uint64 {
 	var o uint64
 	{
 		// FirstName
@@ -582,7 +682,7 @@ func unmarshali1(m *Account, b []byte) uint64 {
 	return o
 }
 
-func makePatchi1(m, mSrc *Account, b []byte) uint64 {
+func makePatchi2(m, mSrc *Account, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// FirstName
@@ -618,7 +718,7 @@ func makePatchi1(m, mSrc *Account, b []byte) uint64 {
 	return o
 }
 
-func applyPatchi1(m *Account, b []byte) uint64 {
+func applyPatchi2(m *Account, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// FirstName

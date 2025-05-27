@@ -125,9 +125,15 @@ func runReactor(
 		res, err := r.Apply(cmd.PeerID, cmd.Cmd)
 		if err != nil {
 			if cmd.Cmd != nil {
-				if _, ok := cmd.Cmd.(*types.ClientRequest); ok && errors.Is(err, state.ErrInvalidTransaction) {
-					log.Error("Invalid transaction received from client.", zap.Error(err))
-					continue
+				if _, ok := cmd.Cmd.(*types.ClientRequest); ok {
+					switch {
+					case errors.Is(err, state.ErrInvalidTransaction):
+						log.Error("Invalid transaction received from client.", zap.Error(err))
+						continue
+					case errors.Is(err, reactor.ErrUncommittedLogTooLong):
+						log.Error("Max uncommitted log limit exceeded.", zap.Error(err))
+						continue
+					}
 				}
 			}
 			return err
