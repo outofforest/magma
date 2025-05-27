@@ -1,28 +1,27 @@
 package client
 
 import (
-	"encoding/binary"
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"github.com/zeebo/xxh3"
 
+	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/integration/entities"
-	"github.com/outofforest/magma/state/repository/format"
-	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
-	"github.com/outofforest/varuint64"
 )
 
 func TestEntityCreation(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
-	c := newTestClient(t)
+	c := NewTestClient(t, entities.NewMarshaller(), nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -35,7 +34,7 @@ func TestEntityCreation(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		_, exists := Get[entities.Account](tx.View, acc1.ID)
 		requireT.False(exists)
 
@@ -50,7 +49,7 @@ func TestEntityCreation(t *testing.T) {
 
 	acc1.Revision = 1
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		acc, exists := Get[entities.Account](tx.View, acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
@@ -79,8 +78,10 @@ func TestEntityCreation(t *testing.T) {
 func TestEntityUpdate(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
-	c := newTestClient(t)
+	c := NewTestClient(t, entities.NewMarshaller(), nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -93,7 +94,7 @@ func TestEntityUpdate(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		tx.Set(acc1)
 		tx.Set(acc2)
 
@@ -103,7 +104,7 @@ func TestEntityUpdate(t *testing.T) {
 	acc1.Revision = 1
 	acc2.Revision = 1
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		acc, exists := Get[entities.Account](tx.View, acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
@@ -147,23 +148,28 @@ func TestEntityUpdate(t *testing.T) {
 func TestFailingTransaction(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	err := errors.New("error")
-	requireT.ErrorIs(newTestClient(t).Tx(func(tx *Tx) error {
-		return err
-	}), err)
+	requireT.ErrorIs(NewTestClient(t, entities.NewMarshaller(), nil).NewTransactor().
+		Tx(ctx, func(tx *Tx) error {
+			return err
+		}), err)
 }
 
 func TestFieldIndexString(t *testing.T) {
 	t.Parallel()
+
+	ctx := newContext(t)
 
 	requireT := require.New(t)
 
 	var acc entities.Account
 	indexLastName := indices.NewFieldIndex(&acc, &acc.LastName)
 
-	c := newTestClient(t, indexLastName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
 
 	accs := []entities.Account{
 		{
@@ -178,7 +184,7 @@ func TestFieldIndexString(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
@@ -314,12 +320,14 @@ func TestFieldIndexString(t *testing.T) {
 func TestFieldIndexBool(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Bool)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -332,7 +340,7 @@ func TestFieldIndexBool(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -406,12 +414,14 @@ func TestFieldIndexBool(t *testing.T) {
 func TestFieldIndexTime(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Time)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	time0 := time.Unix(100, 10)
 	time1 := time.Unix(10, 20)
@@ -452,7 +462,7 @@ func TestFieldIndexTime(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -515,6 +525,8 @@ func TestFieldIndexTime(t *testing.T) {
 func TestFieldIndexInt8(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = int8
 
 	requireT := require.New(t)
@@ -522,7 +534,7 @@ func TestFieldIndexInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int8)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -547,7 +559,7 @@ func TestFieldIndexInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -604,6 +616,8 @@ func TestFieldIndexInt8(t *testing.T) {
 func TestFieldIndexInt16(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = int16
 
 	requireT := require.New(t)
@@ -611,7 +625,7 @@ func TestFieldIndexInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int16)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -636,7 +650,7 @@ func TestFieldIndexInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -693,6 +707,8 @@ func TestFieldIndexInt16(t *testing.T) {
 func TestFieldIndexInt32(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = int32
 
 	requireT := require.New(t)
@@ -700,7 +716,7 @@ func TestFieldIndexInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int32)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -725,7 +741,7 @@ func TestFieldIndexInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -782,6 +798,8 @@ func TestFieldIndexInt32(t *testing.T) {
 func TestFieldIndexInt64(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = int64
 
 	requireT := require.New(t)
@@ -789,7 +807,7 @@ func TestFieldIndexInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int64)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -814,7 +832,7 @@ func TestFieldIndexInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -912,6 +930,8 @@ func TestFieldIndexInt64(t *testing.T) {
 func TestFieldIndexUInt8(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = uint8
 
 	requireT := require.New(t)
@@ -919,7 +939,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint8)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -936,7 +956,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -983,6 +1003,8 @@ func TestFieldIndexUInt8(t *testing.T) {
 func TestFieldIndexUInt16(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = uint16
 
 	requireT := require.New(t)
@@ -990,7 +1012,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint16)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -1007,7 +1029,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -1054,6 +1076,8 @@ func TestFieldIndexUInt16(t *testing.T) {
 func TestFieldIndexUInt32(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = uint32
 
 	requireT := require.New(t)
@@ -1061,7 +1085,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint32)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -1078,7 +1102,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -1125,6 +1149,8 @@ func TestFieldIndexUInt32(t *testing.T) {
 func TestFieldIndexUInt64(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	type intType = uint64
 
 	requireT := require.New(t)
@@ -1132,7 +1158,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint64)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -1149,7 +1175,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -1227,12 +1253,14 @@ func TestFieldIndexUInt64(t *testing.T) {
 func TestFieldIndexID(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.EntityID)
 
-	c := newTestClient(t, index)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
 
 	es := []entities.Fields{
 		{
@@ -1249,7 +1277,7 @@ func TestFieldIndexID(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
 			tx.Set(e)
 		}
@@ -1327,6 +1355,8 @@ func TestFieldIndexID(t *testing.T) {
 func TestIfIndex(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var acc entities.Account
@@ -1337,7 +1367,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	)
 
-	c := newTestClient(t, indexLastName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
 
 	accs := []entities.Account{
 		{
@@ -1357,7 +1387,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
@@ -1433,6 +1463,8 @@ func TestIfIndex(t *testing.T) {
 func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	acc := entities.Account{
@@ -1448,9 +1480,9 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 		},
 	)
 
-	c := newTestClient(t, indexLastName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		tx.Set(acc)
 		return nil
 	}))
@@ -1459,7 +1491,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 	acc, exists := First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		acc.FirstName = "First2"
 		tx.Set(acc)
 		return nil
@@ -1473,6 +1505,8 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 func TestMultiIndex(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var acc entities.Account
@@ -1481,7 +1515,7 @@ func TestMultiIndex(t *testing.T) {
 		indices.NewFieldIndex(&acc, &acc.FirstName),
 	)
 
-	c := newTestClient(t, indexName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexName)
 
 	accs := []entities.Account{
 		{
@@ -1511,7 +1545,7 @@ func TestMultiIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
@@ -1761,6 +1795,8 @@ func TestMultiIndex(t *testing.T) {
 func TestMultiIfIndex(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var acc entities.Account
@@ -1775,7 +1811,7 @@ func TestMultiIfIndex(t *testing.T) {
 			}),
 	)
 
-	c := newTestClient(t, indexName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexName)
 
 	accs := []entities.Account{
 		{
@@ -1800,7 +1836,7 @@ func TestMultiIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
@@ -1849,12 +1885,14 @@ func TestMultiIfIndex(t *testing.T) {
 func TestReverseIndex(t *testing.T) {
 	t.Parallel()
 
+	ctx := newContext(t)
+
 	requireT := require.New(t)
 
 	var acc entities.Account
 	indexLastName := indices.NewReverseIndex(indices.NewFieldIndex(&acc, &acc.LastName))
 
-	c := newTestClient(t, indexLastName)
+	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
 
 	accs := []entities.Account{
 		{
@@ -1874,7 +1912,7 @@ func TestReverseIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.Tx(func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
 			tx.Set(acc)
 		}
@@ -1965,58 +2003,6 @@ func TestReverseIndex(t *testing.T) {
 	requireT.False(ok)
 }
 
-const maxMsgSize = 4 * 1024
-
-func newTestClient(t *testing.T, indices ...memdb.Index) testClient {
-	client, err := New(Config{
-		Service:        "test",
-		MaxMessageSize: maxMsgSize,
-		Marshaller:     entities.NewMarshaller(),
-		Indices:        indices,
-	})
-	require.NoError(t, err)
-
-	return testClient{
-		client: client,
-	}
-}
-
-type testClient struct {
-	client *Client
-}
-
-func (tc testClient) View() *View {
-	return tc.client.View()
-}
-
-func (tc testClient) Tx(txF func(tx *Tx) error) error {
-	tx, _, err := tc.client.NewTransactor().prepareTx(txF)
-	if err != nil {
-		return err
-	}
-
-	if tx.Tx == nil {
-		return nil
-	}
-
-	_, n := varuint64.Parse(tx.Tx)
-	txRaw := tx.Tx[n:]
-	size := uint64(len(txRaw)) + format.ChecksumSize
-	buf := make([]byte, varuint64.MaxSize+size)
-	n = varuint64.Put(buf, size)
-	copy(buf[n:], txRaw)
-
-	size = n + uint64(len(txRaw))
-	binary.LittleEndian.PutUint64(buf[size:], xxh3.HashSeed(buf[:size], tc.client.previousChecksum))
-
-	txn := tc.client.db.Txn(true)
-	previousChecksum, err := tc.client.applyTx(nil, tc.client.previousChecksum, txn, buf[:size+format.ChecksumSize])
-	if err != nil {
-		txn.Abort()
-		return err
-	}
-	txn.Commit()
-	tc.client.previousChecksum = previousChecksum
-	tc.client.nextIndex += types.Index(len(tx.Tx))
-	return nil
+func newContext(t *testing.T) context.Context {
+	return logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig))
 }

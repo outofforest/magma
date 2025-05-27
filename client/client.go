@@ -45,6 +45,9 @@ var (
 
 var idType = reflect.TypeOf(memdb.ID{})
 
+// TriggerFunc defines function triggered after applying transactions.
+type TriggerFunc func(ctx context.Context, v *View) error
+
 // Config is the configuration of magma client.
 type Config struct {
 	Service          string
@@ -55,7 +58,7 @@ type Config struct {
 	AwaitTimeout     time.Duration
 	Marshaller       proton.Marshaller
 	Indices          []memdb.Index
-	TriggerFunc      func(ctx context.Context, v *View) error
+	TriggerFunc      TriggerFunc
 }
 
 // New creates new magma client.
@@ -355,8 +358,8 @@ func (c *Client) View() *View {
 }
 
 // NewTransactor creates new transactor.
-func (c *Client) NewTransactor() *Transactor {
-	return &Transactor{
+func (c *Client) NewTransactor() Transactor {
+	return &transactor{
 		client:  c,
 		changes: map[memdb.ID]change{},
 	}
@@ -491,7 +494,11 @@ type txEnvelope struct {
 }
 
 // Transactor builds and broadcasts transactions.
-type Transactor struct {
+type Transactor interface {
+	Tx(ctx context.Context, txF func(tx *Tx) error) error
+}
+
+type transactor struct {
 	client       *Client
 	changes      map[memdb.ID]change
 	previousTxID memdb.ID
@@ -499,7 +506,7 @@ type Transactor struct {
 }
 
 // Tx creates and broadcasts transaction to the magma network.
-func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
+func (t *transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 	tx, i, err := t.prepareTx(txF)
 	if err != nil {
 		return err
@@ -515,7 +522,7 @@ func (t *Transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 	return err
 }
 
-func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64, retErr error) {
+func (t *transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64, retErr error) {
 	defer clear(t.changes)
 
 	t.client.db.AwaitTxn()
@@ -618,7 +625,7 @@ func (t *Transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 	}, 0, nil
 }
 
-func (t *Transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) error {
+func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) error {
 	select {
 	case <-ctx.Done():
 		return errors.WithStack(ctx.Err())
