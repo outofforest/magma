@@ -443,7 +443,6 @@ func TestCandidateApplyVoteResponseGrantedFromMajority(t *testing.T) {
 		peer3ID: 0,
 		peer4ID: 0,
 	}, r.matchIndex)
-	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(2, r.lastTerm)
 	requireT.Equal(types.CommitInfo{
 		NextIndex:      10,
@@ -468,7 +467,6 @@ func TestCandidateApplyHeartbeatTickDoesNothing(t *testing.T) {
 	result, err := r.Apply(magmatypes.ZeroServerID, types.HeartbeatTick(1))
 	requireT.NoError(err)
 	requireT.Equal(types.RoleCandidate, r.role)
-	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.Equal(Result{
 		Role:     types.RoleCandidate,
 		LeaderID: magmatypes.ZeroServerID,

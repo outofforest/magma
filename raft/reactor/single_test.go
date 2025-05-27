@@ -25,7 +25,6 @@ func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {
 	requireT.NoError(err)
 	requireT.Equal(types.RoleLeader, r.role)
 	requireT.EqualValues(2, r.ignoreElectionTick)
-	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(1, s.CurrentTerm())
 	requireT.Equal(1, r.votedForMe)
 	requireT.Equal(Result{
@@ -77,7 +76,6 @@ func TestSingleModeApplyClientRequestAppend(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.EqualValues(1, r.ignoreHeartbeatTick)
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
@@ -123,7 +121,6 @@ func TestSingleModeApplyHeartbeatTickDoNothing(t *testing.T) {
 	requireT.NoError(err)
 
 	requireT.Equal(types.RoleLeader, r.role)
-	requireT.EqualValues(1, r.heartbeatTick)
 	requireT.EqualValues(4, s.CurrentTerm())
 	requireT.Equal(Result{
 		Role:     types.RoleLeader,
