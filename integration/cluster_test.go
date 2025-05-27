@@ -918,16 +918,23 @@ func TestSplitAndResync(t *testing.T) {
 		return nil
 	}), client.ErrTxAwaitTimeout)
 	acc5ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
-		tx.Set(entities.Account{ID: acc5ID})
-		return nil
-	}))
+
+	var err error
+	for range 5 {
+		err = tr1.Tx(ctx, func(tx *client.Tx) error {
+			tx.Set(entities.Account{ID: acc5ID})
+			return nil
+		})
+		if err == nil {
+			break
+		}
+	}
+	requireT.NoError(err)
 
 	cluster.EnableLink(peer3, peer1)
 	cluster.EnableLink(peer3, peer2)
 
 	acc6ID := memdb.NewID[entities.AccountID]()
-	var err error
 	for range 5 {
 		err = c3.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 			tx.Set(entities.Account{ID: acc6ID})

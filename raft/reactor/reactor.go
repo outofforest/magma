@@ -323,7 +323,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 	}
 
 	//nolint:nestif
-	if r.commitInfo.NextIndex > r.syncedCount && tick%5 == 0 {
+	if r.commitInfo.NextIndex > r.syncedCount {
 		var err error
 		r.syncedCount, err = r.state.Sync()
 		if err != nil {
@@ -354,7 +354,7 @@ func (r *Reactor) applyHeartbeatTick(tick types.HeartbeatTick) (Result, error) {
 		}
 	}
 
-	if r.role != types.RoleLeader || tick%20 != 0 {
+	if r.role != types.RoleLeader || tick%5 != 0 {
 		return r.resultEmpty()
 	}
 

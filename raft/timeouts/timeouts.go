@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	heartbeatInterval    = 20 * time.Millisecond
-	electionBaseInterval = 2 * time.Second
+	heartbeatInterval    = 100 * time.Millisecond
+	electionBaseInterval = 5 * time.Second
 )
 
 // New creates new timeout manager.
