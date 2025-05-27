@@ -174,7 +174,10 @@ func (c *Client) stop() {
 	}
 }
 
-const maxMsgSize = 4 * 1024
+const (
+	maxMsgSize        = 4 * 1024
+	maxUncommittedLog = 2048
+)
 
 // NewCluster creates new cluster.
 func NewCluster(t *testing.T, peers ...*Peer) (Cluster, context.Context) {
@@ -250,8 +253,9 @@ func (c Cluster) DisableLink(peer1, peer2 *Peer) {
 
 func (c Cluster) newConfig(peer *Peer) types.Config {
 	config := types.Config{
-		ServerID:       peer.id,
-		MaxMessageSize: maxMsgSize,
+		ServerID:          peer.id,
+		MaxMessageSize:    maxMsgSize,
+		MaxUncommittedLog: maxUncommittedLog,
 	}
 
 	for _, p := range c.peers {

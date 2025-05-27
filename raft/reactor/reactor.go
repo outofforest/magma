@@ -41,20 +41,25 @@ type Result struct {
 	Force   bool
 }
 
+// ErrUncommittedLogTooLong is returned when uncommitted log size exceeds configured limit.
+var ErrUncommittedLogTooLong = errors.New("uncommitted log is too long")
+
 // New creates new reactor of raft consensus algorithm.
 func New(
 	serverID magmatypes.ServerID,
 	activePeers []magmatypes.ServerID,
 	passivePeers []magmatypes.ServerID,
+	maxUncommittedLog uint64,
 	s *state.State,
 ) *Reactor {
 	r := &Reactor{
-		serverID:    serverID,
-		peers:       append(append([]magmatypes.ServerID{}, activePeers...), passivePeers...),
-		activePeers: activePeers,
-		state:       s,
-		majority:    (len(activePeers)+1)/2 + 1,
-		lastTerm:    s.LastTerm(),
+		serverID:          serverID,
+		peers:             append(append([]magmatypes.ServerID{}, activePeers...), passivePeers...),
+		activePeers:       activePeers,
+		maxUncommittedLog: magmatypes.Index(maxUncommittedLog),
+		state:             s,
+		majority:          (len(activePeers)+1)/2 + 1,
+		lastTerm:          s.LastTerm(),
 		commitInfo: types.CommitInfo{
 			NextIndex: s.NextIndex(),
 		},
@@ -69,11 +74,12 @@ func New(
 
 // Reactor implements Raft's state machine.
 type Reactor struct {
-	serverID    magmatypes.ServerID
-	peers       []magmatypes.ServerID
-	activePeers []magmatypes.ServerID
-	leaderID    magmatypes.ServerID
-	state       *state.State
+	serverID          magmatypes.ServerID
+	peers             []magmatypes.ServerID
+	activePeers       []magmatypes.ServerID
+	maxUncommittedLog magmatypes.Index
+	leaderID          magmatypes.ServerID
+	state             *state.State
 
 	majority             int
 	role                 types.Role
@@ -300,8 +306,14 @@ func (r *Reactor) applyClientRequest(m *types.ClientRequest) (Result, error) {
 	if r.role != types.RoleLeader {
 		return r.resultEmpty()
 	}
-	if len(m.Data) == 0 {
+
+	dataLen := magmatypes.Index(len(m.Data))
+	if dataLen == 0 {
 		return r.resultEmpty()
+	}
+
+	if r.commitInfo.NextIndex+dataLen > r.commitInfo.CommittedCount+r.maxUncommittedLog {
+		return r.resultError(ErrUncommittedLogTooLong)
 	}
 
 	lastTerm, nextIndex, err := r.state.Append(m.Data, false, false)

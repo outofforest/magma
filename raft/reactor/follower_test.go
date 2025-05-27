@@ -66,7 +66,7 @@ func newReactor(serverID magmatypes.ServerID, s *state.State) *Reactor {
 		}
 	}
 
-	return New(serverID, activePeers, []magmatypes.ServerID{passivePeerID}, s)
+	return New(serverID, activePeers, []magmatypes.ServerID{passivePeerID}, 600, s)
 }
 
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {

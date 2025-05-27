@@ -962,3 +962,54 @@ func TestSplitAndResync(t *testing.T) {
 	_, exists = client.Get[entities.Account](v, acc6ID)
 	requireT.True(exists)
 }
+
+func TestMaxUncommittedLogLimit(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+
+	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+
+	cluster, ctx := system.NewCluster(t, peer1, peer2)
+	cluster.ForceLeader(peer1)
+
+	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
+	tr1 := c1.NewTransactor()
+
+	cluster.StartPeers(peer1, peer2)
+	cluster.StartClients(c1)
+	cluster.StopPeers(peer2)
+
+	blob1ID := memdb.NewID[memdb.ID]()
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Blob{ID: blob1ID})
+		return nil
+	}), client.ErrTxAwaitTimeout)
+
+	// This one should exceed the limit.
+	blob2ID := memdb.NewID[memdb.ID]()
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Blob{ID: blob2ID, Data: make([]byte, 2048)})
+		return nil
+	}), client.ErrTxAwaitTimeout)
+
+	blob3ID := memdb.NewID[memdb.ID]()
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
+		tx.Set(entities.Blob{ID: blob3ID})
+		return nil
+	}), client.ErrTxAwaitTimeout)
+
+	cluster.StartPeers(peer2)
+
+	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
+	cluster.StartClients(c2)
+
+	v := c2.View()
+	_, exists := client.Get[entities.Blob](v, blob1ID)
+	requireT.True(exists)
+	_, exists = client.Get[entities.Blob](v, blob2ID)
+	requireT.False(exists)
+	_, exists = client.Get[entities.Blob](v, blob3ID)
+	requireT.True(exists)
+}

@@ -17,9 +17,10 @@ type PartitionID string
 
 // Config is the config of magma.
 type Config struct {
-	ServerID       ServerID
-	Servers        []ServerConfig
-	MaxMessageSize uint64
+	ServerID          ServerID
+	Servers           []ServerConfig
+	MaxMessageSize    uint64
+	MaxUncommittedLog uint64
 }
 
 // Partitions represents the role of server in partitions.
