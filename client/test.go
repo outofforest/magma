@@ -67,6 +67,11 @@ func (tc TestClient) Trigger(ctx context.Context) error {
 	return tc.triggerFunc(ctx, tc.View())
 }
 
+// Checksum returns current checksum of received transaction log.
+func (tc TestClient) Checksum() uint64 {
+	return tc.client.previousChecksum
+}
+
 type testTransactor struct {
 	tc TestClient
 }
