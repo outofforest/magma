@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -187,7 +186,6 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				defer conn2.Close()
 
 				<-ctx.Done()
-				fmt.Println("====================")
 				return errors.WithStack(ctx.Err())
 			})
 
