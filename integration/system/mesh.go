@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"io"
 	"net"
 	"sync"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
+	"github.com/outofforest/varuint64"
 )
 
 type link struct {
@@ -197,21 +197,16 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 					return err
 				}
 
-				isP2PChannel := helloMsg1.Channel == wire.ChannelP2P || helloMsg2.Channel == wire.ChannelP2P
+				channel := helloMsg1.Channel
+				if channel == wire.ChannelNone {
+					channel = helloMsg2.Channel
+				}
 
 				spawn("copy1", parallel.Exit, func(ctx context.Context) error {
-					if !isP2PChannel {
-						_, err := io.Copy(conn2, conn)
-						return err
-					}
-					return m.interceptVoteRequests(c2, c1, lnk.SrcPeer)
+					return m.interceptChannel(channel, c2, c1, lnk.SrcPeer)
 				})
 				spawn("copy2", parallel.Exit, func(ctx context.Context) error {
-					if !isP2PChannel {
-						_, err := io.Copy(conn, conn2)
-						return err
-					}
-					return m.interceptVoteRequests(c1, c2, lnk.DstPeer)
+					return m.interceptChannel(channel, c1, c2, lnk.DstPeer)
 				})
 
 				return nil
@@ -230,26 +225,37 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 	})
 }
 
-func (m *mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *Peer) error {
+func (m *mesh) interceptChannel(channel wire.Channel, dstC, srcC *resonance.Connection, srcPeer *Peer) error {
 	for {
-		msg, err := srcC.ReceiveProton(m.mP2P)
+		msg, err := srcC.ReceiveRawBytes()
 		if err != nil {
 			return err
 		}
 
-		if v, ok := msg.(*types.VoteRequest); ok && m.forcedLeader != nil {
-			if m.forcedLeader == srcPeer {
-				if err := srcC.SendProton(&types.VoteResponse{
-					Term:        v.Term,
-					VoteGranted: true,
-				}, m.mP2P); err != nil {
-					return err
-				}
+		//nolint:nestif
+		if channel == wire.ChannelP2P {
+			_, n := varuint64.Parse(msg)
+			msgID, n2 := varuint64.Parse(msg[n:])
+
+			p2pMsg, _, err := m.mP2P.Unmarshal(msgID, msg[n+n2:])
+			if err != nil {
+				return err
 			}
-			continue
+
+			if v, ok := p2pMsg.(*types.VoteRequest); ok && m.forcedLeader != nil {
+				if m.forcedLeader == srcPeer {
+					if err := srcC.SendProton(&types.VoteResponse{
+						Term:        v.Term,
+						VoteGranted: true,
+					}, m.mP2P); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 		}
 
-		if err := dstC.SendProton(msg, m.mP2P); err != nil {
+		if err := dstC.SendRawBytes(msg); err != nil {
 			return err
 		}
 	}
