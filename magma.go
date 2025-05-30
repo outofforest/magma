@@ -80,10 +80,14 @@ func Run(
 
 		peers := make([]types.ServerConfig, 0, len(config.Servers))
 		activePeers := make([]types.ServerID, 0, len(config.Servers))
+		activeServersMap := map[types.ServerID]struct{}{}
 		passivePeers := make([]types.ServerID, 0, len(config.Servers))
 		var role types.PartitionRole
 		for _, s := range config.Servers {
 			if pRole, exists := s.Partitions[pID]; exists {
+				if pRole == types.PartitionRoleActive {
+					activeServersMap[s.ID] = struct{}{}
+				}
 				if config.ServerID == s.ID {
 					role = pRole
 					continue
@@ -101,6 +105,7 @@ func Run(
 			Repo:          repo,
 			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, config.MaxUncommittedLog, s),
 			Peers:         peers,
+			ActiveServers: activeServersMap,
 			PartitionRole: role,
 			CmdP2PCh:      make(chan rafttypes.Command, queueCapacity),
 			CmdC2PCh:      make(chan rafttypes.Command, queueCapacity),
