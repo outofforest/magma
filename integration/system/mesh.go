@@ -180,42 +180,6 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				return err
 			}
 
-			spawn("handshake", parallel.Continue, func(ctx context.Context) error {
-				config := resonance.Config{
-					MaxMessageSize: maxMsgSize,
-				}
-				c1 := resonance.NewConnection(conn, config)
-				c2 := resonance.NewConnection(conn2, config)
-
-				c1.BufferReads()
-				c1.BufferWrites()
-				c2.BufferReads()
-				c2.BufferWrites()
-
-				helloMsg1, err := m.interceptHello(c2, c1)
-				if err != nil {
-					return err
-				}
-
-				helloMsg2, err := m.interceptHello(c1, c2)
-				if err != nil {
-					return err
-				}
-
-				channel := helloMsg1.Channel
-				if channel == wire.ChannelNone {
-					channel = helloMsg2.Channel
-				}
-
-				spawn("copy1", parallel.Exit, func(ctx context.Context) error {
-					return m.interceptChannel(channel, c2, c1, lnk.SrcPeer)
-				})
-				spawn("copy2", parallel.Exit, func(ctx context.Context) error {
-					return m.interceptChannel(channel, c1, c2, lnk.DstPeer)
-				})
-
-				return nil
-			})
 			spawn("watchdog", parallel.Fail, func(ctx context.Context) error {
 				defer conn.Close()
 				defer conn2.Close()
@@ -223,6 +187,40 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				<-ctx.Done()
 				return errors.WithStack(ctx.Err())
 			})
+
+			config := resonance.Config{
+				MaxMessageSize: maxMsgSize,
+			}
+			c1 := resonance.NewConnection(conn, config)
+			c2 := resonance.NewConnection(conn2, config)
+
+			c1.BufferReads()
+			c1.BufferWrites()
+			c2.BufferReads()
+			c2.BufferWrites()
+
+			helloMsg1, err := m.interceptHello(c2, c1)
+			if err != nil {
+				return err
+			}
+
+			helloMsg2, err := m.interceptHello(c1, c2)
+			if err != nil {
+				return err
+			}
+
+			channel := helloMsg1.Channel
+			if channel == wire.ChannelNone {
+				channel = helloMsg2.Channel
+			}
+
+			spawn("copy1", parallel.Exit, func(ctx context.Context) error {
+				return m.interceptChannel(channel, c2, c1, lnk.SrcPeer)
+			})
+			spawn("copy2", parallel.Exit, func(ctx context.Context) error {
+				return m.interceptChannel(channel, c1, c2, lnk.DstPeer)
+			})
+
 			return nil
 		})
 
