@@ -2,6 +2,8 @@ package raft
 
 import (
 	"context"
+	"math/rand"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -87,6 +89,7 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 	var heartbeatTick types.HeartbeatTick
 	var electionTick types.ElectionTick
 
+	var electionDelay <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -95,6 +98,11 @@ func runTimeoutConsumer(ctx context.Context, t *timeouts.Timeouts, cmdCh chan<- 
 			heartbeatTick++
 			cmdCh <- types.Command{Cmd: heartbeatTick}
 		case <-t.Election():
+			if electionDelay == nil {
+				electionDelay = time.After(time.Duration(rand.Intn(1000)) * time.Millisecond)
+			}
+		case <-electionDelay:
+			electionDelay = nil
 			electionTick++
 			cmdCh <- types.Command{Cmd: electionTick}
 		}
