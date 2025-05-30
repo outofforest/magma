@@ -8,7 +8,7 @@ require (
 	github.com/outofforest/memdb v1.10.0
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.15.0
-	github.com/outofforest/resonance v0.20.0
+	github.com/outofforest/resonance v0.21.0
 	github.com/outofforest/varuint64 v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.50.0

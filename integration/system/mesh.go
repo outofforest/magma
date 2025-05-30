@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -177,6 +178,7 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 		_ = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			conn2, err := net.Dial("tcp", pair.DstListener.Addr().String())
 			if err != nil {
+				_ = conn.Close()
 				return err
 			}
 
@@ -185,6 +187,7 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				defer conn2.Close()
 
 				<-ctx.Done()
+				fmt.Println("====================")
 				return errors.WithStack(ctx.Err())
 			})
 
@@ -193,6 +196,9 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 			}
 			c1 := resonance.NewConnection(conn, config)
 			c2 := resonance.NewConnection(conn2, config)
+
+			spawn("c1", parallel.Fail, c1.Run)
+			spawn("c2", parallel.Fail, c2.Run)
 
 			c1.BufferReads()
 			c1.BufferWrites()
