@@ -255,18 +255,21 @@ func TestPeerRestart(t *testing.T) {
 	}
 }
 
-func TestPassivePeer(t *testing.T) {
+func TestPassivePeers(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
 
 	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peerObserver := system.NewPeer(t, "PO", types.Partitions{partitionDefault: types.PartitionRolePassive})
+
+	// Passive peers have their IDs intentionally set to be the first and the last one.
+	peerObserver1 := system.NewPeer(t, "P0", types.Partitions{partitionDefault: types.PartitionRolePassive})
+	peerObserver2 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRolePassive})
 
 	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peerObserver)
+	cluster, ctx := system.NewCluster(t, peer1, peer2, peerObserver1, peerObserver2)
 	cluster.StartPeers(peer1, peer2)
 	cluster.StartClients(c)
 
@@ -298,14 +301,21 @@ func TestPassivePeer(t *testing.T) {
 
 	cluster.StopClients(c)
 
-	c = system.NewClient(t, peerObserver, "client", partitionDefault, nil)
-	cluster.StartPeers(peerObserver)
-	cluster.StartClients(c)
+	cp1 := system.NewClient(t, peerObserver1, "client1", partitionDefault, nil)
+	cp2 := system.NewClient(t, peerObserver2, "client2", partitionDefault, nil)
+	cluster.StartPeers(peerObserver1, peerObserver2)
+	cluster.StartClients(cp1, cp2)
 
-	v := c.View()
+	v1 := cp1.View()
+	v2 := cp2.View()
 	for _, acc := range accs {
 		acc.Revision = 1
-		acc2, exists := client.Get[entities.Account](v, acc.ID)
+
+		acc2, exists := client.Get[entities.Account](v1, acc.ID)
+		requireT.True(exists)
+		requireT.Equal(acc, acc2)
+
+		acc2, exists = client.Get[entities.Account](v2, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
 	}

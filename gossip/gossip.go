@@ -155,7 +155,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 
 				for pID, pState := range g.partitions {
 					for _, s := range pState.Peers {
-						if !initConnection(g.serverID, s.ID) {
+						if !g.shouldConnect(g.serverID, s.ID, pID) {
 							continue
 						}
 
@@ -233,6 +233,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 
 //nolint:gocyclo
 func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error {
+	var activePeersConnected int
 	peersP2P := map[types.ServerID]peerP2P{}
 	peersL2P := map[types.ServerID]peerL2P{}
 	peersTx2P := map[types.ServerID]peerTx2P{}
@@ -341,15 +342,21 @@ func (g *Gossip) runSupervisor(ctx context.Context, pState partitionState) error
 				}
 				peersP2P[p.ID] = p
 				close(p.InstalledCh)
-				if !exists && len(peersP2P) == pState.minority {
-					pState.MajorityCh <- true
+				if !exists {
+					if _, ok := pState.ActiveServers[p.ID]; ok {
+						activePeersConnected++
+						if activePeersConnected == pState.minority {
+							pState.MajorityCh <- true
+						}
+					}
 				}
 			case peersP2P[p.ID].SendCh == p.SendCh:
 				delete(peersP2P, p.ID)
 				close(p.SendCh)
-				if len(peersP2P)+1 == pState.minority {
+				if activePeersConnected == pState.minority {
 					pState.MajorityCh <- false
 				}
+				activePeersConnected--
 			}
 		case p, ok := <-pState.PeerL2PCh:
 			if !ok {
@@ -816,8 +823,8 @@ func (g *Gossip) hello(
 
 	switch {
 	case prop == connProperties{}:
-		if initConnection(g.serverID, h.ServerID) {
-			return connProperties{}, partitionState{}, errors.New("peer should wait for my connection")
+		if !g.shouldConnect(h.ServerID, g.serverID, h.PartitionID) {
+			return connProperties{}, partitionState{}, errors.New("peer should not connect")
 		}
 		switch h.Channel {
 		case wire.ChannelP2P, wire.ChannelL2P, wire.ChannelTx2P:
@@ -853,6 +860,16 @@ func (g *Gossip) hello(
 	return prop, pState, nil
 }
 
-func initConnection(serverID, peerID types.ServerID) bool {
-	return strings.Compare(string(serverID), string(peerID)) >= 0
+func (g *Gossip) shouldConnect(srcPeerID, dstPeerID types.ServerID, partitionID types.PartitionID) bool {
+	pState, exists := g.partitions[partitionID]
+	if !exists {
+		return false
+	}
+	if _, exists := pState.ActiveServers[dstPeerID]; !exists {
+		return false
+	}
+	if _, exists := pState.ActiveServers[srcPeerID]; !exists {
+		return true
+	}
+	return strings.Compare(string(srcPeerID), string(dstPeerID)) > 0
 }
