@@ -237,7 +237,15 @@ func (m *mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *
 			return err
 		}
 
-		if _, ok := msg.(*types.VoteRequest); ok && m.isVoteRequestBlocked(srcPeer) {
+		if v, ok := msg.(*types.VoteRequest); ok && m.forcedLeader != nil {
+			if m.forcedLeader == srcPeer {
+				if err := srcC.SendProton(&types.VoteResponse{
+					Term:        v.Term,
+					VoteGranted: true,
+				}, m.mP2P); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 
@@ -245,13 +253,6 @@ func (m *mesh) interceptVoteRequests(dstC, srcC *resonance.Connection, srcPeer *
 			return err
 		}
 	}
-}
-
-func (m *mesh) isVoteRequestBlocked(srcPeer *Peer) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.forcedLeader != nil && m.forcedLeader != srcPeer
 }
 
 func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, error) {
