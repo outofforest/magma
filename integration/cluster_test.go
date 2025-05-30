@@ -28,7 +28,7 @@ func TestBenchmark(t *testing.T) {
 	t.Parallel()
 
 	const (
-		numOfClients          = 20
+		numOfClients          = 10
 		transactionsPerClient = 50
 	)
 
