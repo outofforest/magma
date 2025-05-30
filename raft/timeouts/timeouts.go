@@ -2,7 +2,6 @@ package timeouts
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/pkg/errors"
@@ -75,7 +74,7 @@ func (t *Timeouts) applyRole(role types.Role) {
 	case types.RoleFollower, types.RoleCandidate:
 		if t.majorityPresent {
 			if t.partitionRole == magmatypes.PartitionRoleActive {
-				t.tickerElection.Start(electionInterval())
+				t.tickerElection.Start(electionBaseInterval)
 			}
 		} else {
 			t.tickerElection.Stop()
@@ -98,10 +97,6 @@ func (t *Timeouts) applyMajority(majorityPresent bool) {
 		return
 	}
 	if t.partitionRole == magmatypes.PartitionRoleActive {
-		t.tickerElection.Start(electionInterval())
+		t.tickerElection.Start(electionBaseInterval)
 	}
-}
-
-func electionInterval() time.Duration {
-	return electionBaseInterval + time.Duration(rand.Intn(500))*time.Millisecond
 }
