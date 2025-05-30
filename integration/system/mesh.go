@@ -187,6 +187,11 @@ func (m *mesh) handleConn(conn net.Conn, lnk link, pair *pair) {
 				c1 := resonance.NewConnection(conn, config)
 				c2 := resonance.NewConnection(conn2, config)
 
+				c1.BufferReads()
+				c1.BufferWrites()
+				c2.BufferReads()
+				c2.BufferWrites()
+
 				helloMsg1, err := m.interceptHello(c2, c1)
 				if err != nil {
 					return err
