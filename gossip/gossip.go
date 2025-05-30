@@ -70,7 +70,7 @@ func New(
 		pStates[id] = partitionState{
 			State: p,
 
-			minority:        (len(p.Peers) + 1) / 2,
+			minority:        len(p.ActiveServers) / 2,
 			validPeers:      validPeers,
 			providerPeers:   repository.NewTailProvider(),
 			providerClients: repository.NewTailProvider(),
