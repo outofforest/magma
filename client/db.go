@@ -30,54 +30,47 @@ func First[T any](v *View, index memdb.Index, args ...any) (T, bool) {
 	return first[T](v, index.ID(), args...)
 }
 
-// Last returns the first object matching indexed values.
-func Last[T any](v *View, index memdb.Index, args ...any) (T, bool) {
-	if uint64(len(args)) > index.NumOfArgs() {
-		panic(errors.New("too many arguments"))
-	}
-	return last[T](v, index.ID(), args...)
-}
-
 // All iterates over all entities using ID index.
 func All[T any](v *View) func(func(T) bool) {
-	return iterateForward[T](v, memdbid.IndexID)
+	return iterateWhere[T](v, memdbid.IndexID)
 }
 
-// IterateForward iterates over entities in forward direction using provided index.
-func IterateForward[T any](v *View, index memdb.Index, args ...any) func(func(T) bool) {
+// Where iterates over entities matching index in forward direction.
+func Where[T any](v *View, index memdb.Index, args ...any) func(func(T) bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return iterateForward[T](v, index.ID(), args...)
+	return iterateWhere[T](v, index.ID(), args...)
 }
 
-// IterateBackward iterates over entities in backward direction using provided index.
-func IterateBackward[T any](v *View, index memdb.Index, args ...any) func(func(T) bool) {
+// From iterates over entities greater than or equal to args in forward direction using provided index.
+func From[T any](v *View, index memdb.Index, args ...any) func(func(T) bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return iterateBackward[T](v, index.ID(), args...)
+	return iterateFrom[T](v, index.ID(), args...)
 }
 
 // AllIterator returns iterator iterating over all entities using ID index.
 func AllIterator[T any](v *View) func() (T, bool) {
-	return forwardIterator[T](v, memdbid.IndexID)
+	return iteratorWhere[T](v, memdbid.IndexID)
 }
 
-// ForwardIterator returns iterator iterating over all entities in forward direction using provided index.
-func ForwardIterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
+// WhereIterator returns iterator iterating over entities matching index in forward direction.
+func WhereIterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return forwardIterator[T](v, index.ID(), args...)
+	return iteratorWhere[T](v, index.ID(), args...)
 }
 
-// BackwardIterator returns iterator iterating over all entities in backward direction using provided index.
-func BackwardIterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
+// FromIterator returns iterator iterating over entities greater than or equal to args in forward direction using
+// provided index.
+func FromIterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
 	if uint64(len(args)) > index.NumOfArgs() {
 		panic(errors.New("too many arguments"))
 	}
-	return backwardIterator[T](v, index.ID(), args...)
+	return iteratorFrom[T](v, index.ID(), args...)
 }
 
 func first[T any](v *View, index uint64, args ...any) (T, bool) {
@@ -99,26 +92,7 @@ func first[T any](v *View, index uint64, args ...any) (T, bool) {
 	return o.Elem().Interface().(T), true
 }
 
-func last[T any](v *View, index uint64, args ...any) (T, bool) {
-	var t T
-	tt := reflect.TypeOf(t)
-	typeDef, exists := v.byType[tt]
-	if !exists {
-		panic(errors.Errorf("type %s not defined", tt))
-	}
-
-	o, err := v.tx.Last(typeDef.TableID, index, args...)
-	if err != nil {
-		panic(errors.WithStack(err))
-	}
-
-	if o == nil {
-		return t, false
-	}
-	return o.Elem().Interface().(T), true
-}
-
-func iterateForward[T any](v *View, index uint64, args ...any) func(func(T) bool) {
+func iterateWhere[T any](v *View, index uint64, args ...any) func(func(T) bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -140,29 +114,7 @@ func iterateForward[T any](v *View, index uint64, args ...any) func(func(T) bool
 	}
 }
 
-func iterateBackward[T any](v *View, index uint64, args ...any) func(func(T) bool) {
-	var t T
-	tt := reflect.TypeOf(t)
-	typeDef, exists := v.byType[tt]
-	if !exists {
-		panic(errors.Errorf("type %s not defined", tt))
-	}
-
-	it, err := v.tx.GetReverse(typeDef.TableID, index, args...)
-	if err != nil {
-		panic(errors.WithStack(err))
-	}
-
-	return func(yield func(e T) bool) {
-		for e := it.Next(); e != nil; e = it.Next() {
-			if !yield(e.Elem().Interface().(T)) {
-				return
-			}
-		}
-	}
-}
-
-func forwardIterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
+func iteratorWhere[T any](v *View, index uint64, args ...any) func() (T, bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -184,7 +136,7 @@ func forwardIterator[T any](v *View, index uint64, args ...any) func() (T, bool)
 	}
 }
 
-func backwardIterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
+func iterateFrom[T any](v *View, index uint64, args ...any) func(func(T) bool) {
 	var t T
 	tt := reflect.TypeOf(t)
 	typeDef, exists := v.byType[tt]
@@ -192,7 +144,29 @@ func backwardIterator[T any](v *View, index uint64, args ...any) func() (T, bool
 		panic(errors.Errorf("type %s not defined", tt))
 	}
 
-	it, err := v.tx.GetReverse(typeDef.TableID, index, args...)
+	it, err := v.tx.LowerBound(typeDef.TableID, index, args...)
+	if err != nil {
+		panic(errors.WithStack(err))
+	}
+
+	return func(yield func(e T) bool) {
+		for e := it.Next(); e != nil; e = it.Next() {
+			if !yield(e.Elem().Interface().(T)) {
+				return
+			}
+		}
+	}
+}
+
+func iteratorFrom[T any](v *View, index uint64, args ...any) func() (T, bool) {
+	var t T
+	tt := reflect.TypeOf(t)
+	typeDef, exists := v.byType[tt]
+	if !exists {
+		panic(errors.Errorf("type %s not defined", tt))
+	}
+
+	it, err := v.tx.LowerBound(typeDef.TableID, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
