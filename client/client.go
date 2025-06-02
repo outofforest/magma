@@ -19,7 +19,6 @@ import (
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
-	memdbid "github.com/outofforest/memdb/id"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
@@ -94,7 +93,7 @@ func New(config Config) (*Client, error) {
 		if revisionF.Type != revisionType {
 			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
 		}
-		if revisionF.Index[0] != 1 || revisionF.Offset != memdbid.Length {
+		if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
 			return nil, errors.Errorf("revision must be the second field in type %d", t)
 		}
 
@@ -451,7 +450,7 @@ func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retE
 			return errors.Errorf("unknown type %s", typeDef.Type)
 		}
 
-		o, err := tx.First(typeDef.TableID, memdbid.IndexID, entityMeta.ID)
+		o, err := tx.First(typeDef.TableID, memdb.IDIndexID, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
