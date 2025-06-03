@@ -15,13 +15,20 @@ import (
 	"github.com/outofforest/memdb/indices"
 )
 
+var config = NewTestConfig(entities.NewMarshaller(), nil)
+
+func withIndices(config Config, indices ...memdb.Index) Config {
+	config.Indices = append(append([]memdb.Index{}, config.Indices...), indices...)
+	return config
+}
+
 func TestEntityCreation(t *testing.T) {
 	t.Parallel()
 
 	ctx := newContext(t)
 
 	requireT := require.New(t)
-	c := NewTestClient(t, entities.NewMarshaller(), nil)
+	c := NewTestClient(t, config)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -81,7 +88,7 @@ func TestEntityUpdate(t *testing.T) {
 	ctx := newContext(t)
 
 	requireT := require.New(t)
-	c := NewTestClient(t, entities.NewMarshaller(), nil)
+	c := NewTestClient(t, config)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -153,7 +160,7 @@ func TestFailingTransaction(t *testing.T) {
 	requireT := require.New(t)
 
 	err := errors.New("error")
-	requireT.ErrorIs(NewTestClient(t, entities.NewMarshaller(), nil).NewTransactor().
+	requireT.ErrorIs(NewTestClient(t, config).NewTransactor().
 		Tx(ctx, func(tx *Tx) error {
 			return err
 		}), err)
@@ -169,7 +176,7 @@ func TestFieldIndexString(t *testing.T) {
 	var acc entities.Account
 	indexLastName := indices.NewFieldIndex(&acc, &acc.LastName)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
+	c := NewTestClient(t, withIndices(config, indexLastName))
 
 	accs := []entities.Account{
 		{
@@ -321,7 +328,7 @@ func TestFieldIndexBool(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Bool)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -403,7 +410,7 @@ func TestFieldIndexTime(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Time)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	time0 := time.Unix(100, 10)
 	time1 := time.Unix(10, 20)
@@ -557,7 +564,7 @@ func TestFieldIndexInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int8)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -648,7 +655,7 @@ func TestFieldIndexInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int16)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -739,7 +746,7 @@ func TestFieldIndexInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int32)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -830,7 +837,7 @@ func TestFieldIndexInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int64)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -950,7 +957,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint8)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -1023,7 +1030,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint16)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -1096,7 +1103,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint32)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -1169,7 +1176,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint64)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -1263,7 +1270,7 @@ func TestFieldIndexID(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.EntityID)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, index)
+	c := NewTestClient(t, withIndices(config, index))
 
 	es := []entities.Fields{
 		{
@@ -1339,7 +1346,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
+	c := NewTestClient(t, withIndices(config, indexLastName))
 
 	accs := []entities.Account{
 		{
@@ -1452,7 +1459,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 		},
 	)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
+	c := NewTestClient(t, withIndices(config, indexLastName))
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		tx.Set(acc)
@@ -1487,7 +1494,7 @@ func TestMultiIndex(t *testing.T) {
 		indices.NewFieldIndex(&acc, &acc.FirstName),
 	)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexName)
+	c := NewTestClient(t, withIndices(config, indexName))
 
 	accs := []entities.Account{
 		{
@@ -1666,7 +1673,7 @@ func TestMultiIfIndex(t *testing.T) {
 			}),
 	)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexName)
+	c := NewTestClient(t, withIndices(config, indexName))
 
 	accs := []entities.Account{
 		{
@@ -1747,7 +1754,7 @@ func TestReverseIndex(t *testing.T) {
 	var acc entities.Account
 	indexLastName := indices.NewReverseIndex(indices.NewFieldIndex(&acc, &acc.LastName))
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil, indexLastName)
+	c := NewTestClient(t, withIndices(config, indexLastName))
 
 	accs := []entities.Account{
 		{

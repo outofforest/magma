@@ -18,24 +18,24 @@ import (
 
 const maxMsgSize = 4 * 1024
 
-// NewTestClient creates new client for tests.
-func NewTestClient(
-	t *testing.T,
-	marshaller proton.Marshaller,
-	triggerFunc TriggerFunc,
-	indices ...memdb.Index,
-) TestClient {
-	client, err := New(Config{
+// NewTestConfig creates new config for test client.
+func NewTestConfig(marshaller proton.Marshaller, triggerFunc TriggerFunc, indices ...memdb.Index) Config {
+	return Config{
 		Service:        "test",
 		MaxMessageSize: maxMsgSize,
 		Marshaller:     marshaller,
 		Indices:        indices,
-	})
+	}
+}
+
+// NewTestClient creates new client for tests.
+func NewTestClient(t *testing.T, config Config) TestClient {
+	client, err := New(config)
 	require.NoError(t, err)
 
 	return TestClient{
 		client:      client,
-		triggerFunc: triggerFunc,
+		triggerFunc: config.TriggerFunc,
 	}
 }
 
