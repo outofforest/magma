@@ -35,7 +35,7 @@ func TestIDIndex(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, entities.NewMarshaller(), nil)
+	c := NewTestClient(t, config)
 
 	id0 := entities.AccountID{0x02}
 	id1 := entities.AccountID{0x01}
