@@ -294,6 +294,13 @@ func (c *Cluster) NewClient(
 	}, nil
 }
 
+// Peers returns peers in the cluster.
+func (c *Cluster) Peers() []*Peer {
+	peers := make([]*Peer, len(c.peers))
+	copy(peers, c.peers)
+	return peers
+}
+
 // StartPeers starts peers.
 func (c *Cluster) StartPeers(ctx context.Context, peers ...*Peer) {
 	cmd := startPeers{
