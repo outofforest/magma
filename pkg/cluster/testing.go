@@ -33,6 +33,11 @@ type TestingCluster struct {
 	requireT *require.Assertions
 }
 
+// Peers returns peers in the cluster.
+func (c TestingCluster) Peers() []*Peer {
+	return c.cluster.Peers()
+}
+
 // NewPeer creates new peer.
 func (c TestingCluster) NewPeer(peerID types.ServerID, partitions types.Partitions) *Peer {
 	peer, err := c.cluster.NewPeer(peerID, partitions, c.t.TempDir())
