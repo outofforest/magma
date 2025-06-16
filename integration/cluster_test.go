@@ -10,11 +10,12 @@ import (
 
 	"github.com/outofforest/magma/client"
 	"github.com/outofforest/magma/integration/entities"
-	"github.com/outofforest/magma/integration/system"
+	"github.com/outofforest/magma/pkg/cluster"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/parallel"
+	"github.com/outofforest/qa"
 )
 
 const (
@@ -33,11 +34,14 @@ func TestBenchmark(t *testing.T) {
 	)
 
 	requireT := require.New(t)
-
-	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
+	peers := []*cluster.Peer{
+		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
 	var e entities.Account
@@ -45,17 +49,16 @@ func TestBenchmark(t *testing.T) {
 	indexFirstName := indices.NewFieldIndex(&e, &e.FirstName)
 	indexName := indices.NewMultiIndex(indexLastName, indexFirstName)
 
-	clients := make([]*system.Client, 0, numOfClients)
+	clients := make([]*cluster.Client, 0, numOfClients)
 	for i := range numOfClients {
-		clients = append(clients, system.NewClient(t, peers[i%len(peers)], fmt.Sprintf("client-%d", i),
+		clients = append(clients, clstr.NewClient(peers[i%len(peers)], fmt.Sprintf("client-%d", i), m,
 			partitionDefault, nil, indexLastName, indexFirstName, indexName))
 	}
 
-	cluster, ctx := system.NewCluster(t, peers...)
-	cluster.StartPeers(peers...)
-	cluster.StartClients(clients...)
+	clstr.StartPeers(peers...)
+	clstr.StartClients(clients...)
 
-	clientGroup := parallel.NewGroup(ctx)
+	clientGroup := qa.NewGroup(ctx, t)
 	for i, c := range clients {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
@@ -82,13 +85,16 @@ func TestSinglePeer(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := system.NewClient(t, p, "client", partitionDefault, nil)
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, p)
-	cluster.StartPeers(p)
-	cluster.StartClients(c)
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
 
 	accountID := memdb.NewID[entities.AccountID]()
 
@@ -116,11 +122,15 @@ func Test3Peers3Clients(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+	peers := []*cluster.Peer{
+		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
 	ids := make([]entities.AccountID, 0, len(peers))
@@ -152,21 +162,20 @@ func Test3Peers3Clients(t *testing.T) {
 		}
 	}
 
-	clients := make([]*system.Client, 0, len(peers))
+	clients := make([]*cluster.Client, 0, len(peers))
 	idCh := make(chan entities.AccountID, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), partitionDefault,
+		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), m, partitionDefault,
 			triggerFunc()))
 		id := memdb.NewID[entities.AccountID]()
 		ids = append(ids, id)
 		idCh <- id
 	}
 
-	cluster, ctx := system.NewCluster(t, peers...)
-	cluster.StartPeers(peers...)
-	cluster.StartClients(clients...)
+	clstr.StartPeers(peers...)
+	clstr.StartClients(clients...)
 
-	clientGroup := parallel.NewGroup(ctx)
+	clientGroup := qa.NewGroup(ctx, t)
 	for _, c := range clients {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			return c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
@@ -204,28 +213,31 @@ func TestPeerRestart(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peers := []*system.Peer{
-		system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
-		system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+	peers := []*cluster.Peer{
+		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
+		clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 	}
 
-	clients := make([]*system.Client, 0, len(peers))
+	clients := make([]*cluster.Client, 0, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, system.NewClient(t, peer, fmt.Sprintf("client-%d", i), partitionDefault,
+		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), m, partitionDefault,
 			nil))
 	}
 
-	cluster, ctx := system.NewCluster(t, peers...)
-	cluster.StartPeers(peers...)
-	cluster.StartClients(clients...)
+	clstr.StartPeers(peers...)
+	clstr.StartClients(clients...)
 
 	for i := range 2 * len(peers) {
 		pI := i % len(peers)
 		cI := (i + 1) % len(clients)
 
-		cluster.StopPeers(peers[pI])
+		clstr.StopPeers(peers[pI])
 
 	loop:
 		for j := range 5 {
@@ -251,7 +263,7 @@ func TestPeerRestart(t *testing.T) {
 			}
 		}
 
-		cluster.StartPeers(peers[pI])
+		clstr.StartPeers(peers[pI])
 	}
 }
 
@@ -259,19 +271,22 @@ func TestPassivePeers(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	// Passive peers have their IDs intentionally set to be the first and the last one.
-	peerObserver1 := system.NewPeer(t, "P0", types.Partitions{partitionDefault: types.PartitionRolePassive})
-	peerObserver2 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRolePassive})
+	peerObserver1 := clstr.NewPeer("P0", types.Partitions{partitionDefault: types.PartitionRolePassive})
+	peerObserver2 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRolePassive})
 
-	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peerObserver1, peerObserver2)
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c)
 
 	accs := []entities.Account{
 		{
@@ -299,12 +314,12 @@ func TestPassivePeers(t *testing.T) {
 		}))
 	}
 
-	cluster.StopClients(c)
+	clstr.StopClients(c)
 
-	cp1 := system.NewClient(t, peerObserver1, "client1", partitionDefault, nil)
-	cp2 := system.NewClient(t, peerObserver2, "client2", partitionDefault, nil)
-	cluster.StartPeers(peerObserver1, peerObserver2)
-	cluster.StartClients(cp1, cp2)
+	cp1 := clstr.NewClient(peerObserver1, "client1", m, partitionDefault, nil)
+	cp2 := clstr.NewClient(peerObserver2, "client2", m, partitionDefault, nil)
+	clstr.StartPeers(peerObserver1, peerObserver2)
+	clstr.StartClients(cp1, cp2)
 
 	v1 := cp1.View()
 	v2 := cp2.View()
@@ -325,16 +340,19 @@ func TestSyncWhileRunning(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c)
 
 	accID := memdb.NewID[entities.AccountID]()
 	accs := []entities.Account{
@@ -378,13 +396,13 @@ func TestSyncWhileRunning(t *testing.T) {
 		}))
 	}
 
-	cluster.StartPeers(peer3)
-	c2 := system.NewClient(t, peer3, "client2", partitionDefault, nil)
-	cluster.StartClients(c2)
-	cluster.StopClients(c2)
+	clstr.StartPeers(peer3)
+	c2 := clstr.NewClient(peer3, "client2", m, partitionDefault, nil)
+	clstr.StartClients(c2)
+	clstr.StopClients(c2)
 
-	cluster.DisableLink(peer3, peer1)
-	cluster.DisableLink(peer3, peer2)
+	clstr.DisableLink(peer3, peer1)
+	clstr.DisableLink(peer3, peer2)
 
 	for _, acc := range accs[3:] {
 		requireT.NoError(tr.Tx(ctx, func(tx *client.Tx) error {
@@ -393,8 +411,8 @@ func TestSyncWhileRunning(t *testing.T) {
 		}))
 	}
 
-	c2 = system.NewClient(t, peer3, "client2", partitionDefault, nil)
-	cluster.StartClients(c2)
+	c2 = clstr.NewClient(peer3, "client2", m, partitionDefault, nil)
+	clstr.StartClients(c2)
 
 	tr2 := c2.NewTransactor()
 	requireT.Error(tr2.Tx(ctx, func(tx *client.Tx) error {
@@ -406,8 +424,8 @@ func TestSyncWhileRunning(t *testing.T) {
 		return nil
 	}))
 
-	c3 := system.NewClient(t, peer3, "client3", partitionDefault, nil)
-	cluster.StartClients(c3)
+	c3 := clstr.NewClient(peer3, "client3", m, partitionDefault, nil)
+	clstr.StartClients(c3)
 
 	v := c3.View()
 	acc, exists := client.Get[entities.Account](v, accID)
@@ -415,8 +433,8 @@ func TestSyncWhileRunning(t *testing.T) {
 	acc.Revision = 0
 	requireT.Equal(accs[2], acc)
 
-	cluster.EnableLink(peer3, peer1)
-	cluster.EnableLink(peer3, peer2)
+	clstr.EnableLink(peer3, peer1)
+	clstr.EnableLink(peer3, peer2)
 
 	var err error
 	for range 10 {
@@ -445,16 +463,19 @@ func TestSyncAfterRestart(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c)
 
 	accID := memdb.NewID[entities.AccountID]()
 	accs := []entities.Account{
@@ -513,10 +534,10 @@ func TestSyncAfterRestart(t *testing.T) {
 		}
 	}
 
-	c2 := system.NewClient(t, peer3, "client2", partitionDefault, triggerFunc(accCh1))
-	c3 := system.NewClient(t, peer3, "client3", partitionDefault, triggerFunc(accCh2))
-	cluster.StartPeers(peer3)
-	cluster.StartClients(c2, c3)
+	c2 := clstr.NewClient(peer3, "client2", m, partitionDefault, triggerFunc(accCh1))
+	c3 := clstr.NewClient(peer3, "client3", m, partitionDefault, triggerFunc(accCh2))
+	clstr.StartPeers(peer3)
+	clstr.StartClients(c2, c3)
 
 	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
@@ -527,8 +548,8 @@ func TestSyncAfterRestart(t *testing.T) {
 		return nil
 	}))
 
-	cluster.StopClients(c2)
-	cluster.StopPeers(peer3)
+	clstr.StopClients(c2)
+	clstr.StopPeers(peer3)
 
 	requireT.NotEmpty(accCh1)
 	acc := <-accCh1
@@ -547,10 +568,10 @@ func TestSyncAfterRestart(t *testing.T) {
 		}))
 	}
 
-	c2 = system.NewClient(t, peer3, "client2", partitionDefault, triggerFunc(accCh1))
+	c2 = clstr.NewClient(peer3, "client2", m, partitionDefault, triggerFunc(accCh1))
 
-	cluster.StartPeers(peer3)
-	cluster.StartClients(c2)
+	clstr.StartPeers(peer3)
+	clstr.StartClients(c2)
 
 	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()})
@@ -561,8 +582,8 @@ func TestSyncAfterRestart(t *testing.T) {
 		return nil
 	}))
 
-	cluster.StopClients(c2)
-	cluster.StopPeers(peer3)
+	clstr.StopClients(c2)
+	clstr.StopPeers(peer3)
 
 	requireT.NotEmpty(accCh1)
 	acc = <-accCh1
@@ -579,27 +600,30 @@ func TestPartitions(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{
+	peer1 := clstr.NewPeer("P1", types.Partitions{
 		partition1: types.PartitionRoleActive,
 		partition2: types.PartitionRoleActive,
 	})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{
+	peer2 := clstr.NewPeer("P2", types.Partitions{
 		partition2: types.PartitionRoleActive,
 		partition3: types.PartitionRoleActive,
 	})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{
+	peer3 := clstr.NewPeer("P3", types.Partitions{
 		partition3: types.PartitionRoleActive,
 		partition1: types.PartitionRoleActive,
 	})
 
-	c1 := system.NewClient(t, peer1, "client1", partition1, nil)
-	c2 := system.NewClient(t, peer2, "client2", partition2, nil)
-	c3 := system.NewClient(t, peer3, "client3", partition3, nil)
+	c1 := clstr.NewClient(peer1, "client1", m, partition1, nil)
+	c2 := clstr.NewClient(peer2, "client2", m, partition2, nil)
+	c3 := clstr.NewClient(peer3, "client3", m, partition3, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
-	cluster.StartPeers(peer1, peer2, peer3)
-	cluster.StartClients(c1, c2, c3)
+	clstr.StartPeers(peer1, peer2, peer3)
+	clstr.StartClients(c1, c2, c3)
 
 	accs := [][]entities.Account{
 		{
@@ -655,8 +679,8 @@ func TestPartitions(t *testing.T) {
 		},
 	}
 
-	clientGroup := parallel.NewGroup(ctx)
-	for i, c := range []*system.Client{c1, c2, c3} {
+	clientGroup := qa.NewGroup(ctx, t)
+	for i, c := range []*cluster.Client{c1, c2, c3} {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
 			for _, acc := range accs[i] {
@@ -673,15 +697,15 @@ func TestPartitions(t *testing.T) {
 	}
 	requireT.NoError(clientGroup.Wait())
 
-	cluster.StopClients(c1, c2, c3)
+	clstr.StopClients(c1, c2, c3)
 
-	c1 = system.NewClient(t, peer3, "client1", partition1, nil)
-	c2 = system.NewClient(t, peer1, "client2", partition2, nil)
-	c3 = system.NewClient(t, peer2, "client3", partition3, nil)
+	c1 = clstr.NewClient(peer3, "client1", m, partition1, nil)
+	c2 = clstr.NewClient(peer1, "client2", m, partition2, nil)
+	c3 = clstr.NewClient(peer2, "client3", m, partition3, nil)
 
-	cluster.StartClients(c1, c2, c3)
+	clstr.StartClients(c1, c2, c3)
 
-	for i, c := range []*system.Client{c1, c2, c3} {
+	for i, c := range []*cluster.Client{c1, c2, c3} {
 		v := c.View()
 		for j, accs := range accs {
 			for _, acc := range accs {
@@ -702,15 +726,18 @@ func TestTimeouts(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2)
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c)
-	cluster.StopPeers(peer2)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c)
+	clstr.StopPeers(peer2)
 
 	accountID := memdb.NewID[entities.AccountID]()
 
@@ -724,7 +751,7 @@ func TestTimeouts(t *testing.T) {
 		return nil
 	}), client.ErrTxAwaitTimeout)
 
-	cluster.StopPeers(peer1)
+	clstr.StopPeers(peer1)
 
 	requireT.Error(tr.Tx(ctx, func(tx *client.Tx) error {
 		tx.Set(entities.Account{
@@ -749,15 +776,18 @@ func TestOutdatedTx(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
-	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
+	c2 := clstr.NewClient(peer2, "client2", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2)
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c1, c2)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c1, c2)
 
 	accountID := memdb.NewID[entities.AccountID]()
 
@@ -803,14 +833,17 @@ func TestEmptyTx(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	p := system.NewPeer(t, "P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := system.NewClient(t, p, "client", partitionDefault, nil)
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, p)
-	cluster.StartPeers(p)
-	cluster.StartClients(c)
-	cluster.StopPeers(p)
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
+	clstr.StopPeers(p)
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
 		return nil
@@ -821,16 +854,19 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := system.NewClient(t, peer1, "client", partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
-	cluster.StartPeers(peer1, peer2, peer3)
-	cluster.StartClients(c)
+	clstr.StartPeers(peer1, peer2, peer3)
+	clstr.StartClients(c)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -857,9 +893,9 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 		return nil
 	}))
 
-	cluster.StopPeers(peer1)
-	peer1.DropData()
-	cluster.StartPeers(peer1)
+	clstr.StopPeers(peer1)
+	clstr.DropData(peer1)
+	clstr.StartPeers(peer1)
 
 	var err error
 	for range 5 {
@@ -891,21 +927,24 @@ func TestSplitAndResync(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer3 := system.NewPeer(t, "P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2, peer3)
-	cluster.ForceLeader(peer3)
+	clstr.ForceLeader(peer3)
 
-	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
-	c3 := system.NewClient(t, peer3, "client1", partitionDefault, nil)
+	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
+	c3 := clstr.NewClient(peer3, "client1", m, partitionDefault, nil)
 	tr1 := c1.NewTransactor()
 	tr3 := c3.NewTransactor()
 
-	cluster.StartPeers(peer1, peer2, peer3)
-	cluster.StartClients(c1, c3)
+	clstr.StartPeers(peer1, peer2, peer3)
+	clstr.StartClients(c1, c3)
 
 	acc1ID := memdb.NewID[entities.AccountID]()
 	requireT.NoError(tr1.Tx(ctx, func(tx *client.Tx) error {
@@ -918,9 +957,9 @@ func TestSplitAndResync(t *testing.T) {
 		return nil
 	}))
 
-	cluster.ForceLeader(nil)
-	cluster.DisableLink(peer3, peer1)
-	cluster.DisableLink(peer3, peer2)
+	clstr.ForceLeader(nil)
+	clstr.DisableLink(peer3, peer1)
+	clstr.DisableLink(peer3, peer2)
 
 	acc4ID := memdb.NewID[entities.AccountID]()
 	requireT.ErrorIs(tr3.Tx(ctx, func(tx *client.Tx) error {
@@ -941,8 +980,8 @@ func TestSplitAndResync(t *testing.T) {
 	}
 	requireT.NoError(err)
 
-	cluster.EnableLink(peer3, peer1)
-	cluster.EnableLink(peer3, peer2)
+	clstr.EnableLink(peer3, peer1)
+	clstr.EnableLink(peer3, peer2)
 
 	acc6ID := memdb.NewID[entities.AccountID]()
 	for range 5 {
@@ -977,19 +1016,22 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	m := entities.NewMarshaller()
 
-	peer1 := system.NewPeer(t, "P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	peer2 := system.NewPeer(t, "P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	cluster, ctx := system.NewCluster(t, peer1, peer2)
-	cluster.ForceLeader(peer1)
+	clstr.ForceLeader(peer1)
 
-	c1 := system.NewClient(t, peer1, "client1", partitionDefault, nil)
+	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
 	tr1 := c1.NewTransactor()
 
-	cluster.StartPeers(peer1, peer2)
-	cluster.StartClients(c1)
-	cluster.StopPeers(peer2)
+	clstr.StartPeers(peer1, peer2)
+	clstr.StartClients(c1)
+	clstr.StopPeers(peer2)
 
 	blob1ID := memdb.NewID[memdb.ID]()
 	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
@@ -1010,10 +1052,10 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 		return nil
 	}), client.ErrTxAwaitTimeout)
 
-	cluster.StartPeers(peer2)
+	clstr.StartPeers(peer2)
 
-	c2 := system.NewClient(t, peer2, "client2", partitionDefault, nil)
-	cluster.StartClients(c2)
+	c2 := clstr.NewClient(peer2, "client2", m, partitionDefault, nil)
+	clstr.StartClients(c2)
 
 	v := c2.View()
 	_, exists := client.Get[entities.Blob](v, blob1ID)
