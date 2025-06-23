@@ -233,6 +233,7 @@ func TestFieldIndexString(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(3, i)
 
 	i = 0
 	for acc := range Iterate[entities.Account](v, indexLastName, "Last1") {
@@ -244,6 +245,7 @@ func TestFieldIndexString(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(1, i)
 
 	for range Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
@@ -285,6 +287,21 @@ func TestFieldIndexString(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(2, i)
+
+	i = 0
+	for acc := range Iterate[entities.Account](v, indexLastName, memdb.From, "Last21", memdb.Back, 1) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[0], acc)
+		case 1:
+			requireT.Equal(accs[2], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+	requireT.Equal(2, i)
 
 	for range Iterate[entities.Account](v, indexLastName, memdb.From, "Missing") {
 		requireT.Fail("nothing should be returned")
@@ -1401,6 +1418,7 @@ func TestIfIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(2, i)
 
 	i = 0
 	for acc := range Iterate[entities.Account](v, indexLastName, "Last3") {
@@ -1412,6 +1430,7 @@ func TestIfIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(1, i)
 
 	for range Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
@@ -1580,6 +1599,7 @@ func TestMultiIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(5, i)
 
 	i = 0
 	for acc := range Iterate[entities.Account](v, indexName, "Last2") {
@@ -1593,6 +1613,7 @@ func TestMultiIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(2, i)
 
 	i = 0
 	for acc := range Iterate[entities.Account](v, indexName, "Last2", "First2") {
@@ -1604,6 +1625,7 @@ func TestMultiIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(1, i)
 
 	for range Iterate[entities.Account](v, indexName, "Las") {
 		requireT.Fail("nothing should be returned")
@@ -1811,6 +1833,7 @@ func TestReverseIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(3, i)
 
 	i = 0
 	for acc := range Iterate[entities.Account](v, indexLastName, "Last3") {
@@ -1822,6 +1845,7 @@ func TestReverseIndex(t *testing.T) {
 		}
 		i++
 	}
+	requireT.Equal(1, i)
 
 	for range Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
