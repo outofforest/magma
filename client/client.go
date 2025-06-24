@@ -69,32 +69,13 @@ func New(config Config) (*Client, error) {
 
 	dbIndexes := make([][]memdb.Index, 0, len(objectTypes))
 
-	revisionType := reflect.TypeOf(types.Revision(0))
-
 	byID := map[uint64]typeInfo{}
 	byType := map[reflect.Type]typeInfo{}
 	for tableID, o := range objectTypes {
 		t := reflect.TypeOf(o)
 
-		idF, exists := t.FieldByName("ID")
-		if !exists {
-			return nil, errors.Errorf("object %s has no ID field", t)
-		}
-		if !idF.Type.ConvertibleTo(idType) {
-			return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
-		}
-		if idF.Index[0] != 0 || idF.Offset != 0 {
-			return nil, errors.Errorf("id must be the first field in type %s", t)
-		}
-		revisionF, exists := t.FieldByName("Revision")
-		if !exists {
-			return nil, errors.Errorf("object %s has no Revision field", t)
-		}
-		if revisionF.Type != revisionType {
-			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
-		}
-		if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
-			return nil, errors.Errorf("revision must be the second field in type %d", t)
+		if err := validateType(t); err != nil {
+			return nil, err
 		}
 
 		if _, exists := byType[t]; exists {
@@ -114,13 +95,7 @@ func New(config Config) (*Client, error) {
 		byID[msgID] = info
 		byType[t] = info
 
-		table := []memdb.Index{}
-		for _, index := range config.Indices {
-			if index.Type() == t {
-				table = append(table, index)
-			}
-		}
-		dbIndexes = append(dbIndexes, table)
+		dbIndexes = buildDBIndexesForType(dbIndexes, config.Indices, t)
 	}
 
 	db, err := memdb.NewMemDB(dbIndexes)
@@ -684,4 +659,41 @@ type typeInfo struct {
 	Type    reflect.Type
 	MsgID   uint64
 	TableID uint64
+}
+
+var revisionType = reflect.TypeOf(types.Revision(0))
+
+func validateType(t reflect.Type) error {
+	idF, exists := t.FieldByName("ID")
+	if !exists {
+		return errors.Errorf("object %s has no ID field", t)
+	}
+	if !idF.Type.ConvertibleTo(idType) {
+		return errors.Errorf("object's %s ID field must be of type %s", t, idType)
+	}
+	if idF.Index[0] != 0 || idF.Offset != 0 {
+		return errors.Errorf("id must be the first field in type %s", t)
+	}
+	revisionF, exists := t.FieldByName("Revision")
+	if !exists {
+		return errors.Errorf("object %s has no Revision field", t)
+	}
+	if revisionF.Type != revisionType {
+		return errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
+	}
+	if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
+		return errors.Errorf("revision must be the second field in type %d", t)
+	}
+
+	return nil
+}
+
+func buildDBIndexesForType(dbIndexes [][]memdb.Index, indices []memdb.Index, t reflect.Type) [][]memdb.Index {
+	table := []memdb.Index{}
+	for _, index := range indices {
+		if index.Type() == t {
+			table = append(table, index)
+		}
+	}
+	return append(dbIndexes, table)
 }

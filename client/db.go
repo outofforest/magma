@@ -123,13 +123,28 @@ type Tx struct {
 
 // Set sets object in transaction.
 func (tx *Tx) Set(o any) {
+	id, oldValue, newValue := insert(tx.tx, tx.byType, o)
+
+	if ch, exists := tx.changes[id]; exists {
+		ch.New = newValue
+		tx.changes[id] = ch
+		return
+	}
+
+	tx.changes[id] = change{
+		Old: oldValue,
+		New: newValue,
+	}
+}
+
+func insert(tx *memdb.Txn, byType map[reflect.Type]typeInfo, o any) (memdb.ID, *reflect.Value, *reflect.Value) {
 	oValue := reflect.ValueOf(o)
 	if oValue.Kind() == reflect.Ptr {
 		panic(errors.New("object must not be a pointer"))
 	}
 
 	oType := oValue.Type()
-	typeDef, exists := tx.byType[oType]
+	typeDef, exists := byType[oType]
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
 	}
@@ -140,19 +155,10 @@ func (tx *Tx) Set(o any) {
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
-	old, err := tx.tx.Insert(typeDef.TableID, &oPtrValue)
+	old, err := tx.Insert(typeDef.TableID, &oPtrValue)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	if ch, exists := tx.changes[id]; exists {
-		ch.New = &oPtrValue
-		tx.changes[id] = ch
-		return
-	}
-
-	tx.changes[id] = change{
-		Old: old,
-		New: &oPtrValue,
-	}
+	return id, old, &oPtrValue
 }
