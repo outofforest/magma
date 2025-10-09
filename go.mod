@@ -12,7 +12,7 @@ require (
 	github.com/outofforest/resonance v0.21.0
 	github.com/outofforest/varuint64 v0.1.1
 	github.com/pkg/errors v0.9.1
-	github.com/samber/lo v1.51.0
+	github.com/samber/lo v1.52.0
 	github.com/stretchr/testify v1.10.0
 	github.com/zeebo/xxh3 v1.0.2
 	go.uber.org/zap v1.27.0
