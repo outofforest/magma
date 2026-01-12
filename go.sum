@@ -20,8 +20,8 @@ github.com/outofforest/ioc/v2 v2.5.2/go.mod h1:yI+FHuHchC/t6nVo3WJ96qEgCXdHQKFI/
 github.com/outofforest/iradix v1.9.0 h1:VKMDLfZ7bTU0BPlhiKLQnZYRIgVlNN0+sw00WeJVtXU=
 github.com/outofforest/iradix v1.9.0/go.mod h1:90ar7XqWU9cD7AH2/O2FxQOGSWqnVeHIzYngoMjCfg4=
 github.com/outofforest/logger v0.3.3/go.mod h1:+M5sO17Va9V33t28Qs9VqRQ8bFV501Uhq2PtQY+R3Ms=
-github.com/outofforest/logger v0.6.0 h1:x2A/6XRcDD/WOiWdp5RD60U3MHYwMsIhkHm1oYVeB0A=
-github.com/outofforest/logger v0.6.0/go.mod h1:BmKsJGfqah2NQw+yUjUZD1+uhZtTnfiJ2i1pU1HJgV8=
+github.com/outofforest/logger v0.6.1 h1:oNxe+4wCYBP8Mve5Tpt/gpDpdGYzuJSTD5epi8U/YQ0=
+github.com/outofforest/logger v0.6.1/go.mod h1:BmKsJGfqah2NQw+yUjUZD1+uhZtTnfiJ2i1pU1HJgV8=
 github.com/outofforest/mass v0.2.1 h1:oIzOnoTJqN8eVXo5jxk1htOhW7bL7hy2JHrvnTsfvtU=
 github.com/outofforest/mass v0.2.1/go.mod h1:rqr19KwYSKncmsmZCmMatTsg8pI+ElxerH9v1SGU1CQ=
 github.com/outofforest/memdb v1.15.0 h1:DjupoX6RhCFNvahIAmDmUMvR/M0ZTTzIi0ZKXqyCu3o=
