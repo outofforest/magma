@@ -29,7 +29,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		types.LogACK{},
 		types.VoteRequest{},
 		types.VoteResponse{},
@@ -129,7 +129,7 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 
 // ApplyPatch applies patch.
 func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
-	defer helpers.RecoverUnmarshal(&retErr)
+	defer helpers.RecoverApplyPatch(&retErr)
 
 	switch msg2 := msg.(type) {
 	case *types.LogACK:

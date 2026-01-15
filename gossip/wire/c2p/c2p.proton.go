@@ -30,7 +30,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		InitRequest{},
 		InitResponse{},
 		wire.StartLogStream{},
@@ -130,7 +130,7 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 
 // ApplyPatch applies patch.
 func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr error) {
-	defer helpers.RecoverUnmarshal(&retErr)
+	defer helpers.RecoverApplyPatch(&retErr)
 
 	switch msg2 := msg.(type) {
 	case *InitRequest:
@@ -314,7 +314,7 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.PartitionID = types.PartitionID(b[o:o+l])
+				m.PartitionID = types.PartitionID(b[o : o+l])
 				o += l
 			}
 		}
@@ -369,7 +369,7 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.PartitionID = types.PartitionID(b[o:o+l])
+					m.PartitionID = types.PartitionID(b[o : o+l])
 					o += l
 				}
 			}

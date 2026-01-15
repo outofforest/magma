@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -9,10 +8,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
+	"github.com/outofforest/qa"
 )
 
 var config = NewTestConfig(entities.NewMarshaller(), nil)
@@ -25,7 +24,7 @@ func withIndices(config Config, indices ...memdb.Index) Config {
 func TestEntityCreation(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 	c := NewTestClient(t, config)
@@ -42,12 +41,12 @@ func TestEntityCreation(t *testing.T) {
 	}
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
-		_, exists := Get[entities.Account](tx.View, acc1.ID)
+		_, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.False(exists)
 
-		tx.Set(acc1)
+		requireT.NoError(tx.Set(acc1))
 
-		acc, exists := Get[entities.Account](tx.View, acc1.ID)
+		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
@@ -57,13 +56,13 @@ func TestEntityCreation(t *testing.T) {
 	acc1.Revision = 1
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
-		acc, exists := Get[entities.Account](tx.View, acc1.ID)
+		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
-		tx.Set(acc2)
+		requireT.NoError(tx.Set(acc2))
 
-		acc, exists = Get[entities.Account](tx.View, acc2.ID)
+		acc, exists = Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(acc2, acc)
 
@@ -85,7 +84,7 @@ func TestEntityCreation(t *testing.T) {
 func TestEntityUpdate(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 	c := NewTestClient(t, config)
@@ -102,8 +101,8 @@ func TestEntityUpdate(t *testing.T) {
 	}
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
-		tx.Set(acc1)
-		tx.Set(acc2)
+		requireT.NoError(tx.Set(acc1))
+		requireT.NoError(tx.Set(acc2))
 
 		return nil
 	}))
@@ -112,25 +111,25 @@ func TestEntityUpdate(t *testing.T) {
 	acc2.Revision = 1
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
-		acc, exists := Get[entities.Account](tx.View, acc1.ID)
+		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
 		acc.FirstName = "AAA"
-		tx.Set(acc)
+		requireT.NoError(tx.Set(acc))
 
-		accc, exists := Get[entities.Account](tx.View, acc1.ID)
+		accc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(accc, acc)
 
-		acc, exists = Get[entities.Account](tx.View, acc2.ID)
+		acc, exists = Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(acc2, acc)
 
 		acc.FirstName = "BBB"
-		tx.Set(acc)
+		requireT.NoError(tx.Set(acc))
 
-		accc, exists = Get[entities.Account](tx.View, acc2.ID)
+		accc, exists = Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(accc, acc)
 
@@ -155,7 +154,7 @@ func TestEntityUpdate(t *testing.T) {
 func TestFailingTransaction(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -169,7 +168,7 @@ func TestFailingTransaction(t *testing.T) {
 func TestFieldIndexString(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -198,7 +197,7 @@ func TestFieldIndexString(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
@@ -338,7 +337,7 @@ func TestFieldIndexString(t *testing.T) {
 func TestFieldIndexBool(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -360,7 +359,7 @@ func TestFieldIndexBool(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -420,7 +419,7 @@ func TestFieldIndexBool(t *testing.T) {
 func TestFieldIndexTime(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -470,7 +469,7 @@ func TestFieldIndexTime(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -572,7 +571,7 @@ func TestFieldIndexTime(t *testing.T) {
 func TestFieldIndexInt8(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = int8
 
@@ -608,7 +607,7 @@ func TestFieldIndexInt8(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -663,7 +662,7 @@ func TestFieldIndexInt8(t *testing.T) {
 func TestFieldIndexInt16(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = int16
 
@@ -699,7 +698,7 @@ func TestFieldIndexInt16(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -754,7 +753,7 @@ func TestFieldIndexInt16(t *testing.T) {
 func TestFieldIndexInt32(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = int32
 
@@ -790,7 +789,7 @@ func TestFieldIndexInt32(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -845,7 +844,7 @@ func TestFieldIndexInt32(t *testing.T) {
 func TestFieldIndexInt64(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = int64
 
@@ -881,7 +880,7 @@ func TestFieldIndexInt64(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -965,7 +964,7 @@ func TestFieldIndexInt64(t *testing.T) {
 func TestFieldIndexUInt8(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = uint8
 
@@ -993,7 +992,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -1038,7 +1037,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 func TestFieldIndexUInt16(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = uint16
 
@@ -1066,7 +1065,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -1111,7 +1110,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 func TestFieldIndexUInt32(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = uint32
 
@@ -1139,7 +1138,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -1184,7 +1183,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 func TestFieldIndexUInt64(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	type intType = uint64
 
@@ -1212,7 +1211,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -1280,7 +1279,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 func TestFieldIndexID(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1306,7 +1305,7 @@ func TestFieldIndexID(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, e := range es {
-			tx.Set(e)
+			requireT.NoError(tx.Set(e))
 		}
 		return nil
 	}))
@@ -1351,7 +1350,7 @@ func TestFieldIndexID(t *testing.T) {
 func TestIfIndex(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1385,7 +1384,7 @@ func TestIfIndex(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
@@ -1461,7 +1460,7 @@ func TestIfIndex(t *testing.T) {
 func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1481,7 +1480,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 	c := NewTestClient(t, withIndices(config, indexLastName))
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
-		tx.Set(acc)
+		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
 
@@ -1491,7 +1490,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		acc.FirstName = "First2"
-		tx.Set(acc)
+		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
 
@@ -1503,7 +1502,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 func TestMultiIndex(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1545,7 +1544,7 @@ func TestMultiIndex(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
@@ -1679,7 +1678,7 @@ func TestMultiIndex(t *testing.T) {
 func TestMultiIfIndex(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1722,7 +1721,7 @@ func TestMultiIfIndex(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
@@ -1769,7 +1768,7 @@ func TestMultiIfIndex(t *testing.T) {
 func TestReverseIndex(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -1798,7 +1797,7 @@ func TestReverseIndex(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
@@ -1876,6 +1875,292 @@ func TestReverseIndex(t *testing.T) {
 	requireT.False(ok)
 }
 
-func newContext(t *testing.T) context.Context {
-	return logger.WithLogger(t.Context(), logger.New(logger.DefaultConfig))
+func TestOverrideSingleNonExistingEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	accID := memdb.NewID[entities.AccountID]()
+	acc := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAA",
+		LastName:  "Last",
+	}
+	acc2 := acc
+	acc2.LastName = "Changed"
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc))
+		requireT.NoError(tx.Set(acc2))
+		return nil
+	}))
+
+	acc2.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc2, accAfter)
+}
+
+func TestOverrideSingleExistingEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	accID := memdb.NewID[entities.AccountID]()
+	acc := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAA",
+		LastName:  "Last",
+	}
+	acc2 := acc
+	acc2.LastName = "BBBBBBBBBBBBB1"
+	acc3 := acc
+	acc3.LastName = "BBBBBBBBBBBBB2"
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc2))
+		requireT.NoError(tx.Set(acc3))
+		return nil
+	}))
+
+	acc3.Revision += 2
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc3, accAfter)
+}
+
+func TestOverrideLastEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	acc1 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First",
+		LastName:  "Last",
+	}
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc1))
+		requireT.NoError(tx.Set(acc2))
+		requireT.NoError(tx.Set(acc3))
+		return nil
+	}))
+
+	acc3.Revision++
+	acc1.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc3, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc1.ID)
+	requireT.True(exists)
+	requireT.Equal(acc1, accAfter)
+}
+
+func TestOverrideFirstEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	acc1 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First",
+		LastName:  "Last",
+	}
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc2))
+		requireT.NoError(tx.Set(acc1))
+		requireT.NoError(tx.Set(acc3))
+		return nil
+	}))
+
+	acc3.Revision++
+	acc1.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc3, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc1.ID)
+	requireT.True(exists)
+	requireT.Equal(acc1, accAfter)
+}
+
+func TestOverrideMiddleEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	acc11 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First1",
+		LastName:  "Last1",
+	}
+	acc12 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First2",
+		LastName:  "Last2",
+	}
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc11))
+		requireT.NoError(tx.Set(acc2))
+		requireT.NoError(tx.Set(acc12))
+		requireT.NoError(tx.Set(acc3))
+		return nil
+	}))
+
+	acc3.Revision++
+	acc11.Revision++
+	acc12.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc3, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc11.ID)
+	requireT.True(exists)
+	requireT.Equal(acc11, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc12.ID)
+	requireT.True(exists)
+	requireT.Equal(acc12, accAfter)
+}
+
+func TestTxSizeOutOfLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	acc := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First1",
+		LastName:  "Last1",
+	}
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: strings.Repeat("A", maxMsgSize),
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc2))
+		return nil
+	}))
+
+	acc2.Revision++
+
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.ErrorIs(tx.Set(acc3), ErrTxTooBig)
+
+		accAfter, exists := Get[entities.Account](tx.View(), accID)
+		requireT.True(exists)
+		requireT.Equal(acc2, accAfter)
+
+		requireT.NoError(tx.Set(acc))
+
+		accAfter, exists = Get[entities.Account](tx.View(), accID)
+		requireT.True(exists)
+		requireT.Equal(acc2, accAfter)
+
+		accAfter, exists = Get[entities.Account](tx.View(), acc.ID)
+		requireT.True(exists)
+		requireT.Equal(acc, accAfter)
+
+		return nil
+	}))
+
+	acc.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc2, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc.ID)
+	requireT.True(exists)
+	requireT.Equal(acc, accAfter)
 }

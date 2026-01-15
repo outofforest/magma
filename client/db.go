@@ -2,10 +2,13 @@ package client
 
 import (
 	"reflect"
+	"unsafe"
 
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/memdb"
+	"github.com/outofforest/proton"
 )
 
 var emptyID memdb.ID
@@ -110,31 +113,112 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 }
 
 type change struct {
-	Old *reflect.Value
-	New *reflect.Value
+	OldValue   *reflect.Value
+	StartIndex uint64
+	EndIndex   uint64
 }
 
 // Tx represents transaction.
 type Tx struct {
-	*View
-
+	client  *Client
+	db      *memdb.MemDB
+	buf     []byte
+	size    uint64
 	changes map[memdb.ID]change
 }
 
+// View returns read-only view of the DB.
+func (tx *Tx) View() *View {
+	return &View{
+		tx:     tx.db.Txn(false),
+		byType: tx.client.byType,
+	}
+}
+
 // Set sets object in transaction.
-func (tx *Tx) Set(o any) {
-	id, oldValue, newValue := insert(tx.tx, tx.byType, o)
+func (tx *Tx) Set(o any) error {
+	dbTx := tx.db.Txn(true)
+	defer dbTx.Abort()
 
-	if ch, exists := tx.changes[id]; exists {
-		ch.New = newValue
-		tx.changes[id] = ch
-		return
+	id, oldValue, newValue := insert(dbTx, tx.client.byType, o)
+
+	chg, chgExists := tx.changes[id]
+
+	//nolint:nestif
+	if chgExists {
+		if chg.EndIndex > 0 {
+			if chg.EndIndex == tx.size {
+				tx.size = chg.StartIndex
+			} else {
+				copy(tx.buf[chg.StartIndex:], tx.buf[chg.EndIndex:tx.size])
+				tx.size -= chg.EndIndex - chg.StartIndex
+			}
+
+			// This is done to know later that there is nothing to move in the tx if set fails.
+			chg.StartIndex = 0
+			chg.EndIndex = 0
+			tx.changes[id] = chg
+		}
+	} else {
+		chg = change{
+			OldValue: oldValue,
+		}
 	}
 
-	tx.changes[id] = change{
-		Old: oldValue,
-		New: newValue,
+	vv := newValue.Elem()
+	typeDef, exists := tx.client.byType[vv.Type()]
+	if !exists {
+		return errors.Errorf("unknown type %s", vv.Type())
 	}
+
+	unsafeID := unsafeIDFromEntity(*newValue)
+
+	var oldV reflect.Value
+	if chg.OldValue == nil {
+		oldV = reflect.New(typeDef.Type)
+		setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
+	} else {
+		oldV = *chg.OldValue
+	}
+
+	entityMeta := &wire.EntityMetadata{
+		MessageID: typeDef.MsgID,
+	}
+	copyMetaFromEntity(entityMeta, oldV)
+	entityMeta.Revision++
+
+	chg.StartIndex = tx.size
+	chg.EndIndex = chg.StartIndex
+	_, entitySize, err := tx.client.metaM.Marshal(entityMeta, tx.buf[chg.EndIndex:])
+
+	switch {
+	case err == nil:
+	case errors.Is(err, proton.ErrBufferFailure):
+		return ErrTxTooBig
+	default:
+		return err
+	}
+
+	chg.EndIndex += entitySize
+
+	_, msgSize, err := tx.client.config.Marshaller.MakePatch(newValue.Interface(), oldV.Interface(), tx.buf[chg.EndIndex:])
+
+	switch {
+	case err == nil:
+	case errors.Is(err, proton.ErrBufferFailure):
+		return ErrTxTooBig
+	default:
+		return err
+	}
+
+	chg.EndIndex += msgSize
+
+	tx.size = chg.EndIndex
+	tx.changes[id] = chg
+
+	dbTx.Commit()
+
+	return nil
 }
 
 func insert(tx *memdb.Txn, byType map[reflect.Type]typeInfo, o any) (memdb.ID, *reflect.Value, *reflect.Value) {
