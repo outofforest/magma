@@ -13,15 +13,6 @@ import (
 
 const checksumSize = 8
 
-// NewEncoder creates new encoder.
-func NewEncoder(checksumSeed uint64, w io.Writer, m proton.Marshaller) *Encoder {
-	return &Encoder{
-		w:            w,
-		m:            m,
-		checksumSeed: checksumSeed,
-	}
-}
-
 // Encoder encodes events to the output stream.
 type Encoder struct {
 	w io.Writer
@@ -29,6 +20,15 @@ type Encoder struct {
 
 	buf          []byte
 	checksumSeed uint64
+}
+
+// NewEncoder creates new encoder.
+func NewEncoder(checksumSeed uint64, w io.Writer, m proton.Marshaller) *Encoder {
+	return &Encoder{
+		w:            w,
+		m:            m,
+		checksumSeed: checksumSeed,
+	}
 }
 
 // Encode encodes event.

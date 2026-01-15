@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"path/filepath"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -22,11 +23,29 @@ import (
 
 const queueCapacity = 10
 
+// Ent is the entity definition.
+type Ent struct {
+	MsgType reflect.Type
+}
+
+// Entity creates entity definition.
+func Entity[T any]() Ent {
+	return Ent{
+		MsgType: reflect.TypeFor[T](),
+	}
+}
+
 // Generate generates serialization code for entities.
-func Generate(filePath string, entities ...any) {
+func Generate(filePath string, entities ...Ent) {
 	msgs := make([]proton.Msg, 0, len(entities))
 	for _, e := range entities {
-		msgs = append(msgs, proton.Message(e, "ID", "Revision"))
+		msgs = append(msgs, proton.Msg{
+			MsgType: e.MsgType,
+			IgnoreFields: map[string]bool{
+				"ID":       true,
+				"Revision": true,
+			},
+		})
 	}
 	proton.Generate(filePath, msgs...)
 }

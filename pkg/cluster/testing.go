@@ -13,6 +13,14 @@ import (
 	"github.com/outofforest/proton"
 )
 
+// TestingCluster is a set of helper around cluster for testing.
+type TestingCluster struct {
+	cluster  *Cluster
+	group    *parallel.Group
+	t        *testing.T
+	requireT *require.Assertions
+}
+
 // NewTestingCluster returns new testing cluster wrapper.
 func NewTestingCluster(group *parallel.Group, t *testing.T, cluster *Cluster) TestingCluster {
 	tc := TestingCluster{
@@ -23,14 +31,6 @@ func NewTestingCluster(group *parallel.Group, t *testing.T, cluster *Cluster) Te
 	}
 	group.Spawn("cluster", parallel.Fail, tc.cluster.Run)
 	return tc
-}
-
-// TestingCluster is a set of helper around cluster for testing.
-type TestingCluster struct {
-	cluster  *Cluster
-	group    *parallel.Group
-	t        *testing.T
-	requireT *require.Assertions
 }
 
 // Peers returns peers in the cluster.

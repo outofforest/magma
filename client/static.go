@@ -15,6 +15,15 @@ type StaticConfig struct {
 	TriggerFunc TriggerFunc
 }
 
+// StaticClient is the read-only client serving preloaded entities.
+type StaticClient struct {
+	config   StaticConfig
+	db       *memdb.MemDB
+	byType   map[reflect.Type]typeInfo
+	loaded   bool
+	entities []any
+}
+
 // NewStaticClient creates static client.
 func NewStaticClient(config StaticConfig, entities []any) (*StaticClient, error) {
 	byType := map[reflect.Type]typeInfo{}
@@ -49,15 +58,6 @@ func NewStaticClient(config StaticConfig, entities []any) (*StaticClient, error)
 		byType:   byType,
 		entities: entities,
 	}, nil
-}
-
-// StaticClient is the read-only client serving preloaded entities.
-type StaticClient struct {
-	config   StaticConfig
-	db       *memdb.MemDB
-	byType   map[reflect.Type]typeInfo
-	loaded   bool
-	entities []any
 }
 
 // WarmUp waits until hot end is reached for the first time.

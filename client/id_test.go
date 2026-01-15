@@ -13,7 +13,7 @@ import (
 
 func TestMetaLayout(t *testing.T) {
 	requireT := require.New(t)
-	metaT := reflect.TypeOf(wire.EntityMetadata{})
+	metaT := reflect.TypeFor[wire.EntityMetadata]()
 
 	idF, exists := metaT.FieldByName("ID")
 	requireT.True(exists)

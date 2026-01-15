@@ -421,10 +421,7 @@ func initialize(log []byte, previousChecksum uint64) (types.Index, uint64, bool)
 		}
 		size, n := varuint64.Parse(log[index:])
 		if size == 0 {
-			remainingSize := types.Index(len(log[index:]))
-			if remainingSize > maxTestSize {
-				remainingSize = maxTestSize
-			}
+			remainingSize := min(types.Index(len(log[index:])), maxTestSize)
 
 			// Here we do a test where we compare if next 1KB of logs is zero.
 			// If this is true we assume the rest of the log is empty, and we may continue from there.

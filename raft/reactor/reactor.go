@@ -592,10 +592,7 @@ func (r *Reactor) newHeartbeatRequest() (Result, error) {
 
 func (r *Reactor) updateFollowerCommit() {
 	if r.commitInfo.NextIndex > r.commitInfo.CommittedCount && r.leaderCommittedCount > r.commitInfo.CommittedCount {
-		r.commitInfo.CommittedCount = r.commitInfo.NextIndex
-		if r.commitInfo.CommittedCount > r.leaderCommittedCount {
-			r.commitInfo.CommittedCount = r.leaderCommittedCount
-		}
+		r.commitInfo.CommittedCount = min(r.commitInfo.NextIndex, r.leaderCommittedCount)
 	}
 }
 
