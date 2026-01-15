@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/pkg/errors"
 	"github.com/zeebo/xxh3"
@@ -26,6 +25,9 @@ import (
 )
 
 var (
+	// ErrTxTooBig means that adding new entity to transaction caused it to exceed the max size limit.
+	ErrTxTooBig = errors.New("transaction exceeds the max size limit")
+
 	// ErrTxFailure is a general error meaning that transaction failed.
 	ErrTxFailure = errors.New("transaction failed")
 
@@ -120,7 +122,7 @@ func New(config Config) (*Client, error) {
 		txCh:             make(chan txEnvelope),
 		metaM:            metaM,
 		doneCh:           make(chan struct{}),
-		bufSize:          10 * (config.MaxMessageSize + varuint64.MaxSize),
+		bufSize:          max(10*(config.MaxMessageSize+2*varuint64.MaxSize), 4*1024),
 		byID:             byID,
 		byType:           byType,
 		db:               db,
@@ -481,7 +483,7 @@ type transactor struct {
 
 // Tx creates and broadcasts transaction to the magma network.
 func (t *transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
-	tx, i, err := t.prepareTx(txF)
+	tx, usedSize, err := t.prepareTx(txF)
 	if err != nil {
 		return err
 	}
@@ -489,49 +491,23 @@ func (t *transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 		return nil
 	}
 
-	err = t.broadcastAndAwaitTx(ctx, tx)
-	if err != nil {
-		t.buf = t.buf[i:]
+	if err = t.broadcastAndAwaitTx(ctx, tx); err != nil {
+		t.buf = t.buf[usedSize:]
 	}
 	return err
 }
 
-func (t *transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64, retErr error) {
+func (t *transactor) prepareTx(txF func(tx *Tx) error) (retTx txEnvelope, retUsedSize uint64, retErr error) {
 	defer clear(t.changes)
 
 	t.client.db.AwaitTxn()
-
-	pendingTx := &Tx{
-		View: &View{
-			// By taking a snapshot, we don't block the main DB from processing incoming changes.
-			tx:     t.client.db.Snapshot().Txn(true),
-			byType: t.client.byType,
-		},
-		changes: t.changes,
-	}
-
-	defer pendingTx.tx.Abort()
-	defer txRecover(&retErr)
-
-	if err := txF(pendingTx); err != nil {
-		return txEnvelope{}, 0, err
-	}
-
-	pendingTx.tx.Abort()
-
-	if len(pendingTx.changes) == 0 {
-		return txEnvelope{}, 0, nil
-	}
 
 	if uint64(len(t.buf)) < t.client.config.MaxMessageSize {
 		t.buf = make([]byte, t.client.bufSize)
 	}
 
-	i = uint64(varuint64.MaxSize)
-
 	txID := memdb.NewID[memdb.ID]()
-	previousTxID := t.previousTxID
-	t.previousTxID = txID
+	metaSize := uint64(varuint64.MaxSize)
 
 	meta := &wire.TxMetadata{
 		ID:               txID,
@@ -540,63 +516,46 @@ func (t *transactor) prepareTx(txF func(tx *Tx) error) (tx txEnvelope, i uint64,
 		EntityMetadataID: t.client.entityMetadataID,
 	}
 
-	i += varuint64.Put(t.buf[i:], t.client.metaID)
-	_, metaSize, err := t.client.metaM.Marshal(meta, t.buf[i:])
+	metaSize += varuint64.Put(t.buf[metaSize:], t.client.metaID)
+	_, metaMsgSize, err := t.client.metaM.Marshal(meta, t.buf[metaSize:])
 	if err != nil {
 		return txEnvelope{}, 0, err
 	}
-	i += metaSize
+	metaSize += metaMsgSize
 
-	for _, ch := range pendingTx.changes {
-		vv := ch.New.Elem()
-		typeDef, exists := t.client.byType[vv.Type()]
-		if !exists {
-			return txEnvelope{}, 0, errors.Errorf("unknown type %s", vv.Type())
-		}
-
-		unsafeID := unsafeIDFromEntity(*ch.New)
-
-		var oldV reflect.Value
-		if ch.Old == nil {
-			oldV = reflect.New(typeDef.Type)
-			setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
-		} else {
-			oldV = *ch.Old
-		}
-
-		entityMeta := &wire.EntityMetadata{
-			MessageID: typeDef.MsgID,
-		}
-		copyMetaFromEntity(entityMeta, oldV)
-		entityMeta.Revision++
-
-		_, entitySize, err := t.client.metaM.Marshal(entityMeta, t.buf[i:])
-		if err != nil {
-			return txEnvelope{}, 0, err
-		}
-		i += entitySize
-
-		_, msgSize, err := t.client.config.Marshaller.MakePatch(ch.New.Interface(), oldV.Interface(), t.buf[i:])
-		if err != nil {
-			return txEnvelope{}, 0, err
-		}
-		i += msgSize
-
-		if i+1 > t.client.config.MaxMessageSize {
-			return txEnvelope{}, 0,
-				errors.Errorf("tx size %d exceeds allowed maximum %d", i, t.client.config.MaxMessageSize)
-		}
+	pendingTx := &Tx{
+		// By taking a snapshot, we don't block the main DB from processing incoming changes.
+		db:      t.client.db.Snapshot(),
+		client:  t.client,
+		buf:     t.buf[metaSize : metaSize+t.client.config.MaxMessageSize-metaMsgSize],
+		changes: t.changes,
 	}
 
-	n := varuint64.Size(i - varuint64.MaxSize)
-	varuint64.Put(t.buf[varuint64.MaxSize-n:], i-varuint64.MaxSize)
+	defer txRecover(&retErr)
+
+	if err := txF(pendingTx); err != nil {
+		return txEnvelope{}, 0, err
+	}
+
+	if pendingTx.size == 0 {
+		return txEnvelope{}, 0, nil
+	}
+
+	previousTxID := t.previousTxID
+	t.previousTxID = txID
+
+	txSize := metaSize + pendingTx.size - varuint64.MaxSize
+	n := varuint64.Size(txSize)
+	start := varuint64.MaxSize - n
+	end := start + n + txSize
+	varuint64.Put(t.buf[start:], txSize)
 
 	return txEnvelope{
 		ID:           txID,
-		Tx:           t.buf[varuint64.MaxSize-n : i],
+		Tx:           t.buf[start:end],
 		ReceivedCh:   make(chan any, 1),
 		PreviousTxID: previousTxID,
-	}, 0, nil
+	}, end, nil
 }
 
 func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) error {

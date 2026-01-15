@@ -9,6 +9,7 @@ import (
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/memdb"
+	"github.com/outofforest/qa"
 )
 
 func TestMetaLayout(t *testing.T) {
@@ -31,7 +32,7 @@ func TestMetaLayout(t *testing.T) {
 func TestIDIndex(t *testing.T) {
 	t.Parallel()
 
-	ctx := newContext(t)
+	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
@@ -47,7 +48,7 @@ func TestIDIndex(t *testing.T) {
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
 		for _, acc := range accs {
-			tx.Set(acc)
+			requireT.NoError(tx.Set(acc))
 		}
 		return nil
 	}))
