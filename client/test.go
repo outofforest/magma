@@ -28,6 +28,12 @@ func NewTestConfig(marshaller proton.Marshaller, triggerFunc TriggerFunc, indice
 	}
 }
 
+// TestClient is the client wrapper used in unit tests.
+type TestClient struct {
+	client      *Client
+	triggerFunc TriggerFunc
+}
+
 // NewTestClient creates new client for tests.
 func NewTestClient(t *testing.T, config Config) TestClient {
 	client, err := New(config)
@@ -37,12 +43,6 @@ func NewTestClient(t *testing.T, config Config) TestClient {
 		client:      client,
 		triggerFunc: config.TriggerFunc,
 	}
-}
-
-// TestClient is the client wrapper used in unit tests.
-type TestClient struct {
-	client      *Client
-	triggerFunc TriggerFunc
 }
 
 // WarmUp is a noop in test client.

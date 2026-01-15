@@ -11,15 +11,6 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
-// NewDecoder creates new decoder.
-func NewDecoder(r io.Reader, m proton.Marshaller) *Decoder {
-	return &Decoder{
-		r:   r,
-		m:   m,
-		buf: make([]byte, varuint64.MaxSize),
-	}
-}
-
 // Decoder decodes events from the input stream.
 type Decoder struct {
 	r io.Reader
@@ -28,6 +19,15 @@ type Decoder struct {
 	buf          []byte
 	checksumSeed uint64
 	count        uint64
+}
+
+// NewDecoder creates new decoder.
+func NewDecoder(r io.Reader, m proton.Marshaller) *Decoder {
+	return &Decoder{
+		r:   r,
+		m:   m,
+		buf: make([]byte, varuint64.MaxSize),
+	}
 }
 
 // Decode decodes single event.

@@ -9,6 +9,6 @@ import (
 
 func main() {
 	proton.Generate("../format.proton.go",
-		proton.Message(format.Header{}),
+		proton.Message[format.Header](),
 	)
 }

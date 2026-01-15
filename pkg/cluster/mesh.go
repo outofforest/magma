@@ -74,94 +74,12 @@ type connection struct {
 	Pair *Pair
 }
 
-func (m *mesh) run(ctx context.Context) error {
-	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-		spawn("supervisor", parallel.Fail, func(ctx context.Context) error {
-			runningPairs := map[*Pair]*parallel.Group{}
-
-			for {
-				select {
-				case <-ctx.Done():
-					return errors.WithStack(ctx.Err())
-				case cmd := <-m.ch:
-					switch cmd := cmd.(type) {
-					case connection:
-						group := runningPairs[cmd.Pair]
-						if group == nil {
-							continue
-						}
-						group.Spawn("conn", parallel.Continue, func(ctx context.Context) error {
-							return m.runConn(ctx, cmd.Conn, cmd.Pair)
-						})
-					case startPair:
-						if _, exists := runningPairs[cmd.Pair]; exists {
-							continue
-						}
-						group := parallel.NewSubgroup(spawn, "connections", parallel.Continue)
-						runningPairs[cmd.Pair] = group
-
-						spawn("pair", parallel.Continue, func(ctx context.Context) error {
-							return m.runForwarder(ctx, cmd.Pair)
-						})
-					case enablePair:
-						func() {
-							defer close(cmd.Done)
-
-							group, exists := runningPairs[cmd.Pair]
-							if !exists || group != nil {
-								return
-							}
-
-							runningPairs[cmd.Pair] = parallel.NewSubgroup(spawn, "connections", parallel.Continue)
-						}()
-					case disablePair:
-						err := func() error {
-							defer close(cmd.Done)
-
-							group, exists := runningPairs[cmd.Pair]
-
-							if !exists || group == nil {
-								return nil
-							}
-
-							group.Exit(nil)
-							if err := group.Wait(); err != nil {
-								return err
-							}
-							runningPairs[cmd.Pair] = nil
-							return nil
-						}()
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
-		})
-
-		return nil
-	})
-}
-
 // Listener returns listener for peer.
 func (m *mesh) Listener(peer *Peer) (net.Listener, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return m.listener(peer)
-}
-
-func (m *mesh) listener(peer *Peer) (net.Listener, error) {
-	l, exists := m.listeners[peer]
-	if !exists {
-		var err error
-		l, err = net.Listen("tcp", "localhost:0")
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		m.listeners[peer] = l
-	}
-	return l, nil
 }
 
 // Pair returns a pair of connected endpoints.
@@ -255,6 +173,75 @@ func (m *mesh) DisableLink(ctx context.Context, srcPeer, dstPeer *Peer) error {
 	}
 
 	return nil
+}
+
+func (m *mesh) run(ctx context.Context) error {
+	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+		spawn("supervisor", parallel.Fail, func(ctx context.Context) error {
+			runningPairs := map[*Pair]*parallel.Group{}
+
+			for {
+				select {
+				case <-ctx.Done():
+					return errors.WithStack(ctx.Err())
+				case cmd := <-m.ch:
+					switch cmd := cmd.(type) {
+					case connection:
+						group := runningPairs[cmd.Pair]
+						if group == nil {
+							continue
+						}
+						group.Spawn("conn", parallel.Continue, func(ctx context.Context) error {
+							return m.runConn(ctx, cmd.Conn, cmd.Pair)
+						})
+					case startPair:
+						if _, exists := runningPairs[cmd.Pair]; exists {
+							continue
+						}
+						group := parallel.NewSubgroup(spawn, "connections", parallel.Continue)
+						runningPairs[cmd.Pair] = group
+
+						spawn("pair", parallel.Continue, func(ctx context.Context) error {
+							return m.runForwarder(ctx, cmd.Pair)
+						})
+					case enablePair:
+						func() {
+							defer close(cmd.Done)
+
+							group, exists := runningPairs[cmd.Pair]
+							if !exists || group != nil {
+								return
+							}
+
+							runningPairs[cmd.Pair] = parallel.NewSubgroup(spawn, "connections", parallel.Continue)
+						}()
+					case disablePair:
+						err := func() error {
+							defer close(cmd.Done)
+
+							group, exists := runningPairs[cmd.Pair]
+
+							if !exists || group == nil {
+								return nil
+							}
+
+							group.Exit(nil)
+							if err := group.Wait(); err != nil {
+								return err
+							}
+							runningPairs[cmd.Pair] = nil
+							return nil
+						}()
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
+		})
+
+		return nil
+	})
 }
 
 func (m *mesh) runForwarder(ctx context.Context, pair *Pair) error {
@@ -406,4 +393,17 @@ func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, er
 	}
 
 	return helloMsg, nil
+}
+
+func (m *mesh) listener(peer *Peer) (net.Listener, error) {
+	l, exists := m.listeners[peer]
+	if !exists {
+		var err error
+		l, err = net.Listen("tcp", "localhost:0")
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		m.listeners[peer] = l
+	}
+	return l, nil
 }

@@ -9,6 +9,6 @@ import (
 
 func main() {
 	proton.Generate("../hello.proton.go",
-		proton.Message(wire.Hello{}),
+		proton.Message[wire.Hello](),
 	)
 }

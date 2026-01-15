@@ -9,17 +9,17 @@ import (
 	magmatypes "github.com/outofforest/magma/types"
 )
 
+// TailProvider provides the valid tail index of the transaction stream.
+type TailProvider struct {
+	cond         *sync.Cond
+	tail, hotEnd magmatypes.Index
+}
+
 // NewTailProvider creates new tail provider.
 func NewTailProvider() *TailProvider {
 	return &TailProvider{
 		cond: sync.NewCond(&sync.Mutex{}),
 	}
-}
-
-// TailProvider provides the valid tail index of the transaction stream.
-type TailProvider struct {
-	cond         *sync.Cond
-	tail, hotEnd magmatypes.Index
 }
 
 // Wait waits until transaction is available.

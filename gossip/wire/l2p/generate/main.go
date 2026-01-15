@@ -10,9 +10,9 @@ import (
 
 func main() {
 	proton.Generate("../l2p.proton.go",
-		proton.Message(types.LogSyncRequest{}),
-		proton.Message(types.LogSyncResponse{}),
-		proton.Message(wire.StartLogStream{}),
-		proton.Message(wire.HotEnd{}),
+		proton.Message[types.LogSyncRequest](),
+		proton.Message[types.LogSyncResponse](),
+		proton.Message[wire.StartLogStream](),
+		proton.Message[wire.HotEnd](),
 	)
 }

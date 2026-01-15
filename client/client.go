@@ -42,7 +42,7 @@ var (
 	ErrTxOutdatedTx = errors.Wrap(ErrTxFailure, "outdated transaction")
 )
 
-var idType = reflect.TypeOf(memdb.ID{})
+var idType = reflect.TypeFor[memdb.ID]()
 
 // TriggerFunc defines function triggered after applying transactions.
 type TriggerFunc func(ctx context.Context, v *View) error
@@ -661,7 +661,7 @@ type typeInfo struct {
 	TableID uint64
 }
 
-var revisionType = reflect.TypeOf(types.Revision(0))
+var revisionType = reflect.TypeFor[types.Revision]()
 
 func validateType(t reflect.Type) error {
 	idF, exists := t.FieldByName("ID")
