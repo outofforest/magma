@@ -28,7 +28,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		TxMetadata{},
 		EntityMetadata{},
 	}
@@ -313,7 +313,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 		var nanoseconds uint32
 		helpers.Int64Unmarshal(&seconds, b, &o)
 		helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-		m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
+		m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 	}
 	{
 		// Service
@@ -322,7 +322,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Service = string(b[o : o+l])
+				m.Service = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -407,7 +407,7 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 			var nanoseconds uint32
 			helpers.Int64Unmarshal(&seconds, b, &o)
 			helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-			m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
+			m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 		}
 	}
 	{
@@ -418,7 +418,7 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Service = string(b[o : o+l])
+					m.Service = string(b[o:o+l])
 					o += l
 				}
 			}
