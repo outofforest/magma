@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -56,7 +57,6 @@ func (p *Peer) close() {
 
 // Client is used tor un clients.
 type Client struct {
-	name   string
 	client *client.Client
 }
 
@@ -91,8 +91,9 @@ const (
 )
 
 // New creates new cluster.
-func New(ctx context.Context) *Cluster {
+func New(dir string) *Cluster {
 	return &Cluster{
+		dir:  dir,
 		mesh: newMesh(),
 		ch:   make(chan any),
 	}
@@ -100,6 +101,7 @@ func New(ctx context.Context) *Cluster {
 
 // Cluster runs peers and clients.
 type Cluster struct {
+	dir   string
 	mesh  *mesh
 	peers []*Peer
 
@@ -161,7 +163,7 @@ func (c *Cluster) Run(ctx context.Context) error {
 									if err != nil {
 										return err
 									}
-									config, err := c.newConfig(ctx, p)
+									config, err := c.newPeerConfig(ctx, p)
 									if err != nil {
 										return err
 									}
@@ -246,7 +248,7 @@ func (c *Cluster) Run(ctx context.Context) error {
 }
 
 // NewPeer creates new peer.
-func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions, dir string) (*Peer, error) {
+func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions) (*Peer, error) {
 	c2pListener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -254,7 +256,7 @@ func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions, di
 
 	peer := &Peer{
 		id:          peerID,
-		dir:         dir,
+		dir:         filepath.Join(c.dir, string(peerID)),
 		c2pListener: c2pListener.(*net.TCPListener),
 		partitions:  partitions,
 	}
@@ -268,7 +270,7 @@ func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions, di
 func (c *Cluster) NewClient(
 	peer *Peer,
 	name string,
-	marhsaller proton.Marshaller,
+	marshaller proton.Marshaller,
 	partitionID types.PartitionID,
 	triggerFunc func(context.Context, *client.View) error,
 	indices ...memdb.Index,
@@ -280,7 +282,7 @@ func (c *Cluster) NewClient(
 		MaxMessageSize:   maxMsgSize,
 		BroadcastTimeout: time.Second,
 		AwaitTimeout:     5 * time.Second,
-		Marshaller:       marhsaller,
+		Marshaller:       marshaller,
 		Indices:          indices,
 		TriggerFunc:      triggerFunc,
 	})
@@ -289,16 +291,8 @@ func (c *Cluster) NewClient(
 	}
 
 	return &Client{
-		name:   name,
 		client: cl,
 	}, nil
-}
-
-// Peers returns peers in the cluster.
-func (c *Cluster) Peers() []*Peer {
-	peers := make([]*Peer, len(c.peers))
-	copy(peers, c.peers)
-	return peers
 }
 
 // StartPeers starts peers.
@@ -391,7 +385,7 @@ func (c *Cluster) DisableLink(ctx context.Context, peer1, peer2 *Peer) error {
 	return c.mesh.DisableLink(ctx, peer2, peer1)
 }
 
-func (c *Cluster) newConfig(ctx context.Context, peer *Peer) (types.Config, error) {
+func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, error) {
 	config := types.Config{
 		ServerID:          peer.id,
 		MaxMessageSize:    maxMsgSize,

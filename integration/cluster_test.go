@@ -36,7 +36,7 @@ func TestBenchmark(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 	peers := []*cluster.Peer{
 		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
@@ -87,7 +87,7 @@ func TestSinglePeer(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -124,7 +124,7 @@ func Test3Peers3Clients(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peers := []*cluster.Peer{
@@ -215,7 +215,7 @@ func TestPeerRestart(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peers := []*cluster.Peer{
@@ -273,7 +273,7 @@ func TestPassivePeers(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -342,7 +342,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -465,7 +465,7 @@ func TestSyncAfterRestart(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -602,7 +602,7 @@ func TestPartitions(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{
@@ -728,7 +728,7 @@ func TestTimeouts(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -778,7 +778,7 @@ func TestOutdatedTx(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -835,7 +835,7 @@ func TestEmptyTx(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -856,7 +856,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -929,7 +929,7 @@ func TestSplitAndResync(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -1018,7 +1018,7 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
-	clstr := cluster.NewTestingCluster(group, t, cluster.New(ctx))
+	clstr := cluster.NewTesting(group, t)
 	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
