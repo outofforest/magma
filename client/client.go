@@ -181,14 +181,14 @@ func (c *Client) Run(ctx context.Context) error {
 				conn.BufferReads()
 				conn.BufferWrites()
 
-				if err := conn.SendProton(&c2p.InitRequest{
+				if _, err := conn.SendProton(&c2p.InitRequest{
 					PartitionID: c.config.PartitionID,
 					NextIndex:   c.nextIndex,
 				}, cMarshaller); err != nil {
 					return errors.WithStack(err)
 				}
 
-				msg, err := conn.ReceiveProton(cMarshaller)
+				msg, _, err := conn.ReceiveProton(cMarshaller)
 				if err != nil {
 					return err
 				}
@@ -210,7 +210,7 @@ func (c *Client) Run(ctx context.Context) error {
 						}()
 
 						for {
-							m, err := conn.ReceiveProton(cMarshaller)
+							m, _, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
 								return err
 							}
@@ -222,7 +222,7 @@ func (c *Client) Run(ctx context.Context) error {
 								}
 								var length uint64
 								for length < msg.Length {
-									txRaw, err := conn.ReceiveRawBytes()
+									txRaw, _, err := conn.ReceiveRawBytes()
 									if err != nil {
 										return err
 									}
@@ -265,7 +265,7 @@ func (c *Client) Run(ctx context.Context) error {
 								c.awaitedTxs[tx.ID] = tx.ReceivedCh
 								c.mu.Unlock()
 
-								if err := conn.SendRawBytes(tx.Tx); err != nil {
+								if _, err := conn.SendRawBytes(tx.Tx); err != nil {
 									return errors.WithStack(err)
 								}
 							}
@@ -525,9 +525,11 @@ func (t *transactor) prepareTx(txF func(tx *Tx) error) (retTx txEnvelope, retUse
 
 	pendingTx := &Tx{
 		// By taking a snapshot, we don't block the main DB from processing incoming changes.
-		db:      t.client.db.Snapshot(),
-		client:  t.client,
-		buf:     t.buf[metaSize : metaSize+t.client.config.MaxMessageSize-metaMsgSize],
+		db:     t.client.db.Snapshot(),
+		client: t.client,
+		// Checksum size is subtracted here because later we receive the transaction back with checksum included,
+		// so the checksum must fit in max message size.
+		buf:     t.buf[metaSize : metaSize+t.client.config.MaxMessageSize-metaMsgSize-format.ChecksumSize],
 		changes: t.changes,
 	}
 

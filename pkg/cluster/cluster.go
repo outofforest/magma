@@ -86,8 +86,8 @@ func (c *Client) warmUp(ctx context.Context) error {
 }
 
 const (
-	maxMsgSize        = 4 * 1024
-	maxUncommittedLog = 2048
+	maxMsgSize        = 1024
+	maxUncommittedLog = 2 * maxMsgSize
 )
 
 // New creates new cluster.

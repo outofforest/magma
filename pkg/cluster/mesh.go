@@ -343,7 +343,7 @@ func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
 
 func (m *mesh) interceptChannel(channel wire.Channel, dstC, srcC *resonance.Connection, srcPeer *Peer) error {
 	for {
-		msg, err := srcC.ReceiveRawBytes()
+		msg, _, err := srcC.ReceiveRawBytes()
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (m *mesh) interceptChannel(channel wire.Channel, dstC, srcC *resonance.Conn
 
 			if v, ok := p2pMsg.(*types.VoteRequest); ok && m.forcedLeader != nil {
 				if m.forcedLeader == srcPeer {
-					if err := srcC.SendProton(&types.VoteResponse{
+					if _, err := srcC.SendProton(&types.VoteResponse{
 						Term:        v.Term,
 						VoteGranted: true,
 					}, m.mP2P); err != nil {
@@ -371,14 +371,14 @@ func (m *mesh) interceptChannel(channel wire.Channel, dstC, srcC *resonance.Conn
 			}
 		}
 
-		if err := dstC.SendRawBytes(msg); err != nil {
+		if _, err := dstC.SendRawBytes(msg); err != nil {
 			return err
 		}
 	}
 }
 
 func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, error) {
-	msg, err := srcC.ReceiveProton(m.mHello)
+	msg, _, err := srcC.ReceiveProton(m.mHello)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, er
 		return nil, errors.Errorf("hello expected, got: %T", msg)
 	}
 
-	if err := dstC.SendProton(helloMsg, m.mHello); err != nil {
+	if _, err := dstC.SendProton(helloMsg, m.mHello); err != nil {
 		return nil, err
 	}
 

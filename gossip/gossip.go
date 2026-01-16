@@ -18,6 +18,7 @@ import (
 	"github.com/outofforest/magma/raft/reactor"
 	rafttypes "github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository"
+	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/resonance"
@@ -136,19 +137,23 @@ func (g *Gossip) Run(ctx context.Context) error {
 			}()
 
 			resConfig := resonance.Config{MaxMessageSize: g.maxMessageSize}
+			// Checksum size is subtracted because we receive messages without checksums from client,
+			// but later we add them and send back with checksums included. It means, that later
+			// message would be too big.
+			maxTxSize := g.maxMessageSize - format.ChecksumSize
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
 					return resonance.RunServer(ctx, g.p2pListener, resConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
-							return g.peerHandler(ctx, connProperties{}, c)
+							return g.peerHandler(ctx, connProperties{}, c, maxTxSize)
 						},
 					)
 				})
 				spawn("c2pListener", parallel.Fail, func(ctx context.Context) error {
 					return resonance.RunServer(ctx, g.c2pListener, resConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
-							return g.c2pHandler(ctx, c)
+							return g.c2pHandler(ctx, c, maxTxSize)
 						},
 					)
 				})
@@ -168,7 +173,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 											PeerID:      s.ID,
 											PartitionID: pID,
 											Channel:     wire.ChannelP2P,
-										}, c)
+										}, c, maxTxSize)
 									},
 								)
 								if ctx.Err() != nil {
@@ -187,7 +192,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 											PeerID:      s.ID,
 											PartitionID: pID,
 											Channel:     wire.ChannelL2P,
-										}, c)
+										}, c, maxTxSize)
 									},
 								)
 								if ctx.Err() != nil {
@@ -207,7 +212,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 											PeerID:      s.ID,
 											PartitionID: pID,
 											Channel:     wire.ChannelTx2P,
-										}, c)
+										}, c, maxTxSize)
 									},
 								)
 								if ctx.Err() != nil {
@@ -466,7 +471,12 @@ type connProperties struct {
 	Channel     wire.Channel
 }
 
-func (g *Gossip) peerHandler(ctx context.Context, prop connProperties, c *resonance.Connection) error {
+func (g *Gossip) peerHandler(
+	ctx context.Context,
+	prop connProperties,
+	c *resonance.Connection,
+	maxTxSize uint64,
+) error {
 	prop, pState, err := g.hello(c, prop)
 	if err != nil {
 		return err
@@ -476,7 +486,7 @@ func (g *Gossip) peerHandler(ctx context.Context, prop connProperties, c *resona
 	case wire.ChannelP2P:
 		return g.p2pHandler(ctx, prop.PeerID, pState.PeerP2PCh, pState.CmdP2PCh, c)
 	case wire.ChannelL2P:
-		return g.l2pHandler(ctx, prop.PeerID, pState.PeerL2PCh, pState.CmdP2PCh, c)
+		return g.l2pHandler(ctx, prop.PeerID, pState.PeerL2PCh, pState.CmdP2PCh, c, maxTxSize)
 	case wire.ChannelTx2P:
 		return g.tx2pHandler(prop.PeerID, pState.PeerTx2PCh, pState.CmdP2PCh, c)
 	default:
@@ -514,7 +524,7 @@ func (g *Gossip) p2pHandler(
 			<-p.InstalledCh
 
 			for {
-				m, err := c.ReceiveProton(g.p2pMarshaller)
+				m, _, err := c.ReceiveProton(g.p2pMarshaller)
 				if err != nil {
 					return err
 				}
@@ -533,7 +543,7 @@ func (g *Gossip) p2pHandler(
 			}()
 
 			for m := range sendCh {
-				if err := c.SendProton(m, g.p2pMarshaller); err != nil {
+				if _, err := c.SendProton(m, g.p2pMarshaller); err != nil {
 					return err
 				}
 			}
@@ -551,6 +561,7 @@ func (g *Gossip) l2pHandler(
 	peerCh chan<- peerL2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
+	maxTxSize uint64,
 ) error {
 	c.BufferReads()
 
@@ -579,7 +590,7 @@ func (g *Gossip) l2pHandler(
 			}
 
 			for {
-				m, err := c.ReceiveProton(g.l2pMarshaller)
+				m, _, err := c.ReceiveProton(g.l2pMarshaller)
 				if err != nil {
 					return err
 				}
@@ -588,16 +599,19 @@ func (g *Gossip) l2pHandler(
 				case *wire.StartLogStream:
 					var length uint64
 					for length < msg.Length {
-						m, err := c.ReceiveRawBytes()
+						tx, txSize, err := c.ReceiveRawBytes()
 						if err != nil {
 							return err
 						}
+						if txSize > maxTxSize {
+							return errors.Errorf("transaction exceeds maximum size %d", maxTxSize)
+						}
 
-						length += uint64(len(m))
+						length += uint64(len(tx))
 
 						cmdCh <- rafttypes.Command{
 							PeerID: peerID,
-							Cmd:    m,
+							Cmd:    tx,
 						}
 					}
 				default:
@@ -625,7 +639,7 @@ func (g *Gossip) l2pHandler(
 						}
 
 						if r == nil {
-							if err := c.SendProton(&wire.HotEnd{}, g.l2pMarshaller); err != nil {
+							if _, err := c.SendProton(&wire.HotEnd{}, g.l2pMarshaller); err != nil {
 								return err
 							}
 
@@ -635,7 +649,7 @@ func (g *Gossip) l2pHandler(
 							}
 						}
 
-						if err := c.SendProton(&wire.StartLogStream{
+						if _, err := c.SendProton(&wire.StartLogStream{
 							Length: length,
 						}, g.l2pMarshaller); err != nil {
 							return err
@@ -645,7 +659,7 @@ func (g *Gossip) l2pHandler(
 						}
 					}
 				default:
-					if err := c.SendProton(m, g.l2pMarshaller); err != nil {
+					if _, err := c.SendProton(m, g.l2pMarshaller); err != nil {
 						return err
 					}
 				}
@@ -683,7 +697,7 @@ func (g *Gossip) tx2pHandler(
 
 	var leader peerTx2P
 	for {
-		tx, err := c.ReceiveRawBytes()
+		tx, _, err := c.ReceiveRawBytes()
 		if err != nil {
 			return err
 		}
@@ -703,10 +717,10 @@ func (g *Gossip) tx2pHandler(
 	}
 }
 
-func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error {
+func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection, maxTxSize uint64) error {
 	c.BufferReads()
 
-	msg, err := c.ReceiveProton(g.c2pMarshaller)
+	msg, _, err := c.ReceiveProton(g.c2pMarshaller)
 	if err != nil {
 		return err
 	}
@@ -721,7 +735,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
 	}
 
-	if err := c.SendProton(&c2p.InitResponse{}, g.c2pMarshaller); err != nil {
+	if _, err := c.SendProton(&c2p.InitResponse{}, g.c2pMarshaller); err != nil {
 		return err
 	}
 
@@ -743,9 +757,12 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 
 			var leader peerTx2P
 			for {
-				tx, err := c.ReceiveRawBytes()
+				tx, txSize, err := c.ReceiveRawBytes()
 				if err != nil {
 					return err
+				}
+				if txSize > maxTxSize {
+					return errors.Errorf("transaction exceeds maximum size %d", maxTxSize)
 				}
 
 				if len(leaderCh) > 0 {
@@ -761,7 +778,7 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 					}
 				case types.ZeroServerID:
 				default:
-					if leader.Connection.SendRawBytes(tx) != nil {
+					if _, err := leader.Connection.SendRawBytes(tx); err != nil {
 						leader = peerTx2P{}
 					}
 				}
@@ -777,14 +794,14 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection) error 
 				}
 
 				if r == nil {
-					if err := c.SendProton(&wire.HotEnd{}, g.c2pMarshaller); err != nil {
+					if _, err := c.SendProton(&wire.HotEnd{}, g.c2pMarshaller); err != nil {
 						return err
 					}
 
 					continue
 				}
 
-				if err := c.SendProton(&wire.StartLogStream{
+				if _, err := c.SendProton(&wire.StartLogStream{
 					Length: length,
 				}, g.c2pMarshaller); err != nil {
 					return err
@@ -803,7 +820,7 @@ func (g *Gossip) hello(
 	c *resonance.Connection,
 	prop connProperties,
 ) (connProperties, partitionState, error) {
-	if err := c.SendProton(&wire.Hello{
+	if _, err := c.SendProton(&wire.Hello{
 		ServerID:    g.serverID,
 		PartitionID: prop.PartitionID,
 		Channel:     prop.Channel,
@@ -811,7 +828,7 @@ func (g *Gossip) hello(
 		return connProperties{}, partitionState{}, err
 	}
 
-	m, err := c.ReceiveProton(g.helloMarshaller)
+	m, _, err := c.ReceiveProton(g.helloMarshaller)
 	if err != nil {
 		return connProperties{}, partitionState{}, err
 	}
