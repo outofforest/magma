@@ -486,9 +486,9 @@ func (g *Gossip) peerHandler(
 	case wire.ChannelP2P:
 		return g.p2pHandler(ctx, prop.PeerID, pState.PeerP2PCh, pState.CmdP2PCh, c)
 	case wire.ChannelL2P:
-		return g.l2pHandler(ctx, prop.PeerID, pState.PeerL2PCh, pState.CmdP2PCh, c, maxTxSize)
+		return g.l2pHandler(ctx, prop.PeerID, pState.PeerL2PCh, pState.CmdP2PCh, c)
 	case wire.ChannelTx2P:
-		return g.tx2pHandler(prop.PeerID, pState.PeerTx2PCh, pState.CmdP2PCh, c)
+		return g.tx2pHandler(prop.PeerID, pState.PeerTx2PCh, pState.CmdP2PCh, c, maxTxSize)
 	default:
 		return errors.Errorf("unexpected channel %d", prop.Channel)
 	}
@@ -561,7 +561,6 @@ func (g *Gossip) l2pHandler(
 	peerCh chan<- peerL2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
-	maxTxSize uint64,
 ) error {
 	c.BufferReads()
 
@@ -599,12 +598,9 @@ func (g *Gossip) l2pHandler(
 				case *wire.StartLogStream:
 					var length uint64
 					for length < msg.Length {
-						tx, txSize, err := c.ReceiveRawBytes()
+						tx, _, err := c.ReceiveRawBytes()
 						if err != nil {
 							return err
-						}
-						if txSize > maxTxSize {
-							return errors.Errorf("transaction exceeds maximum size %d", maxTxSize)
 						}
 
 						length += uint64(len(tx))
@@ -677,6 +673,7 @@ func (g *Gossip) tx2pHandler(
 	peerCh chan<- peerTx2P,
 	cmdCh chan<- rafttypes.Command,
 	c *resonance.Connection,
+	maxTxSize uint64,
 ) error {
 	c.BufferReads()
 	c.BufferWrites()
@@ -697,9 +694,12 @@ func (g *Gossip) tx2pHandler(
 
 	var leader peerTx2P
 	for {
-		tx, _, err := c.ReceiveRawBytes()
+		tx, txSize, err := c.ReceiveRawBytes()
 		if err != nil {
 			return err
+		}
+		if txSize > maxTxSize {
+			return errors.Errorf("transaction exceeds maximum size %d, %d", maxTxSize, txSize)
 		}
 
 		if len(leaderCh) > 0 {
