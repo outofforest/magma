@@ -301,7 +301,7 @@ func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
 		})
 
 		config := resonance.Config{
-			MaxMessageSize: maxMsgSize,
+			MaxMessageSize: MaxMsgSize,
 		}
 		c1 := resonance.NewConnection(conn, config)
 		c2 := resonance.NewConnection(conn2, config)

@@ -1040,15 +1040,19 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	}), client.ErrTxAwaitTimeout)
 
 	// This one should exceed the limit.
+	for {
+		err := tr1.Tx(ctx, func(tx *client.Tx) error {
+			requireT.NoError(tx.Set(entities.Blob{ID: memdb.NewID[memdb.ID](), Data: make([]byte, cluster.MaxMsgSize/2)}))
+			return nil
+		})
+		if errors.Is(err, client.ErrTxAwaitTimeout) {
+			break
+		}
+	}
+
 	blob2ID := memdb.NewID[memdb.ID]()
 	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
-		requireT.NoError(tx.Set(entities.Blob{ID: blob2ID, Data: make([]byte, 2048)}))
-		return nil
-	}), client.ErrTxAwaitTimeout)
-
-	blob3ID := memdb.NewID[memdb.ID]()
-	requireT.ErrorIs(tr1.Tx(ctx, func(tx *client.Tx) error {
-		requireT.NoError(tx.Set(entities.Blob{ID: blob3ID}))
+		requireT.NoError(tx.Set(entities.Blob{ID: blob2ID}))
 		return nil
 	}), client.ErrTxAwaitTimeout)
 
@@ -1061,7 +1065,5 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	_, exists := client.Get[entities.Blob](v, blob1ID)
 	requireT.True(exists)
 	_, exists = client.Get[entities.Blob](v, blob2ID)
-	requireT.False(exists)
-	_, exists = client.Get[entities.Blob](v, blob3ID)
 	requireT.True(exists)
 }

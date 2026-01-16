@@ -86,8 +86,11 @@ func (c *Client) warmUp(ctx context.Context) error {
 }
 
 const (
-	maxMsgSize        = 1024
-	maxUncommittedLog = 2 * maxMsgSize
+	// MaxMsgSize is the max message size used in the cluster.
+	MaxMsgSize = 3 * 1024
+
+	// MaxUncommittedLog defines max allowed uncommitted log in the cluster.
+	MaxUncommittedLog = 5 * MaxMsgSize
 )
 
 // New creates new cluster.
@@ -279,7 +282,7 @@ func (c *Cluster) NewClient(
 		Service:          name,
 		PeerAddress:      peer.c2pListener.Addr().String(),
 		PartitionID:      partitionID,
-		MaxMessageSize:   maxMsgSize,
+		MaxMessageSize:   MaxMsgSize,
 		BroadcastTimeout: time.Second,
 		AwaitTimeout:     5 * time.Second,
 		Marshaller:       marshaller,
@@ -388,8 +391,8 @@ func (c *Cluster) DisableLink(ctx context.Context, peer1, peer2 *Peer) error {
 func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, error) {
 	config := types.Config{
 		ServerID:          peer.id,
-		MaxMessageSize:    maxMsgSize,
-		MaxUncommittedLog: maxUncommittedLog,
+		MaxMessageSize:    MaxMsgSize,
+		MaxUncommittedLog: MaxUncommittedLog,
 	}
 
 	for _, p := range c.peers {
