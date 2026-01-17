@@ -31,21 +31,11 @@ type Pair struct {
 	DstListener net.Listener
 }
 
-// newMesh creates new mesh.
-func newMesh() *mesh {
-	return &mesh{
-		listeners: map[*Peer]net.Listener{},
-		links:     map[Link]*Pair{},
-		mHello:    hello.NewMarshaller(),
-		mP2P:      p2p.NewMarshaller(),
-		ch:        make(chan any),
-	}
-}
-
 // mesh maintains connection mesh between peers.
 type mesh struct {
-	mHello hello.Marshaller
-	mP2P   p2p.Marshaller
+	maxMessageSize uint64
+	mHello         hello.Marshaller
+	mP2P           p2p.Marshaller
 
 	mu           sync.RWMutex
 	listeners    map[*Peer]net.Listener
@@ -53,6 +43,18 @@ type mesh struct {
 	forcedLeader *Peer
 
 	ch chan any
+}
+
+// newMesh creates new mesh.
+func newMesh(maxMessageSize uint64) *mesh {
+	return &mesh{
+		maxMessageSize: maxMessageSize,
+		listeners:      map[*Peer]net.Listener{},
+		links:          map[Link]*Pair{},
+		mHello:         hello.NewMarshaller(),
+		mP2P:           p2p.NewMarshaller(),
+		ch:             make(chan any),
+	}
 }
 
 type startPair struct {
@@ -301,7 +303,7 @@ func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
 		})
 
 		config := resonance.Config{
-			MaxMessageSize: MaxMsgSize,
+			MaxMessageSize: m.maxMessageSize,
 		}
 		c1 := resonance.NewConnection(conn, config)
 		c2 := resonance.NewConnection(conn2, config)

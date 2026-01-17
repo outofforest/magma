@@ -55,8 +55,6 @@ func Run(
 	ctx context.Context,
 	config types.Config,
 	p2pListener, c2pListener net.Listener,
-	dir string,
-	pageSize uint64,
 ) (retErr error) {
 	if config.ServerID == types.ZeroServerID {
 		return errors.New("server ID is not set")
@@ -81,8 +79,8 @@ func Run(
 	}
 
 	for _, pID := range partitions {
-		dir := filepath.Join(dir, string(pID))
-		repo, err := repository.Open(filepath.Join(dir, "repo"), pageSize)
+		dir := filepath.Join(config.Directory, string(pID))
+		repo, err := repository.Open(filepath.Join(dir, "repo"), config.PageSize)
 		if err != nil {
 			return err
 		}

@@ -20,10 +20,22 @@ type TestingCluster struct {
 	requireT *require.Assertions
 }
 
+// ConfigTesting is the config for cluster used in tests.
+type ConfigTesting struct {
+	MaxMessageSize    uint64
+	MaxUncommittedLog uint64
+	PageSize          uint64
+}
+
 // NewTesting returns new testing cluster wrapper.
-func NewTesting(group *parallel.Group, t *testing.T) TestingCluster {
+func NewTesting(group *parallel.Group, t *testing.T, config ConfigTesting) TestingCluster {
 	tc := TestingCluster{
-		cluster:  New(t.TempDir()),
+		cluster: New(Config{
+			Directory:         t.TempDir(),
+			MaxMessageSize:    config.MaxMessageSize,
+			MaxUncommittedLog: config.MaxUncommittedLog,
+			PageSize:          config.PageSize,
+		}),
 		ctx:      group.Context(),
 		requireT: require.New(t),
 	}
