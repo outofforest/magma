@@ -41,7 +41,8 @@ func (p *Peer) DropData() error {
 }
 
 func (p *Peer) run(ctx context.Context, config types.Config, p2pListener net.Listener) error {
-	err := magma.Run(ctx, config, p2pListener, p.c2pListener, p.dir, uint64(os.Getpagesize()))
+	config.Directory = p.dir
+	err := magma.Run(ctx, config, p2pListener, p.c2pListener)
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		logger.Get(ctx).Error("Peer failed", zap.Error(err))
 	}
@@ -85,28 +86,28 @@ func (c *Client) warmUp(ctx context.Context) error {
 	return c.client.WarmUp(ctx)
 }
 
-const (
-	// MaxMsgSize is the max message size used in the cluster.
-	MaxMsgSize = 3 * 1024
-
-	// MaxUncommittedLog defines max allowed uncommitted log in the cluster.
-	MaxUncommittedLog = 5 * MaxMsgSize
-)
+// Config is the config of the cluster.
+type Config struct {
+	Directory         string
+	MaxMessageSize    uint64
+	MaxUncommittedLog uint64
+	PageSize          uint64
+}
 
 // New creates new cluster.
-func New(dir string) *Cluster {
+func New(config Config) *Cluster {
 	return &Cluster{
-		dir:  dir,
-		mesh: newMesh(),
-		ch:   make(chan any),
+		config: config,
+		mesh:   newMesh(config.MaxMessageSize),
+		ch:     make(chan any),
 	}
 }
 
 // Cluster runs peers and clients.
 type Cluster struct {
-	dir   string
-	mesh  *mesh
-	peers []*Peer
+	config Config
+	mesh   *mesh
+	peers  []*Peer
 
 	ch chan any
 }
@@ -259,7 +260,7 @@ func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions) (*
 
 	peer := &Peer{
 		id:          peerID,
-		dir:         filepath.Join(c.dir, string(peerID)),
+		dir:         filepath.Join(c.config.Directory, string(peerID)),
 		c2pListener: c2pListener.(*net.TCPListener),
 		partitions:  partitions,
 	}
@@ -282,7 +283,7 @@ func (c *Cluster) NewClient(
 		Service:          name,
 		PeerAddress:      peer.c2pListener.Addr().String(),
 		PartitionID:      partitionID,
-		MaxMessageSize:   MaxMsgSize,
+		MaxMessageSize:   c.config.MaxMessageSize,
 		BroadcastTimeout: time.Second,
 		AwaitTimeout:     5 * time.Second,
 		Marshaller:       marshaller,
@@ -391,8 +392,10 @@ func (c *Cluster) DisableLink(ctx context.Context, peer1, peer2 *Peer) error {
 func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, error) {
 	config := types.Config{
 		ServerID:          peer.id,
-		MaxMessageSize:    MaxMsgSize,
-		MaxUncommittedLog: MaxUncommittedLog,
+		MaxMessageSize:    c.config.MaxMessageSize,
+		MaxUncommittedLog: c.config.MaxUncommittedLog,
+		PageSize:          c.config.PageSize,
+		Directory:         c.config.Directory,
 	}
 
 	for _, p := range c.peers {

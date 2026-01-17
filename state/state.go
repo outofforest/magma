@@ -272,7 +272,7 @@ func (s *State) appendTx(
 		var sizeWithChecksum, sizeWithoutChecksum uint64
 		if containsChecksum {
 			if size < format.ChecksumSize {
-				return 0, 0, errors.Wrap(ErrInvalidTransaction, "bad size")
+				return 0, 0, errors.Wrap(ErrInvalidTransaction, "tx size is smaller than checksum")
 			}
 			sizeWithChecksum = size
 			sizeWithoutChecksum = size - format.ChecksumSize

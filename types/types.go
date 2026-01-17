@@ -21,6 +21,8 @@ type Config struct {
 	Servers           []ServerConfig
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
+	PageSize          uint64
+	Directory         string
 }
 
 // Partitions represents the role of server in partitions.
