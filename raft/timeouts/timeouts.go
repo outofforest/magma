@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	heartbeatInterval    = 100 * time.Millisecond
+	heartbeatInterval    = 50 * time.Millisecond
 	electionBaseInterval = 5 * time.Second
 )
 
