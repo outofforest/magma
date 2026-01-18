@@ -88,6 +88,18 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// IsPatchNeeded checks if non-empty patch exists.
+func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	switch msg2 := msgDst.(type) {
+	case *TxMetadata:
+		return isPatchNeeded1(msg2, msgSrc.(*TxMetadata)), nil
+	case *EntityMetadata:
+		return isPatchNeeded0(msg2, msgSrc.(*EntityMetadata)), nil
+	default:
+		return false, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
 // MakePatch creates a patch.
 func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
 	defer helpers.RecoverMakePatch(&retErr)
@@ -173,6 +185,35 @@ func unmarshal0(m *EntityMetadata, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded0(m, mSrc *EntityMetadata) bool {
+	{
+		// ID
+
+		if !reflect.DeepEqual(m.ID, mSrc.ID) {
+			return true
+		}
+
+	}
+	{
+		// Revision
+
+		if !reflect.DeepEqual(m.Revision, mSrc.Revision) {
+			return true
+		}
+
+	}
+	{
+		// MessageID
+
+		if !reflect.DeepEqual(m.MessageID, mSrc.MessageID) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch0(m, mSrc *EntityMetadata, b []byte) uint64 {
@@ -334,6 +375,43 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded1(m, mSrc *TxMetadata) bool {
+	{
+		// ID
+
+		if !reflect.DeepEqual(m.ID, mSrc.ID) {
+			return true
+		}
+
+	}
+	{
+		// Time
+
+		if !reflect.DeepEqual(m.Time, mSrc.Time) {
+			return true
+		}
+
+	}
+	{
+		// Service
+
+		if !reflect.DeepEqual(m.Service, mSrc.Service) {
+			return true
+		}
+
+	}
+	{
+		// EntityMetadataID
+
+		if !reflect.DeepEqual(m.EntityMetadataID, mSrc.EntityMetadataID) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch1(m, mSrc *TxMetadata, b []byte) uint64 {
