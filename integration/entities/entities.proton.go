@@ -99,6 +99,20 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// IsPatchNeeded checks if non-empty patch exists.
+func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	switch msg2 := msgDst.(type) {
+	case *Account:
+		return isPatchNeededi2(msg2, msgSrc.(*Account)), nil
+	case *Fields:
+		return isPatchNeededi1(msg2, msgSrc.(*Fields)), nil
+	case *Blob:
+		return isPatchNeededi0(msg2, msgSrc.(*Blob)), nil
+	default:
+		return false, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
 // MakePatch creates a patch.
 func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
 	defer helpers.RecoverMakePatch(&retErr)
@@ -174,6 +188,19 @@ func unmarshali0(m *Blob, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeededi0(m, mSrc *Blob) bool {
+	{
+		// Data
+
+		if !reflect.DeepEqual(m.Data, mSrc.Data) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatchi0(m, mSrc *Blob, b []byte) uint64 {
@@ -392,6 +419,98 @@ func unmarshali1(m *Fields, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeededi1(m, mSrc *Fields) bool {
+	{
+		// Bool
+
+		if m.Bool != mSrc.Bool {
+			return true
+		}
+	}
+	{
+		// Time
+
+		if !reflect.DeepEqual(m.Time, mSrc.Time) {
+			return true
+		}
+
+	}
+	{
+		// Int8
+
+		if !reflect.DeepEqual(m.Int8, mSrc.Int8) {
+			return true
+		}
+
+	}
+	{
+		// Int16
+
+		if !reflect.DeepEqual(m.Int16, mSrc.Int16) {
+			return true
+		}
+
+	}
+	{
+		// Int32
+
+		if !reflect.DeepEqual(m.Int32, mSrc.Int32) {
+			return true
+		}
+
+	}
+	{
+		// Int64
+
+		if !reflect.DeepEqual(m.Int64, mSrc.Int64) {
+			return true
+		}
+
+	}
+	{
+		// Uint8
+
+		if !reflect.DeepEqual(m.Uint8, mSrc.Uint8) {
+			return true
+		}
+
+	}
+	{
+		// Uint16
+
+		if !reflect.DeepEqual(m.Uint16, mSrc.Uint16) {
+			return true
+		}
+
+	}
+	{
+		// Uint32
+
+		if !reflect.DeepEqual(m.Uint32, mSrc.Uint32) {
+			return true
+		}
+
+	}
+	{
+		// Uint64
+
+		if !reflect.DeepEqual(m.Uint64, mSrc.Uint64) {
+			return true
+		}
+
+	}
+	{
+		// EntityID
+
+		if !reflect.DeepEqual(m.EntityID, mSrc.EntityID) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatchi1(m, mSrc *Fields, b []byte) uint64 {
@@ -680,6 +799,27 @@ func unmarshali2(m *Account, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeededi2(m, mSrc *Account) bool {
+	{
+		// FirstName
+
+		if !reflect.DeepEqual(m.FirstName, mSrc.FirstName) {
+			return true
+		}
+
+	}
+	{
+		// LastName
+
+		if !reflect.DeepEqual(m.LastName, mSrc.LastName) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatchi2(m, mSrc *Account, b []byte) uint64 {

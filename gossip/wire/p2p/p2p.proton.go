@@ -109,6 +109,22 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// IsPatchNeeded checks if non-empty patch exists.
+func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	switch msg2 := msgDst.(type) {
+	case *types.LogACK:
+		return isPatchNeeded3(msg2, msgSrc.(*types.LogACK)), nil
+	case *types.VoteRequest:
+		return isPatchNeeded2(msg2, msgSrc.(*types.VoteRequest)), nil
+	case *types.VoteResponse:
+		return isPatchNeeded1(msg2, msgSrc.(*types.VoteResponse)), nil
+	case *types.Heartbeat:
+		return isPatchNeeded0(msg2, msgSrc.(*types.Heartbeat)), nil
+	default:
+		return false, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
 // MakePatch creates a patch.
 func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
 	defer helpers.RecoverMakePatch(&retErr)
@@ -190,6 +206,27 @@ func unmarshal0(m *types.Heartbeat, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded0(m, mSrc *types.Heartbeat) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// LeaderCommit
+
+		if !reflect.DeepEqual(m.LeaderCommit, mSrc.LeaderCommit) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch0(m, mSrc *types.Heartbeat, b []byte) uint64 {
@@ -282,6 +319,26 @@ func unmarshal1(m *types.VoteResponse, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded1(m, mSrc *types.VoteResponse) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// VoteGranted
+
+		if m.VoteGranted != mSrc.VoteGranted {
+			return true
+		}
+	}
+
+	return false
 }
 
 func makePatch1(m, mSrc *types.VoteResponse, b []byte) uint64 {
@@ -389,6 +446,35 @@ func unmarshal2(m *types.VoteRequest, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded2(m, mSrc *types.VoteRequest) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+	{
+		// LastTerm
+
+		if !reflect.DeepEqual(m.LastTerm, mSrc.LastTerm) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch2(m, mSrc *types.VoteRequest, b []byte) uint64 {
@@ -514,6 +600,35 @@ func unmarshal3(m *types.LogACK, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded3(m, mSrc *types.LogACK) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+	{
+		// SyncIndex
+
+		if !reflect.DeepEqual(m.SyncIndex, mSrc.SyncIndex) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch3(m, mSrc *types.LogACK, b []byte) uint64 {

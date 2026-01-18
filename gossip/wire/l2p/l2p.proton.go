@@ -110,6 +110,22 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// IsPatchNeeded checks if non-empty patch exists.
+func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	switch msg2 := msgDst.(type) {
+	case *types.LogSyncRequest:
+		return isPatchNeeded3(msg2, msgSrc.(*types.LogSyncRequest)), nil
+	case *types.LogSyncResponse:
+		return isPatchNeeded2(msg2, msgSrc.(*types.LogSyncResponse)), nil
+	case *wire.StartLogStream:
+		return isPatchNeeded1(msg2, msgSrc.(*wire.StartLogStream)), nil
+	case *wire.HotEnd:
+		return isPatchNeeded0(msg2, msgSrc.(*wire.HotEnd)), nil
+	default:
+		return false, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
 // MakePatch creates a patch.
 func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
 	defer helpers.RecoverMakePatch(&retErr)
@@ -163,6 +179,11 @@ func unmarshal0(m *wire.HotEnd, b []byte) uint64 {
 	return o
 }
 
+func isPatchNeeded0(m, mSrc *wire.HotEnd) bool {
+
+	return false
+}
+
 func makePatch0(m, mSrc *wire.HotEnd, b []byte) uint64 {
 	var o uint64
 
@@ -205,6 +226,19 @@ func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
+	{
+		// Length
+
+		if !reflect.DeepEqual(m.Length, mSrc.Length) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
@@ -296,6 +330,35 @@ func unmarshal2(m *types.LogSyncResponse, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded2(m, mSrc *types.LogSyncResponse) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+	{
+		// SyncIndex
+
+		if !reflect.DeepEqual(m.SyncIndex, mSrc.SyncIndex) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch2(m, mSrc *types.LogSyncResponse, b []byte) uint64 {
@@ -436,6 +499,43 @@ func unmarshal3(m *types.LogSyncRequest, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded3(m, mSrc *types.LogSyncRequest) bool {
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+	{
+		// LastTerm
+
+		if !reflect.DeepEqual(m.LastTerm, mSrc.LastTerm) {
+			return true
+		}
+
+	}
+	{
+		// TermStartIndex
+
+		if !reflect.DeepEqual(m.TermStartIndex, mSrc.TermStartIndex) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch3(m, mSrc *types.LogSyncRequest, b []byte) uint64 {

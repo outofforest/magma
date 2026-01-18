@@ -110,6 +110,22 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	}
 }
 
+// IsPatchNeeded checks if non-empty patch exists.
+func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	switch msg2 := msgDst.(type) {
+	case *InitRequest:
+		return isPatchNeeded3(msg2, msgSrc.(*InitRequest)), nil
+	case *InitResponse:
+		return isPatchNeeded2(msg2, msgSrc.(*InitResponse)), nil
+	case *wire.StartLogStream:
+		return isPatchNeeded1(msg2, msgSrc.(*wire.StartLogStream)), nil
+	case *wire.HotEnd:
+		return isPatchNeeded0(msg2, msgSrc.(*wire.HotEnd)), nil
+	default:
+		return false, errors.Errorf("unknown message type %T", msgDst)
+	}
+}
+
 // MakePatch creates a patch.
 func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize uint64, retErr error) {
 	defer helpers.RecoverMakePatch(&retErr)
@@ -163,6 +179,11 @@ func unmarshal0(m *wire.HotEnd, b []byte) uint64 {
 	return o
 }
 
+func isPatchNeeded0(m, mSrc *wire.HotEnd) bool {
+
+	return false
+}
+
 func makePatch0(m, mSrc *wire.HotEnd, b []byte) uint64 {
 	var o uint64
 
@@ -205,6 +226,19 @@ func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
+	{
+		// Length
+
+		if !reflect.DeepEqual(m.Length, mSrc.Length) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
@@ -251,6 +285,11 @@ func unmarshal2(m *InitResponse, b []byte) uint64 {
 	var o uint64
 
 	return o
+}
+
+func isPatchNeeded2(m, mSrc *InitResponse) bool {
+
+	return false
 }
 
 func makePatch2(m, mSrc *InitResponse, b []byte) uint64 {
@@ -326,6 +365,27 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 	}
 
 	return o
+}
+
+func isPatchNeeded3(m, mSrc *InitRequest) bool {
+	{
+		// PartitionID
+
+		if !reflect.DeepEqual(m.PartitionID, mSrc.PartitionID) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+
+	return false
 }
 
 func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {

@@ -28,12 +28,12 @@ github.com/outofforest/memdb v1.15.0 h1:DjupoX6RhCFNvahIAmDmUMvR/M0ZTTzIi0ZKXqyC
 github.com/outofforest/memdb v1.15.0/go.mod h1:xGrY538vK3iRLwjyfabvBZYWGF1DApY/CvHi0SuoIak=
 github.com/outofforest/parallel v0.2.3 h1:DRIgHr7XTL4LLgsTqrj041kulv4ajtbCkRbkOG5psWY=
 github.com/outofforest/parallel v0.2.3/go.mod h1:cu210xIjJtOMXR2ERzEcNA2kr0Z0xfZjSKw2jTxAQ2E=
-github.com/outofforest/proton v0.19.0 h1:Uy8DMjOXk51AY0SvJrckJLg1Iu9gTktu1nkq+y88zpM=
-github.com/outofforest/proton v0.19.0/go.mod h1:3SdI44tBHPJwOQ3j8DQf37AimL/451db+iUJwgeFduY=
+github.com/outofforest/proton v0.20.0 h1:xi6R/2gTFCKLQ7g67nQcfdhvHdLZwk2qpXvXMg/C9mk=
+github.com/outofforest/proton v0.20.0/go.mod h1:3SdI44tBHPJwOQ3j8DQf37AimL/451db+iUJwgeFduY=
 github.com/outofforest/qa v0.3.0 h1:8XT1rnAXX2SI885ZrxVmPNb+IQmcxPsT7doWOOccD20=
 github.com/outofforest/qa v0.3.0/go.mod h1:xJYZFbf/iJ59dAps2gE3sU90TspMyvYxRIk2NJlQkYk=
-github.com/outofforest/resonance v0.25.0 h1:QUvWDidogbbQEAEY7f79i9XuavJhUNxxVIAG7q6K78s=
-github.com/outofforest/resonance v0.25.0/go.mod h1:XN8g6nhw40MDG9CNZZVtNyy2a0P1ytFGXqi2GnZ9Xhk=
+github.com/outofforest/resonance v0.26.0 h1:GPoRbSF4/FMQTm4FXGi/A13gG6zinbsJI2MFpHfrvjo=
+github.com/outofforest/resonance v0.26.0/go.mod h1:pXOpFLz/ztFZJfxTT1eP9c51kfkbSMPwFRbudrk9Xms=
 github.com/outofforest/run v0.8.0 h1:p3tSksh6AWzxsZ+baZzeQhgsfugKz6d6RaE7xfQYt5M=
 github.com/outofforest/run v0.8.0/go.mod h1:4d6txrC3wfOSFy64bwxZweKUQsccDs9IvtIbAAFAk7E=
 github.com/outofforest/spin v0.3.1 h1:iF1t4zgbt7KaarrnBqmYWMfoSichqY4/KiKMC/dE524=

@@ -151,7 +151,15 @@ func (tx *Tx) Set(o any) error {
 				tx.size = chg.StartIndex
 			} else {
 				copy(tx.buf[chg.StartIndex:], tx.buf[chg.EndIndex:tx.size])
-				tx.size -= chg.EndIndex - chg.StartIndex
+				sizeUpdate := chg.EndIndex - chg.StartIndex
+				for i, ch := range tx.changes {
+					if ch.StartIndex > chg.StartIndex {
+						ch.StartIndex -= sizeUpdate
+						ch.EndIndex -= sizeUpdate
+					}
+					tx.changes[i] = ch
+				}
+				tx.size -= sizeUpdate
 			}
 
 			// This is done to know later that there is nothing to move in the tx if set fails.
@@ -172,13 +180,20 @@ func (tx *Tx) Set(o any) error {
 	}
 
 	unsafeID := unsafeIDFromEntity(*newValue)
-
 	var oldV reflect.Value
 	if chg.OldValue == nil {
 		oldV = reflect.New(typeDef.Type)
 		setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 	} else {
 		oldV = *chg.OldValue
+
+		isNeeded, err := tx.client.config.Marshaller.IsPatchNeeded(newValue.Interface(), oldV.Interface())
+		if err != nil {
+			return err
+		}
+		if !isNeeded {
+			return nil
+		}
 	}
 
 	entityMeta := &wire.EntityMetadata{
