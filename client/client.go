@@ -539,7 +539,7 @@ func (t *transactor) prepareTx(txF func(tx *Tx) error) (retTx txEnvelope, retUse
 		return txEnvelope{}, 0, err
 	}
 
-	if pendingTx.size == 0 {
+	if pendingTx.numOfObjects == 0 {
 		return txEnvelope{}, 0, nil
 	}
 

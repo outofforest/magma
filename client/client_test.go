@@ -2147,7 +2147,7 @@ func TestManyOverrides(t *testing.T) {
 	requireT.Equal(acc1, accAfter)
 }
 
-func TestRevertToOriginalEntity1(t *testing.T) {
+func TestSetRevertToOriginalEntity(t *testing.T) {
 	t.Parallel()
 
 	ctx := qa.NewContext(t)
@@ -2193,7 +2193,7 @@ func TestRevertToOriginalEntity1(t *testing.T) {
 
 	acc11.Revision++
 	acc12.Revision++
-	acc2.Revision++
+	acc2.Revision += 2
 
 	v := c.View()
 	accAfter, exists := Get[entities.Account](v, accID)
@@ -2209,7 +2209,7 @@ func TestRevertToOriginalEntity1(t *testing.T) {
 	requireT.Equal(acc12, accAfter)
 }
 
-func TestRevertToOriginalEntity2(t *testing.T) {
+func TestSetEmptyTx(t *testing.T) {
 	t.Parallel()
 
 	ctx := qa.NewContext(t)
@@ -2238,6 +2238,108 @@ func TestRevertToOriginalEntity2(t *testing.T) {
 	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc2))
+		return nil
+	}))
+
+	acc2.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc2, accAfter)
+}
+
+func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	acc11 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First1",
+		LastName:  "Last1",
+	}
+	acc12 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "First2",
+		LastName:  "Last2",
+	}
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc11))
+		requireT.NoError(tx.Set(acc2))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc3))
+		requireT.NoError(tx.Set(acc12))
+		requireT.NoError(tx.SoftSet(acc2))
+		return nil
+	}))
+
+	acc11.Revision++
+	acc12.Revision++
+	acc2.Revision++
+
+	v := c.View()
+	accAfter, exists := Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc2, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc11.ID)
+	requireT.True(exists)
+	requireT.Equal(acc11, accAfter)
+
+	accAfter, exists = Get[entities.Account](v, acc12.ID)
+	requireT.True(exists)
+	requireT.Equal(acc12, accAfter)
+}
+
+func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	accID := memdb.NewID[entities.AccountID]()
+	acc2 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc3 := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBBC",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc2))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(acc3))
+		requireT.NoError(tx.SoftSet(acc2))
 		return nil
 	}))
 
