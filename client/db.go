@@ -116,15 +116,17 @@ type change struct {
 	OldValue   *reflect.Value
 	StartIndex uint64
 	EndIndex   uint64
+	Added      bool
 }
 
 // Tx represents transaction.
 type Tx struct {
-	client  *Client
-	db      *memdb.MemDB
-	buf     []byte
-	size    uint64
-	changes map[memdb.ID]change
+	client       *Client
+	db           *memdb.MemDB
+	buf          []byte
+	size         uint64
+	numOfObjects uint64
+	changes      map[memdb.ID]change
 }
 
 // View returns read-only view of the DB.
@@ -135,8 +137,24 @@ func (tx *Tx) View() *View {
 	}
 }
 
-// Set sets object in transaction.
+// Set sets object in transaction. This function includes the object in tx even if patch is empty.
+// This is done to detect possible conflicts with other transactions. Use this function if atomicity
+// is required (most of the cases). Compare to SoftSet below.
 func (tx *Tx) Set(o any) error {
+	return tx.set(o, false)
+}
+
+// SoftSet sets object in transaction. It does it only if the object patch is not empty.
+// This function is good to use when you don't care about atomicity in the tx.
+// It might happen that SoftSet doesn't include the object in tx due to empty patch, but somewhere
+// else conflicting transaction is created. This conflict is not detected because we haven't included object
+// with incremented revision.
+// Good scenario to use SoftSet is loading batches of unrelated object where conflicts don't matter.
+func (tx *Tx) SoftSet(o any) error {
+	return tx.set(o, true)
+}
+
+func (tx *Tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.db.Txn(true)
 	defer dbTx.Abort()
 
@@ -162,9 +180,14 @@ func (tx *Tx) Set(o any) error {
 				tx.size -= sizeUpdate
 			}
 
+			if chg.Added {
+				tx.numOfObjects--
+			}
+
 			// This is done to know later that there is nothing to move in the tx if set fails.
 			chg.StartIndex = 0
 			chg.EndIndex = 0
+			chg.Added = false
 			tx.changes[id] = chg
 		}
 	} else {
@@ -181,17 +204,20 @@ func (tx *Tx) Set(o any) error {
 
 	unsafeID := unsafeIDFromEntity(*newValue)
 	var oldV reflect.Value
+	var isNeeded bool
 	if chg.OldValue == nil {
 		oldV = reflect.New(typeDef.Type)
 		setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
+		isNeeded = true
 	} else {
 		oldV = *chg.OldValue
 
-		isNeeded, err := tx.client.config.Marshaller.IsPatchNeeded(newValue.Interface(), oldV.Interface())
+		var err error
+		isNeeded, err = tx.client.config.Marshaller.IsPatchNeeded(newValue.Interface(), oldV.Interface())
 		if err != nil {
 			return err
 		}
-		if !isNeeded {
+		if isSoftSet && !isNeeded {
 			return nil
 		}
 	}
@@ -226,8 +252,12 @@ func (tx *Tx) Set(o any) error {
 		return err
 	}
 
-	chg.EndIndex += msgSize
+	if isNeeded {
+		chg.Added = true
+		tx.numOfObjects++
+	}
 
+	chg.EndIndex += msgSize
 	tx.size = chg.EndIndex
 	tx.changes[id] = chg
 
