@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/client"
@@ -142,9 +143,9 @@ func Test3Peers3Clients(t *testing.T) {
 
 	ids := make([]entities.AccountID, 0, len(peers))
 	results := make(chan map[entities.AccountID]entities.Account, 3)
-	triggerFunc := func() func(ctx context.Context, v *client.View) error {
+	triggerFunc := func() client.TriggerFunc {
 		var found bool
-		return func(ctx context.Context, v *client.View) error {
+		return func(ctx context.Context, v *client.View, _ map[any]struct{}) error {
 			if found {
 				return nil
 			}
@@ -528,8 +529,8 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	accCh1 := make(chan entities.Account, 1)
 	accCh2 := make(chan entities.Account, 1)
-	triggerFunc := func(accCh chan<- entities.Account) func(ctx context.Context, v *client.View) error {
-		return func(ctx context.Context, v *client.View) error {
+	triggerFunc := func(accCh chan<- entities.Account) client.TriggerFunc {
+		return func(ctx context.Context, v *client.View, _ map[any]struct{}) error {
 			a, exists := client.Get[entities.Account](v, accID)
 			if exists {
 				select {
@@ -1074,4 +1075,69 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	requireT.True(exists)
 	_, exists = client.Get[entities.Blob](v, blob2ID)
 	requireT.True(exists)
+}
+
+func TestTriggerFuncReceivesIDs(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTesting(group, t, clusterConfig)
+	m := entities.NewMarshaller()
+
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+
+	receivedIDs := make(chan map[any]struct{}, 3)
+	c := clstr.NewClient(p, "client", m, partitionDefault,
+		func(ctx context.Context, v *client.View, ids map[any]struct{}) error {
+			receivedIDs <- ids
+			return nil
+		},
+	)
+
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
+
+	accountID1 := memdb.NewID[entities.AccountID]()
+	accountID2 := memdb.NewID[entities.AccountID]()
+	accountID3 := memdb.NewID[entities.AccountID]()
+	accountID4 := memdb.NewID[entities.AccountID]()
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		requireT.NoError(tx.Set(entities.Account{
+			ID:        accountID1,
+			FirstName: "FirstName1",
+			LastName:  "LastName1",
+		}))
+		requireT.NoError(tx.Set(entities.Account{
+			ID:        accountID2,
+			FirstName: "FirstName2",
+			LastName:  "LastName2",
+		}))
+		return nil
+	}))
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *client.Tx) error {
+		requireT.NoError(tx.Set(entities.Account{
+			ID:        accountID3,
+			FirstName: "FirstName3",
+			LastName:  "LastName3",
+		}))
+		requireT.NoError(tx.Set(entities.Account{
+			ID:        accountID4,
+			FirstName: "FirstName4",
+			LastName:  "LastName4",
+		}))
+		return nil
+	}))
+
+	requireT.Empty(<-receivedIDs)
+	requireT.ElementsMatch([]any{
+		accountID1,
+		accountID2,
+	}, lo.Keys(<-receivedIDs))
+	requireT.ElementsMatch([]any{
+		accountID3,
+		accountID4,
+	}, lo.Keys(<-receivedIDs))
 }

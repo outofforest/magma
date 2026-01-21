@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
 	magmatypes "github.com/outofforest/magma/types"
@@ -106,7 +107,7 @@ func TestStaticClientTrigger(t *testing.T) {
 
 	var triggered bool
 	c, err := NewStaticClient(StaticConfig{
-		TriggerFunc: func(ctx context.Context, v *View) error {
+		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
 			triggered = true
 			return nil
 		},
@@ -120,13 +121,38 @@ func TestStaticClientTrigger(t *testing.T) {
 	requireT.True(triggered)
 }
 
+func TestStaticClientTriggerReceivesIDs(t *testing.T) {
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+
+	var receivedIDs map[any]struct{}
+	c, err := NewStaticClient(StaticConfig{
+		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
+			receivedIDs = ids
+			return nil
+		},
+	}, []any{e1, e2, e3, e4})
+	requireT.NoError(err)
+
+	requireT.Nil(receivedIDs)
+
+	requireT.NoError(c.WarmUp(ctx))
+
+	requireT.ElementsMatch([]any{
+		e1.ID,
+		e2.ID,
+		e3.ID,
+		e4.ID,
+	}, lo.Keys(receivedIDs))
+}
+
 func TestStaticClientWarmUpTwice(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 
 	var triggered bool
 	c, err := NewStaticClient(StaticConfig{
-		TriggerFunc: func(ctx context.Context, v *View) error {
+		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
 			triggered = true
 			return nil
 		},
@@ -149,7 +175,7 @@ func TestStaticClientTriggerErr(t *testing.T) {
 	ctx := qa.NewContext(t)
 
 	c, err := NewStaticClient(StaticConfig{
-		TriggerFunc: func(ctx context.Context, v *View) error {
+		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
 			return errors.New("test")
 		},
 	}, []any{e1, e2, e3, e4})

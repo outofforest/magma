@@ -34,12 +34,14 @@ func NewStaticClient(config StaticConfig, entities []any) (*StaticClient, error)
 			continue
 		}
 
-		if err := validateType(t); err != nil {
+		idFType, err := validateType(t)
+		if err != nil {
 			return nil, err
 		}
 
 		info := typeInfo{
 			Type:    t,
+			IDType:  idFType,
 			TableID: uint64(len(byType)),
 		}
 		byType[t] = info
@@ -67,15 +69,17 @@ func (c *StaticClient) WarmUp(ctx context.Context) error {
 	}
 	c.loaded = true
 
+	ids := map[any]struct{}{}
 	tx := c.db.Txn(true)
 	for _, e := range c.entities {
-		insert(tx, c.byType, e)
+		id, _, _ := insert(tx, c.byType, e)
+		ids[reflect.ValueOf(id).Convert(c.byType[reflect.TypeOf(e)].IDType).Interface()] = struct{}{}
 	}
 	tx.Commit()
 	c.entities = nil
 
 	if c.config.TriggerFunc != nil {
-		if err := c.config.TriggerFunc(ctx, c.View()); err != nil {
+		if err := c.config.TriggerFunc(ctx, c.View(), ids); err != nil {
 			return err
 		}
 	}

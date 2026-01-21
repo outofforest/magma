@@ -56,7 +56,7 @@ func (c TestingCluster) NewClient(
 	name string,
 	marshaller proton.Marshaller,
 	partitionID types.PartitionID,
-	triggerFunc func(context.Context, *client.View) error,
+	triggerFunc client.TriggerFunc,
 	indices ...memdb.Index,
 ) *Client {
 	cl, err := c.cluster.NewClient(peer, name, marshaller, partitionID, triggerFunc, indices...)
