@@ -276,7 +276,7 @@ func (c *Cluster) NewClient(
 	name string,
 	marshaller proton.Marshaller,
 	partitionID types.PartitionID,
-	triggerFunc func(context.Context, *client.View) error,
+	triggerFunc client.TriggerFunc,
 	indices ...memdb.Index,
 ) (*Client, error) {
 	cl, err := client.New(client.Config{

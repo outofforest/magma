@@ -47,7 +47,7 @@ var (
 var idType = reflect.TypeFor[memdb.ID]()
 
 // TriggerFunc defines function triggered after applying transactions.
-type TriggerFunc func(ctx context.Context, v *View) error
+type TriggerFunc func(ctx context.Context, v *View, ids map[any]struct{}) error
 
 // Config is the configuration of magma client.
 type Config struct {
@@ -76,7 +76,8 @@ func New(config Config) (*Client, error) {
 	for tableID, o := range objectTypes {
 		t := reflect.TypeOf(o)
 
-		if err := validateType(t); err != nil {
+		idFType, err := validateType(t)
+		if err != nil {
 			return nil, err
 		}
 
@@ -91,6 +92,7 @@ func New(config Config) (*Client, error) {
 
 		info := typeInfo{
 			Type:    t,
+			IDType:  idFType,
 			MsgID:   msgID,
 			TableID: uint64(tableID),
 		}
@@ -197,7 +199,7 @@ func (c *Client) Run(ctx context.Context) error {
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-					triggerCh := make(chan struct{}, 1)
+					triggerCh := make(chan map[any]struct{}, 1)
 
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
@@ -209,6 +211,7 @@ func (c *Client) Run(ctx context.Context) error {
 							}
 						}()
 
+						updatedIDs := map[any]struct{}{}
 						for {
 							m, _, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
@@ -229,7 +232,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 									length += uint64(len(txRaw))
 
-									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw)
+									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedIDs)
 									if err != nil {
 										tx.Abort()
 										return err
@@ -248,7 +251,8 @@ func (c *Client) Run(ctx context.Context) error {
 								tx = nil
 								commitCh = make(chan struct{})
 
-								c.applyHotEnd(triggerCh)
+								c.applyHotEnd(triggerCh, updatedIDs)
+								updatedIDs = map[any]struct{}{}
 							default:
 								return errors.Errorf("unexpected message %T", msg)
 							}
@@ -291,11 +295,11 @@ func (c *Client) Run(ctx context.Context) error {
 					})
 					if c.config.TriggerFunc != nil {
 						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
-							for range triggerCh {
+							for updatedIDs := range triggerCh {
 								if err := c.config.TriggerFunc(ctx, &View{
 									tx:     c.db.Txn(false),
 									byType: c.byType,
-								}); err != nil {
+								}, updatedIDs); err != nil {
 									return err
 								}
 							}
@@ -341,7 +345,7 @@ func (c *Client) NewTransactor() Transactor {
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan map[any]struct{}, updatedIDs map[any]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -350,11 +354,14 @@ func (c *Client) applyHotEnd(triggerCh chan struct{}) {
 	if c.config.TriggerFunc != nil {
 		if len(triggerCh) > 0 {
 			select {
-			case <-triggerCh:
+			case oldIDs := <-triggerCh:
+				for id := range oldIDs {
+					updatedIDs[id] = struct{}{}
+				}
 			default:
 			}
 		}
-		triggerCh <- struct{}{}
+		triggerCh <- updatedIDs
 	}
 }
 
@@ -363,6 +370,7 @@ func (c *Client) applyTx(
 	previousChecksum uint64,
 	tx *memdb.Txn,
 	txRaw []byte,
+	updatedIDs map[any]struct{},
 ) (uint64, error) {
 	txLen, n := varuint64.Parse(txRaw)
 
@@ -391,7 +399,7 @@ func (c *Client) applyTx(
 	}
 	meta := metaAny.(*wire.TxMetadata)
 
-	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:])
+	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:], updatedIDs)
 	if err != nil && !errors.Is(err, ErrTxOutdatedTx) {
 		return 0, err
 	}
@@ -412,7 +420,12 @@ func (c *Client) applyTx(
 	return checksum, nil
 }
 
-func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retErr error) {
+func (c *Client) storeTx(
+	entityMetaID uint64,
+	tx *memdb.Txn,
+	txRaw []byte,
+	updatedIDs map[any]struct{},
+) (retErr error) {
 	c.pendingEntities = c.pendingEntities[:0]
 	for len(txRaw) > 0 {
 		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
@@ -451,6 +464,7 @@ func (c *Client) storeTx(entityMetaID uint64, tx *memdb.Txn, txRaw []byte) (retE
 
 		c.pendingEntities = append(c.pendingEntities, pendingEntity{TableID: typeDef.TableID, Entity: &oV})
 		txRaw = txRaw[entityMetaSize+msgSize:]
+		updatedIDs[reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType).Interface()] = struct{}{}
 	}
 
 	for _, e := range c.pendingEntities {
@@ -618,35 +632,36 @@ func txRecover(err *error) {
 
 type typeInfo struct {
 	Type    reflect.Type
+	IDType  reflect.Type
 	MsgID   uint64
 	TableID uint64
 }
 
 var revisionType = reflect.TypeFor[types.Revision]()
 
-func validateType(t reflect.Type) error {
+func validateType(t reflect.Type) (reflect.Type, error) {
 	idF, exists := t.FieldByName("ID")
 	if !exists {
-		return errors.Errorf("object %s has no ID field", t)
+		return nil, errors.Errorf("object %s has no ID field", t)
 	}
 	if !idF.Type.ConvertibleTo(idType) {
-		return errors.Errorf("object's %s ID field must be of type %s", t, idType)
+		return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
 	}
 	if idF.Index[0] != 0 || idF.Offset != 0 {
-		return errors.Errorf("id must be the first field in type %s", t)
+		return nil, errors.Errorf("id must be the first field in type %s", t)
 	}
 	revisionF, exists := t.FieldByName("Revision")
 	if !exists {
-		return errors.Errorf("object %s has no Revision field", t)
+		return nil, errors.Errorf("object %s has no Revision field", t)
 	}
 	if revisionF.Type != revisionType {
-		return errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
+		return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
 	}
 	if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
-		return errors.Errorf("revision must be the second field in type %d", t)
+		return nil, errors.Errorf("revision must be the second field in type %d", t)
 	}
 
-	return nil
+	return idF.Type, nil
 }
 
 func buildDBIndexesForType(dbIndexes [][]memdb.Index, indices []memdb.Index, t reflect.Type) [][]memdb.Index {

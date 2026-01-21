@@ -24,6 +24,7 @@ func NewTestConfig(marshaller proton.Marshaller, triggerFunc TriggerFunc, indice
 		Service:        "test",
 		MaxMessageSize: maxMsgSize,
 		Marshaller:     marshaller,
+		TriggerFunc:    triggerFunc,
 		Indices:        indices,
 	}
 }
@@ -32,51 +33,57 @@ func NewTestConfig(marshaller proton.Marshaller, triggerFunc TriggerFunc, indice
 type TestClient struct {
 	client      *Client
 	triggerFunc TriggerFunc
+	updatedIDs  map[any]struct{}
 }
 
 // NewTestClient creates new client for tests.
-func NewTestClient(t *testing.T, config Config) TestClient {
+func NewTestClient(t *testing.T, config Config) *TestClient {
 	client, err := New(config)
 	require.NoError(t, err)
 
-	return TestClient{
+	return &TestClient{
 		client:      client,
 		triggerFunc: config.TriggerFunc,
+		updatedIDs:  map[any]struct{}{},
 	}
 }
 
 // WarmUp is a noop in test client.
-func (tc TestClient) WarmUp(ctx context.Context) error {
+func (tc *TestClient) WarmUp(ctx context.Context) error {
 	return errors.WithStack(ctx.Err())
 }
 
 // View returns current view.
-func (tc TestClient) View() *View {
+func (tc *TestClient) View() *View {
 	return tc.client.View()
 }
 
 // NewTransactor returns new transactor.
-func (tc TestClient) NewTransactor() Transactor {
-	return testTransactor{
-		tc: tc,
+func (tc *TestClient) NewTransactor() Transactor {
+	return &testTransactor{
+		tc:         tc,
+		updatedIDs: tc.updatedIDs,
 	}
 }
 
 // Trigger triggers trigger function.
-func (tc TestClient) Trigger(ctx context.Context) error {
-	return tc.triggerFunc(ctx, tc.View())
+func (tc *TestClient) Trigger(ctx context.Context) error {
+	err := tc.triggerFunc(ctx, tc.View(), tc.updatedIDs)
+	tc.updatedIDs = map[any]struct{}{}
+	return err
 }
 
 // Checksum returns current checksum of received transaction log.
-func (tc TestClient) Checksum() uint64 {
+func (tc *TestClient) Checksum() uint64 {
 	return tc.client.previousChecksum
 }
 
 type testTransactor struct {
-	tc TestClient
+	tc         *TestClient
+	updatedIDs map[any]struct{}
 }
 
-func (t testTransactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
+func (t *testTransactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 	tx, _, err := t.tc.client.NewTransactor().(*transactor).prepareTx(txF)
 	if err != nil {
 		return err
@@ -97,7 +104,8 @@ func (t testTransactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 	binary.LittleEndian.PutUint64(buf[size:], xxh3.HashSeed(buf[:size], t.tc.client.previousChecksum))
 
 	txn := t.tc.client.db.Txn(true)
-	previousChecksum, err := t.tc.client.applyTx(nil, t.tc.client.previousChecksum, txn, buf[:size+format.ChecksumSize])
+	previousChecksum, err := t.tc.client.applyTx(nil, t.tc.client.previousChecksum, txn,
+		buf[:size+format.ChecksumSize], t.updatedIDs)
 	if err != nil {
 		txn.Abort()
 		return err
