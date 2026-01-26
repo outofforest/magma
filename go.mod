@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.52.0
 	github.com/stretchr/testify v1.11.1
-	github.com/zeebo/xxh3 v1.0.2
+	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/sys v0.40.0
 )
