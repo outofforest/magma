@@ -72,8 +72,8 @@ func (c *StaticClient) WarmUp(ctx context.Context) error {
 	ids := map[any]struct{}{}
 	tx := c.db.Txn(true)
 	for _, e := range c.entities {
-		id, _, _ := insert(tx, c.byType, e)
-		ids[reflect.ValueOf(id).Convert(c.byType[reflect.TypeOf(e)].IDType).Interface()] = struct{}{}
+		id, typeDef, _, _ := insert(tx, c.byType, e)
+		ids[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = struct{}{}
 	}
 	tx.Commit()
 	c.entities = nil

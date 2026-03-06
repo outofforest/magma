@@ -341,7 +341,7 @@ func (c *Client) View() *View {
 func (c *Client) NewTransactor() Transactor {
 	return &transactor{
 		client:  c,
-		changes: map[memdb.ID]change{},
+		changes: map[changeID]change{},
 	}
 }
 
@@ -490,7 +490,7 @@ type Transactor interface {
 
 type transactor struct {
 	client       *Client
-	changes      map[memdb.ID]change
+	changes      map[changeID]change
 	previousTxID memdb.ID
 	buf          []byte
 }
