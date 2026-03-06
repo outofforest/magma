@@ -2416,3 +2416,38 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(acc, accAfter)
 }
+
+func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	id := memdb.NewID[memdb.ID]()
+	e1 := entities.Account{
+		ID: entities.AccountID(id),
+	}
+	e2 := entities.Fields{
+		ID: id,
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(e1))
+		requireT.NoError(tx.Set(e2))
+		return nil
+	}))
+
+	e1.Revision++
+	e2.Revision++
+
+	v := c.View()
+	_, exists := Get[entities.Account](v, e1.ID)
+	requireT.True(exists)
+
+	_, exists = Get[entities.Fields](v, e2.ID)
+	requireT.True(exists)
+}

@@ -119,6 +119,11 @@ type change struct {
 	Added      bool
 }
 
+type changeID struct {
+	ID    memdb.ID
+	MsgID uint64
+}
+
 // Tx represents transaction.
 type Tx struct {
 	client       *Client
@@ -126,7 +131,7 @@ type Tx struct {
 	buf          []byte
 	size         uint64
 	numOfObjects uint64
-	changes      map[memdb.ID]change
+	changes      map[changeID]change
 }
 
 // View returns read-only view of the DB.
@@ -158,9 +163,13 @@ func (tx *Tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.db.Txn(true)
 	defer dbTx.Abort()
 
-	id, oldValue, newValue := insert(dbTx, tx.client.byType, o)
+	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.byType, o)
 
-	chg, chgExists := tx.changes[id]
+	chID := changeID{
+		ID:    id,
+		MsgID: typeDef.MsgID,
+	}
+	chg, chgExists := tx.changes[chID]
 
 	//nolint:nestif
 	if chgExists {
@@ -188,18 +197,12 @@ func (tx *Tx) set(o any, isSoftSet bool) error {
 			chg.StartIndex = 0
 			chg.EndIndex = 0
 			chg.Added = false
-			tx.changes[id] = chg
+			tx.changes[chID] = chg
 		}
 	} else {
 		chg = change{
 			OldValue: oldValue,
 		}
-	}
-
-	vv := newValue.Elem()
-	typeDef, exists := tx.client.byType[vv.Type()]
-	if !exists {
-		return errors.Errorf("unknown type %s", vv.Type())
 	}
 
 	unsafeID := unsafeIDFromEntity(*newValue)
@@ -259,14 +262,18 @@ func (tx *Tx) set(o any, isSoftSet bool) error {
 
 	chg.EndIndex += msgSize
 	tx.size = chg.EndIndex
-	tx.changes[id] = chg
+	tx.changes[chID] = chg
 
 	dbTx.Commit()
 
 	return nil
 }
 
-func insert(tx *memdb.Txn, byType map[reflect.Type]typeInfo, o any) (memdb.ID, *reflect.Value, *reflect.Value) {
+func insert(
+	tx *memdb.Txn,
+	byType map[reflect.Type]typeInfo,
+	o any,
+) (memdb.ID, typeInfo, *reflect.Value, *reflect.Value) {
 	oValue := reflect.ValueOf(o)
 	if oValue.Kind() == reflect.Ptr {
 		panic(errors.New("object must not be a pointer"))
@@ -289,5 +296,5 @@ func insert(tx *memdb.Txn, byType map[reflect.Type]typeInfo, o any) (memdb.ID, *
 		panic(errors.WithStack(err))
 	}
 
-	return id, old, &oPtrValue
+	return id, typeDef, old, &oPtrValue
 }
