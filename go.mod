@@ -1,6 +1,6 @@
 module github.com/outofforest/magma
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/cespare/xxhash v1.1.0
@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.0.2
 	go.uber.org/zap v1.27.1
-	golang.org/x/sys v0.40.0
+	golang.org/x/sys v0.42.0
 )
 
 require (
