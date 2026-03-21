@@ -254,7 +254,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 								commitCh = make(chan struct{})
 
-								c.applyHotEnd(triggerCh, tx, updatedIDs)
+								c.applyHotEnd(triggerCh, c.View(), updatedIDs)
 								tx = nil
 								updatedIDs = map[any]struct{}{}
 							default:
@@ -346,7 +346,7 @@ func (c *Client) NewTransactor() Transactor {
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan trigger, tx *memdb.Txn, updatedIDs map[any]struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan trigger, view *View, updatedIDs map[any]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -363,10 +363,7 @@ func (c *Client) applyHotEnd(triggerCh chan trigger, tx *memdb.Txn, updatedIDs m
 			}
 		}
 		triggerCh <- trigger{
-			View: &View{
-				tx:     tx,
-				byType: c.byType,
-			},
+			View:       view,
 			UpdatedIDs: updatedIDs,
 		}
 	}

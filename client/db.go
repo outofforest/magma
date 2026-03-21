@@ -15,10 +15,18 @@ var _ Tx = &tx{}
 
 var emptyID memdb.ID
 
-// View represents immutable snapshot of the DB.
+// View represents non-persistent view of the DB.
+// It is possible to modify the entities inside view,
+// but those changes cannot be committed. They are always loca
+// to this view only.
 type View struct {
 	tx     *memdb.Txn
 	byType map[reflect.Type]typeInfo
+}
+
+// Set sets the entity inside view.
+func (v *View) Set(o any) {
+	insert(v.tx, v.byType, o)
 }
 
 // Get returns the object.
@@ -134,7 +142,7 @@ type tx struct {
 	changes      map[changeID]change
 }
 
-// View returns read-only view of the DB.
+// View returns non-persistent view of the DB.
 func (tx *tx) View() *View {
 	return &View{
 		tx:     tx.db.Txn(true),

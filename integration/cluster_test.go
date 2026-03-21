@@ -1141,3 +1141,62 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 		accountID4,
 	}, lo.Keys(<-receivedIDs))
 }
+
+func TestTriggerFuncUpdatesView(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+	clstr := cluster.NewTesting(group, t, clusterConfig)
+	m := entities.NewMarshaller()
+
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+
+	account1 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "FirstName1",
+		LastName:  "LastName1",
+	}
+	account2 := entities.Account{
+		ID:        account1.ID,
+		FirstName: "FirstName2",
+		LastName:  "LastName2",
+	}
+
+	var a1, a2 entities.Account
+	doneCh := make(chan struct{})
+	c := clstr.NewClient(p, "client", m, partitionDefault,
+		func(ctx context.Context, v *client.View, ids map[any]struct{}) error {
+			if _, exists := ids[account1.ID]; !exists {
+				return nil
+			}
+
+			a1, _ = client.Get[entities.Account](v, account1.ID)
+
+			v.Set(account2)
+
+			a2, _ = client.Get[entities.Account](v, account1.ID)
+
+			close(doneCh)
+			return nil
+		},
+	)
+
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+		return tx.Set(account1)
+	}))
+
+	<-doneCh
+
+	account1.Revision++
+	requireT.Equal(account1, a1)
+	requireT.Equal(account2, a2)
+
+	a, exists := client.Get[entities.Account](c.View(), account1.ID)
+	requireT.True(exists)
+	requireT.Equal(account1, a)
+}
