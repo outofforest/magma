@@ -172,6 +172,11 @@ type Client struct {
 	pendingEntities []pendingEntity
 }
 
+type trigger struct {
+	View       *View
+	UpdatedIDs map[any]struct{}
+}
+
 // Run runs client.
 func (c *Client) Run(ctx context.Context) error {
 	defer close(c.doneCh)
@@ -205,7 +210,7 @@ func (c *Client) Run(ctx context.Context) error {
 				}
 
 				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-					triggerCh := make(chan map[any]struct{}, 1)
+					triggerCh := make(chan trigger, 1)
 
 					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
 						defer close(triggerCh)
@@ -247,10 +252,10 @@ func (c *Client) Run(ctx context.Context) error {
 								tx.Commit()
 								close(commitCh)
 
-								tx = nil
 								commitCh = make(chan struct{})
 
-								c.applyHotEnd(triggerCh, updatedIDs)
+								c.applyHotEnd(triggerCh, tx, updatedIDs)
+								tx = nil
 								updatedIDs = map[any]struct{}{}
 							default:
 								return errors.Errorf("unexpected message %T", msg)
@@ -294,8 +299,8 @@ func (c *Client) Run(ctx context.Context) error {
 					})
 					if c.config.TriggerFunc != nil {
 						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
-							for updatedIDs := range triggerCh {
-								if err := c.config.TriggerFunc(ctx, c.View(), updatedIDs); err != nil {
+							for t := range triggerCh {
+								if err := c.config.TriggerFunc(ctx, t.View, t.UpdatedIDs); err != nil {
 									return err
 								}
 							}
@@ -328,7 +333,7 @@ func (c *Client) WarmUp(ctx context.Context) error {
 // View returns db view.
 func (c *Client) View() *View {
 	return &View{
-		tx:     c.db.Txn(false),
+		tx:     c.db.Txn(true),
 		byType: c.byType,
 	}
 }
@@ -341,7 +346,7 @@ func (c *Client) NewTransactor() Transactor {
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan map[any]struct{}, updatedIDs map[any]struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan trigger, tx *memdb.Txn, updatedIDs map[any]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -350,14 +355,20 @@ func (c *Client) applyHotEnd(triggerCh chan map[any]struct{}, updatedIDs map[any
 	if c.config.TriggerFunc != nil {
 		if len(triggerCh) > 0 {
 			select {
-			case oldIDs := <-triggerCh:
-				for id := range oldIDs {
+			case oldT := <-triggerCh:
+				for id := range oldT.UpdatedIDs {
 					updatedIDs[id] = struct{}{}
 				}
 			default:
 			}
 		}
-		triggerCh <- updatedIDs
+		triggerCh <- trigger{
+			View: &View{
+				tx:     tx,
+				byType: c.byType,
+			},
+			UpdatedIDs: updatedIDs,
+		}
 	}
 }
 

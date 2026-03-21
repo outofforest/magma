@@ -14,7 +14,7 @@ import (
 	"github.com/outofforest/qa"
 )
 
-var config = NewTestConfig(entities.NewMarshaller(), nil)
+var config = NewTestConfig(entities.NewMarshaller())
 
 func withIndices(config Config, indices ...memdb.Index) Config {
 	config.Indices = append(append([]memdb.Index{}, config.Indices...), indices...)
@@ -2358,7 +2358,7 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, config)
 
 	acc := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
