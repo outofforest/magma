@@ -211,12 +211,6 @@ func (c *Client) Run(ctx context.Context) error {
 						defer close(triggerCh)
 
 						var tx *memdb.Txn
-						defer func() {
-							if tx != nil {
-								tx.Commit()
-							}
-						}()
-
 						updatedIDs := map[any]struct{}{}
 						for {
 							m, _, err := conn.ReceiveProton(cMarshaller)
@@ -240,7 +234,6 @@ func (c *Client) Run(ctx context.Context) error {
 
 									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedIDs)
 									if err != nil {
-										tx.Abort()
 										return err
 									}
 									c.previousChecksum = checksum
@@ -523,8 +516,6 @@ func (t *transactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 
 func (t *transactor) prepareTx(txF func(tx Tx) error) (retTx txEnvelope, retUsedSize uint64, retErr error) {
 	defer clear(t.changes)
-
-	t.client.db.AwaitTxn()
 
 	if uint64(len(t.buf)) < t.client.config.MaxMessageSize {
 		t.buf = make([]byte, t.client.bufSize)

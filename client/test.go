@@ -113,7 +113,6 @@ func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	previousChecksum, err := t.tc.client.applyTx(nil, t.tc.client.previousChecksum, txn,
 		buf[:size+format.ChecksumSize], t.updatedIDs)
 	if err != nil {
-		txn.Abort()
 		return err
 	}
 	txn.Commit()

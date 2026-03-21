@@ -161,7 +161,6 @@ func (tx *tx) SoftSet(o any) error {
 
 func (tx *tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.db.Txn(true)
-	defer dbTx.Abort()
 
 	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.byType, o)
 
