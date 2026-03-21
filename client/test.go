@@ -16,6 +16,12 @@ import (
 	"github.com/outofforest/varuint64"
 )
 
+var (
+	_ ReadClient  = &TestClient{}
+	_ WriteClient = &TestClient{}
+	_ Transactor  = &testTransactor{}
+)
+
 const maxMsgSize = 4 * 1024
 
 // NewTestConfig creates new config for test client.
@@ -83,7 +89,7 @@ type testTransactor struct {
 	updatedIDs map[any]struct{}
 }
 
-func (t *testTransactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
+func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	tx, _, err := t.tc.client.NewTransactor().(*transactor).prepareTx(txF)
 	if err != nil {
 		return err
