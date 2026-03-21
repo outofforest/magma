@@ -52,11 +52,10 @@ func Iterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
 }
 
 func first[T any](v *View, index uint64, args ...any) (T, bool) {
-	var t T
-	tt := reflect.TypeOf(t)
-	typeDef, exists := v.byType[tt]
+	t := reflect.TypeFor[T]()
+	typeDef, exists := v.byType[t]
 	if !exists {
-		panic(errors.Errorf("type %s not defined", tt))
+		panic(errors.Errorf("type %s not defined", t))
 	}
 
 	o, err := v.tx.First(typeDef.TableID, index, args...)
@@ -65,17 +64,17 @@ func first[T any](v *View, index uint64, args ...any) (T, bool) {
 	}
 
 	if o == nil {
-		return t, false
+		var o T
+		return o, false
 	}
 	return o.Elem().Interface().(T), true
 }
 
 func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
-	var t T
-	tt := reflect.TypeOf(t)
-	typeDef, exists := v.byType[tt]
+	t := reflect.TypeFor[T]()
+	typeDef, exists := v.byType[t]
 	if !exists {
-		panic(errors.Errorf("type %s not defined", tt))
+		panic(errors.Errorf("type %s not defined", t))
 	}
 
 	it, err := v.tx.Iterator(typeDef.TableID, index, args...)
@@ -93,11 +92,10 @@ func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
 }
 
 func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
-	var t T
-	tt := reflect.TypeOf(t)
-	typeDef, exists := v.byType[tt]
+	t := reflect.TypeFor[T]()
+	typeDef, exists := v.byType[t]
 	if !exists {
-		panic(errors.Errorf("type %s not defined", tt))
+		panic(errors.Errorf("type %s not defined", t))
 	}
 
 	it, err := v.tx.Iterator(typeDef.TableID, index, args...)
@@ -108,7 +106,8 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 	return func() (T, bool) {
 		e := it.Next()
 		if e == nil {
-			return t, false
+			var o T
+			return o, false
 		}
 		return e.Elem().Interface().(T), true
 	}
