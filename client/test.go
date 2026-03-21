@@ -25,21 +25,19 @@ var (
 const maxMsgSize = 4 * 1024
 
 // NewTestConfig creates new config for test client.
-func NewTestConfig(marshaller proton.Marshaller, triggerFunc TriggerFunc, indices ...memdb.Index) Config {
+func NewTestConfig(marshaller proton.Marshaller, indices ...memdb.Index) Config {
 	return Config{
 		Service:        "test",
 		MaxMessageSize: maxMsgSize,
 		Marshaller:     marshaller,
-		TriggerFunc:    triggerFunc,
 		Indices:        indices,
 	}
 }
 
 // TestClient is the client wrapper used in unit tests.
 type TestClient struct {
-	client      *Client
-	triggerFunc TriggerFunc
-	updatedIDs  map[any]struct{}
+	client     *Client
+	updatedIDs map[any]struct{}
 }
 
 // NewTestClient creates new client for tests.
@@ -48,9 +46,8 @@ func NewTestClient(t *testing.T, config Config) *TestClient {
 	require.NoError(t, err)
 
 	return &TestClient{
-		client:      client,
-		triggerFunc: config.TriggerFunc,
-		updatedIDs:  map[any]struct{}{},
+		client:     client,
+		updatedIDs: map[any]struct{}{},
 	}
 }
 
@@ -70,13 +67,6 @@ func (tc *TestClient) NewTransactor() Transactor {
 		tc:         tc,
 		updatedIDs: tc.updatedIDs,
 	}
-}
-
-// Trigger triggers trigger function.
-func (tc *TestClient) Trigger(ctx context.Context) error {
-	err := tc.triggerFunc(ctx, tc.View(), tc.updatedIDs)
-	tc.updatedIDs = map[any]struct{}{}
-	return err
 }
 
 // Checksum returns current checksum of received transaction log.

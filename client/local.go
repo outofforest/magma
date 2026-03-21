@@ -30,8 +30,8 @@ type LocalClient struct {
 	byType map[reflect.Type]typeInfo
 }
 
-// NewStaticClient creates static client.
-func NewStaticClient(config LocalConfig) (*LocalClient, error) {
+// NewLocalClient creates static client.
+func NewLocalClient(config LocalConfig) (*LocalClient, error) {
 	byType := map[reflect.Type]typeInfo{}
 	dbIndexes := [][]memdb.Index{}
 	for _, t := range config.Types {
@@ -74,7 +74,7 @@ func (c *LocalClient) WarmUp(ctx context.Context) error {
 // View returns db view.
 func (c *LocalClient) View() *View {
 	return &View{
-		tx:     c.db.Txn(false),
+		tx:     c.db.Txn(true),
 		byType: c.byType,
 	}
 }
@@ -91,22 +91,30 @@ type localTransactor struct {
 }
 
 func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
-	txn := t.c.db.Txn(true)
-
 	pendingTx := &localTx{
-		client: t.c,
-		txn:    txn,
-		ids:    map[any]struct{}{},
+		client:  t.c,
+		db:      t.c.db.Snapshot(),
+		updates: map[any]any{},
 	}
 
 	if err := txF(pendingTx); err != nil {
 		return err
 	}
 
+	if len(pendingTx.updates) == 0 {
+		return nil
+	}
+
+	ids := map[any]struct{}{}
+	txn := t.c.db.Txn(true)
+	for id, o := range pendingTx.updates {
+		insert(txn, t.c.byType, o)
+		ids[id] = struct{}{}
+	}
 	txn.Commit()
 
 	if t.c.config.TriggerFunc != nil {
-		if err := t.c.config.TriggerFunc(ctx, t.c.View(), pendingTx.ids); err != nil {
+		if err := t.c.config.TriggerFunc(ctx, pendingTx.View(), ids); err != nil {
 			return err
 		}
 	}
@@ -115,21 +123,23 @@ func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 }
 
 type localTx struct {
-	client *LocalClient
-	txn    *memdb.Txn
-	ids    map[any]struct{}
+	client  *LocalClient
+	db      *memdb.MemDB
+	updates map[any]any
 }
 
 func (tx *localTx) View() *View {
 	return &View{
-		tx:     tx.txn,
+		tx:     tx.db.Txn(true),
 		byType: tx.client.byType,
 	}
 }
 
 func (tx *localTx) Set(o any) error {
-	id, typeDef, _, _ := insert(tx.txn, tx.client.byType, o)
-	tx.ids[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = struct{}{}
+	dbTx := tx.db.Txn(true)
+	id, typeDef, _, _ := insert(dbTx, tx.client.byType, o)
+	tx.updates[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = o
+	dbTx.Commit()
 	return nil
 }
 

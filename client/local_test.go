@@ -62,7 +62,7 @@ func TestLocalClient(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -104,7 +104,7 @@ func TestLocalClientTrigger(t *testing.T) {
 	ctx := qa.NewContext(t)
 
 	var triggered bool
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -138,7 +138,7 @@ func TestLocalClientTriggerReceivesIDs(t *testing.T) {
 	ctx := qa.NewContext(t)
 
 	var receivedIDs map[any]struct{}
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -176,7 +176,7 @@ func TestLocalClientTriggerErr(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -208,7 +208,7 @@ func TestLocalClientIndexes(t *testing.T) {
 	var ie2 localEntity2
 	index2 := indices.NewFieldIndex(&ie2, &ie2.Value)
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -246,7 +246,7 @@ func TestLocalClientInvalidEntityErr(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -270,7 +270,7 @@ func TestLocalClientNoIDErr(t *testing.T) {
 	e := e1
 	e.ID = staticID1{}
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -294,7 +294,7 @@ func TestLocalClientTwoTransactions(t *testing.T) {
 	e12 := e1
 	e12.Value = "str12"
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
@@ -343,7 +343,7 @@ func TestLocalClientTransactionAbort(t *testing.T) {
 	e12 := e1
 	e12.Value = "str12"
 
-	c, err := NewStaticClient(LocalConfig{
+	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),

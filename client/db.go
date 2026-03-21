@@ -137,7 +137,7 @@ type tx struct {
 // View returns read-only view of the DB.
 func (tx *tx) View() *View {
 	return &View{
-		tx:     tx.db.Txn(false),
+		tx:     tx.db.Txn(true),
 		byType: tx.client.byType,
 	}
 }
