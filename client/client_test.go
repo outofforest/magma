@@ -2451,3 +2451,33 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 	_, exists = Get[entities.Fields](v, e2.ID)
 	requireT.True(exists)
 }
+
+func TestIgnoredField(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, withIndices(config))
+
+	e := entities.Ignore{
+		ID:      memdb.NewID[memdb.ID](),
+		Ignored: 5,
+		Value:   6,
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+		requireT.NoError(tx.Set(e))
+		return nil
+	}))
+
+	e.Revision++
+	e.Ignored = 0
+
+	v := c.View()
+	e2, exists := Get[entities.Ignore](v, e.ID)
+	requireT.True(exists)
+	requireT.Equal(e, e2)
+}

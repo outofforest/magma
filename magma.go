@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"path/filepath"
-	"reflect"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -23,31 +22,17 @@ import (
 
 const queueCapacity = 10
 
-// Ent is the entity definition.
-type Ent struct {
-	MsgType reflect.Type
-}
-
 // Entity creates entity definition.
-func Entity[T any]() Ent {
-	return Ent{
-		MsgType: reflect.TypeFor[T](),
-	}
+func Entity[T any](ignoreFields ...string) proton.Msg {
+	msg := proton.Message[T](ignoreFields...)
+	msg.IgnoreFields["ID"] = true
+	msg.IgnoreFields["Revision"] = true
+	return msg
 }
 
 // Generate generates serialization code for entities.
-func Generate(filePath string, entities ...Ent) {
-	msgs := make([]proton.Msg, 0, len(entities))
-	for _, e := range entities {
-		msgs = append(msgs, proton.Msg{
-			MsgType: e.MsgType,
-			IgnoreFields: map[string]bool{
-				"ID":       true,
-				"Revision": true,
-			},
-		})
-	}
-	proton.Generate(filePath, msgs...)
+func Generate(filePath string, entities ...proton.Msg) {
+	proton.Generate(filePath, entities...)
 }
 
 // Run runs magma.
