@@ -92,7 +92,6 @@ type localTransactor struct {
 
 func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	txn := t.c.db.Txn(true)
-	defer txn.Abort()
 
 	pendingTx := &localTx{
 		client: t.c,
