@@ -430,6 +430,7 @@ func (c *Client) storeTx(
 	txRaw []byte,
 	updatedIDs map[any]struct{},
 ) (retErr error) {
+	// FIXME (wojciech): This must be freed on large update. But even better, redo memdb so it is not needed.
 	c.pendingEntities = c.pendingEntities[:0]
 	for len(txRaw) > 0 {
 		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
@@ -478,6 +479,26 @@ func (c *Client) storeTx(
 	}
 
 	return nil
+}
+
+func mergeEntity[T any](tx *memdb.Txn, tableID uint64, meta *wire.EntityMetadata) (*T, error) {
+	o, err := memdb.First[T](tx, tableID, memdb.IDIndexID, meta.ID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var o2 T
+	if o == nil {
+		copyMetaToEntity(&o2, meta)
+	} else {
+		o2 = *o
+		if meta.Revision <= revisionFromEntity(o) {
+			return nil, ErrTxOutdatedTx
+		}
+		setRevisionInEntity(&o2, &meta.Revision)
+	}
+
+	return &o2, nil
 }
 
 type txEnvelope struct {
