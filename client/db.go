@@ -11,6 +11,8 @@ import (
 	"github.com/outofforest/proton"
 )
 
+var _ Tx = &tx{}
+
 var emptyID memdb.ID
 
 // View represents immutable snapshot of the DB.
@@ -124,8 +126,7 @@ type changeID struct {
 	MsgID uint64
 }
 
-// Tx represents transaction.
-type Tx struct {
+type tx struct {
 	client       *Client
 	db           *memdb.MemDB
 	buf          []byte
@@ -135,7 +136,7 @@ type Tx struct {
 }
 
 // View returns read-only view of the DB.
-func (tx *Tx) View() *View {
+func (tx *tx) View() *View {
 	return &View{
 		tx:     tx.db.Txn(false),
 		byType: tx.client.byType,
@@ -145,7 +146,7 @@ func (tx *Tx) View() *View {
 // Set sets object in transaction. This function includes the object in tx even if patch is empty.
 // This is done to detect possible conflicts with other transactions. Use this function if atomicity
 // is required (most of the cases). Compare to SoftSet below.
-func (tx *Tx) Set(o any) error {
+func (tx *tx) Set(o any) error {
 	return tx.set(o, false)
 }
 
@@ -155,11 +156,11 @@ func (tx *Tx) Set(o any) error {
 // else conflicting transaction is created. This conflict is not detected because we haven't included object
 // with incremented revision.
 // Good scenario to use SoftSet is loading batches of unrelated object where conflicts don't matter.
-func (tx *Tx) SoftSet(o any) error {
+func (tx *tx) SoftSet(o any) error {
 	return tx.set(o, true)
 }
 
-func (tx *Tx) set(o any, isSoftSet bool) error {
+func (tx *tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.db.Txn(true)
 	defer dbTx.Abort()
 

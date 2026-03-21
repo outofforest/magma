@@ -13,6 +13,8 @@ import (
 )
 
 func TestMetaLayout(t *testing.T) {
+	t.Parallel()
+
 	requireT := require.New(t)
 	metaT := reflect.TypeFor[wire.EntityMetadata]()
 
@@ -46,7 +48,7 @@ func TestIDIndex(t *testing.T) {
 		{ID: id1},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}

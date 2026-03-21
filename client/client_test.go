@@ -40,7 +40,7 @@ func TestEntityCreation(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		_, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.False(exists)
 
@@ -55,7 +55,7 @@ func TestEntityCreation(t *testing.T) {
 
 	acc1.Revision = 1
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
@@ -100,7 +100,7 @@ func TestEntityUpdate(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 
@@ -110,7 +110,7 @@ func TestEntityUpdate(t *testing.T) {
 	acc1.Revision = 1
 	acc2.Revision = 1
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
@@ -160,7 +160,7 @@ func TestFailingTransaction(t *testing.T) {
 
 	err := errors.New("error")
 	requireT.ErrorIs(NewTestClient(t, config).NewTransactor().
-		Tx(ctx, func(tx *Tx) error {
+		Tx(ctx, func(tx Tx) error {
 			return err
 		}), err)
 }
@@ -195,7 +195,7 @@ func TestFieldIndexString(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -357,7 +357,7 @@ func TestFieldIndexBool(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -467,7 +467,7 @@ func TestFieldIndexTime(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -605,7 +605,7 @@ func TestFieldIndexInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -696,7 +696,7 @@ func TestFieldIndexInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -787,7 +787,7 @@ func TestFieldIndexInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -878,7 +878,7 @@ func TestFieldIndexInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -990,7 +990,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1063,7 +1063,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1136,7 +1136,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1209,7 +1209,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1303,7 +1303,7 @@ func TestFieldIndexID(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1382,7 +1382,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1479,7 +1479,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 
 	c := NewTestClient(t, withIndices(config, indexLastName))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
@@ -1488,7 +1488,7 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 	acc, exists := First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		acc.FirstName = "First2"
 		requireT.NoError(tx.Set(acc))
 		return nil
@@ -1542,7 +1542,7 @@ func TestMultiIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1719,7 +1719,7 @@ func TestMultiIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1795,7 +1795,7 @@ func TestReverseIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1894,7 +1894,7 @@ func TestOverrideSingleNonExistingEntity(t *testing.T) {
 	acc2.LastName = "Changed"
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc))
 		requireT.NoError(tx.Set(acc2))
 		return nil
@@ -1929,11 +1929,11 @@ func TestOverrideSingleExistingEntity(t *testing.T) {
 	acc3.LastName = "BBBBBBBBBBBBB2"
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc3))
 		return nil
@@ -1974,7 +1974,7 @@ func TestOverrideLastEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc3))
@@ -2021,7 +2021,7 @@ func TestOverrideFirstEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc3))
@@ -2073,7 +2073,7 @@ func TestOverrideMiddleEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc12))
@@ -2126,7 +2126,7 @@ func TestManyOverrides(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc1))
@@ -2179,12 +2179,12 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc12))
 		requireT.NoError(tx.Set(acc2))
@@ -2231,11 +2231,11 @@ func TestSetEmptyTx(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc2))
 		return nil
@@ -2281,12 +2281,12 @@ func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc12))
 		requireT.NoError(tx.SoftSet(acc2))
@@ -2333,11 +2333,11 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.SoftSet(acc2))
 		return nil
@@ -2378,14 +2378,14 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
 
 	acc2.Revision++
 
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.ErrorIs(tx.Set(acc3), ErrTxTooBig)
 
 		accAfter, exists := Get[entities.Account](tx.View(), accID)
@@ -2435,7 +2435,7 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(e1))
 		requireT.NoError(tx.Set(e2))
 		return nil
@@ -2468,7 +2468,7 @@ func TestIgnoredField(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx *Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
 		requireT.NoError(tx.Set(e))
 		return nil
 	}))

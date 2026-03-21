@@ -25,6 +25,12 @@ import (
 )
 
 var (
+	_ ReadClient  = &Client{}
+	_ WriteClient = &Client{}
+	_ Transactor  = &transactor{}
+)
+
+var (
 	// ErrTxTooBig means that adding new entity to transaction caused it to exceed the max size limit.
 	ErrTxTooBig = errors.New("transaction exceeds the max size limit")
 
@@ -296,10 +302,7 @@ func (c *Client) Run(ctx context.Context) error {
 					if c.config.TriggerFunc != nil {
 						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
 							for updatedIDs := range triggerCh {
-								if err := c.config.TriggerFunc(ctx, &View{
-									tx:     c.db.Txn(false),
-									byType: c.byType,
-								}, updatedIDs); err != nil {
+								if err := c.config.TriggerFunc(ctx, c.View(), updatedIDs); err != nil {
 									return err
 								}
 							}
@@ -485,7 +488,14 @@ type txEnvelope struct {
 
 // Transactor builds and broadcasts transactions.
 type Transactor interface {
-	Tx(ctx context.Context, txF func(tx *Tx) error) error
+	Tx(ctx context.Context, txF func(tx Tx) error) error
+}
+
+// Tx prepares transaction.
+type Tx interface {
+	View() *View
+	Set(o any) error
+	SoftSet(o any) error
 }
 
 type transactor struct {
@@ -496,7 +506,7 @@ type transactor struct {
 }
 
 // Tx creates and broadcasts transaction to the magma network.
-func (t *transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
+func (t *transactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	tx, usedSize, err := t.prepareTx(txF)
 	if err != nil {
 		return err
@@ -511,7 +521,7 @@ func (t *transactor) Tx(ctx context.Context, txF func(tx *Tx) error) error {
 	return err
 }
 
-func (t *transactor) prepareTx(txF func(tx *Tx) error) (retTx txEnvelope, retUsedSize uint64, retErr error) {
+func (t *transactor) prepareTx(txF func(tx Tx) error) (retTx txEnvelope, retUsedSize uint64, retErr error) {
 	defer clear(t.changes)
 
 	t.client.db.AwaitTxn()
@@ -537,7 +547,7 @@ func (t *transactor) prepareTx(txF func(tx *Tx) error) (retTx txEnvelope, retUse
 	}
 	metaSize += metaMsgSize
 
-	pendingTx := &Tx{
+	pendingTx := &tx{
 		// By taking a snapshot, we don't block the main DB from processing incoming changes.
 		db:     t.client.db.Snapshot(),
 		client: t.client,
