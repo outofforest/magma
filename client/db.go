@@ -66,7 +66,7 @@ func first[T any](v *View, index uint64, args ...any) (T, bool) {
 		panic(errors.Errorf("type %s not defined", t))
 	}
 
-	o, err := v.tx.First(typeDef.TableID, index, args...)
+	o, err := memdb.First[T](v.tx, typeDef.TableID, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
@@ -75,7 +75,7 @@ func first[T any](v *View, index uint64, args ...any) (T, bool) {
 		var o T
 		return o, false
 	}
-	return o.Elem().Interface().(T), true
+	return *o, true
 }
 
 func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
@@ -85,14 +85,14 @@ func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
 		panic(errors.Errorf("type %s not defined", t))
 	}
 
-	it, err := v.tx.Iterator(typeDef.TableID, index, args...)
+	it, err := memdb.Iterator[T](v.tx, typeDef.TableID, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
 	return func(yield func(e T) bool) {
 		for e := it.Next(); e != nil; e = it.Next() {
-			if !yield(e.Elem().Interface().(T)) {
+			if !yield(*e) {
 				return
 			}
 		}
@@ -106,7 +106,7 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 		panic(errors.Errorf("type %s not defined", t))
 	}
 
-	it, err := v.tx.Iterator(typeDef.TableID, index, args...)
+	it, err := memdb.Iterator[T](v.tx, typeDef.TableID, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
@@ -117,7 +117,7 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 			var o T
 			return o, false
 		}
-		return e.Elem().Interface().(T), true
+		return *e, true
 	}
 }
 
@@ -276,32 +276,25 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	return nil
 }
 
-func insert(
+func insert[T any](
 	tx *memdb.Txn,
 	byType map[reflect.Type]typeInfo,
-	o any,
-) (memdb.ID, typeInfo, *reflect.Value, *reflect.Value) {
-	oValue := reflect.ValueOf(o)
-	if oValue.Kind() == reflect.Ptr {
-		panic(errors.New("object must not be a pointer"))
-	}
-
-	oType := oValue.Type()
+	o T,
+) (memdb.ID, typeInfo, *T, *T) {
+	oType := reflect.TypeFor[T]()
 	typeDef, exists := byType[oType]
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
 	}
 
-	oPtrValue := reflect.New(oType)
-	oPtrValue.Elem().Set(oValue)
-	id := memdb.ID(unsafeIDFromEntity(oPtrValue))
+	id := memdb.ID(unsafeIDFromEntity(&o))
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
-	old, err := tx.Insert(typeDef.TableID, &oPtrValue)
+	old, err := memdb.Insert(tx, typeDef.TableID, &o)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	return id, typeDef, old, &oPtrValue
+	return id, typeDef, old, &o
 }

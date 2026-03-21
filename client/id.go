@@ -1,7 +1,6 @@
 package client
 
 import (
-	"reflect"
 	"unsafe"
 
 	"github.com/outofforest/magma/client/wire"
@@ -11,35 +10,35 @@ import (
 
 const revisionLength = 8
 
-func setIDInEntity(eValue reflect.Value, id *memdb.ID) {
-	copy(unsafeIDFromEntity(eValue), unsafe.Slice((*byte)(unsafe.Pointer(id)), memdb.IDLength))
+func setIDInEntity[T any](o *T, id *memdb.ID) {
+	copy(unsafeIDFromEntity(o), unsafe.Slice((*byte)(unsafe.Pointer(id)), memdb.IDLength))
 }
 
-func unsafeIDFromEntity(eValue reflect.Value) []byte {
-	return unsafe.Slice((*byte)(eValue.UnsafePointer()), memdb.IDLength)
+func unsafeIDFromEntity[T any](o *T) []byte {
+	return unsafe.Slice((*byte)(unsafe.Pointer(o)), memdb.IDLength)
 }
 
-func setRevisionInEntity(eValue reflect.Value, revision *types.Revision) {
+func setRevisionInEntity[T any](o *T, revision *types.Revision) {
 	copy(
-		unsafe.Slice((*byte)(unsafe.Pointer(uintptr(eValue.UnsafePointer())+memdb.IDLength)), revisionLength),
+		unsafe.Slice((*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(o))+memdb.IDLength)), revisionLength),
 		unsafe.Slice((*byte)(unsafe.Pointer(revision)), revisionLength),
 	)
 }
 
-func revisionFromEntity(eValue reflect.Value) types.Revision {
-	return *(*types.Revision)(unsafe.Pointer(uintptr(eValue.UnsafePointer()) + memdb.IDLength))
+func revisionFromEntity[T any](o *T) types.Revision {
+	return *(*types.Revision)(unsafe.Pointer(uintptr(unsafe.Pointer(o)) + memdb.IDLength))
 }
 
-func copyMetaFromEntity(meta *wire.EntityMetadata, eValue reflect.Value) {
+func copyMetaFromEntity[T any](meta *wire.EntityMetadata, o *T) {
 	copy(
 		unsafe.Slice((*byte)(unsafe.Pointer(meta)), memdb.IDLength+revisionLength),
-		unsafe.Slice((*byte)(eValue.UnsafePointer()), memdb.IDLength+revisionLength),
+		unsafe.Slice((*byte)(unsafe.Pointer(o)), memdb.IDLength+revisionLength),
 	)
 }
 
-func copyMetaToEntity(eValue reflect.Value, meta *wire.EntityMetadata) {
+func copyMetaToEntity[T any](o *T, meta *wire.EntityMetadata) {
 	copy(
-		unsafe.Slice((*byte)(eValue.UnsafePointer()), memdb.IDLength+revisionLength),
+		unsafe.Slice((*byte)(unsafe.Pointer(o)), memdb.IDLength+revisionLength),
 		unsafe.Slice((*byte)(unsafe.Pointer(meta)), memdb.IDLength+revisionLength),
 	)
 }
