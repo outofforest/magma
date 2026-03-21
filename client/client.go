@@ -495,8 +495,6 @@ type Transactor interface {
 // Tx prepares transaction.
 type Tx interface {
 	View() *View
-	Set(o any) error
-	SoftSet(o any) error
 }
 
 type transactor struct {

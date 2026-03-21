@@ -122,7 +122,7 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 }
 
 type change struct {
-	OldValue   *reflect.Value
+	OldValue   any
 	StartIndex uint64
 	EndIndex   uint64
 	Added      bool
@@ -153,8 +153,8 @@ func (tx *tx) View() *View {
 // Set sets object in transaction. This function includes the object in tx even if patch is empty.
 // This is done to detect possible conflicts with other transactions. Use this function if atomicity
 // is required (most of the cases). Compare to SoftSet below.
-func (tx *tx) Set(o any) error {
-	return tx.set(o, false)
+func Set[T any](tx *tx, o T) error {
+	return set(tx, o, false)
 }
 
 // SoftSet sets object in transaction. It does it only if the object patch is not empty.
@@ -163,11 +163,11 @@ func (tx *tx) Set(o any) error {
 // else conflicting transaction is created. This conflict is not detected because we haven't included object
 // with incremented revision.
 // Good scenario to use SoftSet is loading batches of unrelated object where conflicts don't matter.
-func (tx *tx) SoftSet(o any) error {
-	return tx.set(o, true)
+func SoftSet[T any](tx *tx, o T) error {
+	return set(tx, o, true)
 }
 
-func (tx *tx) set(o any, isSoftSet bool) error {
+func set[T any](tx *tx, o T, isSoftSet bool) error {
 	dbTx := tx.db.Txn(true)
 
 	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.byType, o)
@@ -212,18 +212,19 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 		}
 	}
 
-	unsafeID := unsafeIDFromEntity(*newValue)
-	var oldV reflect.Value
+	unsafeID := unsafeIDFromEntity(newValue)
+	var oldV *T
 	var isNeeded bool
 	if chg.OldValue == nil {
-		oldV = reflect.New(typeDef.Type)
+		oldV = new(T)
+		// FIXME (wojciech): Is it needed?
 		setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 		isNeeded = true
 	} else {
-		oldV = *chg.OldValue
+		oldV = chg.OldValue.(*T)
 
 		var err error
-		isNeeded, err = tx.client.config.Marshaller.IsPatchNeeded(newValue.Interface(), oldV.Interface())
+		isNeeded, err = tx.client.config.Marshaller.IsPatchNeeded(newValue, oldV)
 		if err != nil {
 			return err
 		}
@@ -252,7 +253,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 
 	chg.EndIndex += entitySize
 
-	_, msgSize, err := tx.client.config.Marshaller.MakePatch(newValue.Interface(), oldV.Interface(), tx.buf[chg.EndIndex:])
+	_, msgSize, err := tx.client.config.Marshaller.MakePatch(newValue, oldV, tx.buf[chg.EndIndex:])
 
 	switch {
 	case err == nil:
