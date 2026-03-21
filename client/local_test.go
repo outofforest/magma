@@ -170,6 +170,40 @@ func TestLocalClientTriggerReceivesIDs(t *testing.T) {
 	}, lo.Keys(receivedIDs))
 }
 
+func TestLocalClientTriggerViewUpdateIsLocal(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+
+	c, err := NewLocalClient(LocalConfig{
+		Types: []reflect.Type{
+			reflect.TypeFor[localEntity1](),
+			reflect.TypeFor[localEntity2](),
+		},
+		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
+			e := e1
+			e.Value = "str2"
+			v.Set(e)
+
+			e2, exists := Get[localEntity1](v, e.ID)
+			requireT.True(exists)
+			requireT.Equal(e, e2)
+
+			return nil
+		},
+	})
+	requireT.NoError(err)
+	requireT.NoError(c.WarmUp(ctx))
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+		return tx.Set(e1)
+	}))
+
+	e2, exists := Get[localEntity1](c.View(), e1.ID)
+	requireT.True(exists)
+	requireT.Equal(e1, e2)
+}
+
 func TestLocalClientTriggerErr(t *testing.T) {
 	t.Parallel()
 
