@@ -33,8 +33,13 @@ type LocalClient struct {
 // NewLocalClient creates static client.
 func NewLocalClient(config LocalConfig) (*LocalClient, error) {
 	byType := map[reflect.Type]typeInfo{}
-	dbIndexes := [][]memdb.Index{}
-	for _, t := range config.Types {
+
+	dbConfig := memdb.Config{
+		Entities: config.Types,
+		Indices:  config.Indices,
+	}
+
+	for _, t := range dbConfig.Entities {
 		if _, exists := byType[t]; exists {
 			continue
 		}
@@ -50,11 +55,9 @@ func NewLocalClient(config LocalConfig) (*LocalClient, error) {
 			TableID: uint64(len(byType)),
 		}
 		byType[t] = info
-
-		dbIndexes = buildDBIndexesForType(dbIndexes, config.Indices, t)
 	}
 
-	db, err := memdb.NewMemDB(dbIndexes)
+	db, err := memdb.NewMemDB(dbConfig)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -92,29 +95,23 @@ type localTransactor struct {
 
 func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	pendingTx := &localTx{
-		client:  t.c,
-		db:      t.c.db.Snapshot(),
-		updates: map[any]any{},
+		client:     t.c,
+		txn:        t.c.db.Txn(true),
+		updatedIDs: map[any]struct{}{},
 	}
 
 	if err := txF(pendingTx); err != nil {
 		return err
 	}
 
-	if len(pendingTx.updates) == 0 {
+	if len(pendingTx.updatedIDs) == 0 {
 		return nil
 	}
 
-	ids := map[any]struct{}{}
-	txn := t.c.db.Txn(true)
-	for id, o := range pendingTx.updates {
-		insert(txn, t.c.byType, o)
-		ids[id] = struct{}{}
-	}
-	txn.Commit()
+	pendingTx.txn.Commit()
 
 	if t.c.config.TriggerFunc != nil {
-		if err := t.c.config.TriggerFunc(ctx, pendingTx.View(), ids); err != nil {
+		if err := t.c.config.TriggerFunc(ctx, pendingTx.View(), pendingTx.updatedIDs); err != nil {
 			return err
 		}
 	}
@@ -123,23 +120,21 @@ func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 }
 
 type localTx struct {
-	client  *LocalClient
-	db      *memdb.MemDB
-	updates map[any]any
+	client     *LocalClient
+	txn        *memdb.Txn
+	updatedIDs map[any]struct{}
 }
 
 func (tx *localTx) View() *View {
 	return &View{
-		tx:     tx.db.Txn(true),
+		tx:     tx.txn.Txn(true),
 		byType: tx.client.byType,
 	}
 }
 
 func (tx *localTx) Set(o any) error {
-	dbTx := tx.db.Txn(true)
-	id, typeDef, _, _ := insert(dbTx, tx.client.byType, o)
-	tx.updates[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = o
-	dbTx.Commit()
+	id, typeDef, _, _ := insert(tx.txn, tx.client.byType, o)
+	tx.updatedIDs[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = struct{}{}
 	return nil
 }
 
