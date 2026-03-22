@@ -75,13 +75,11 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("no object types provided")
 	}
 
-	dbIndexes := make([][]memdb.Index, 0, len(objectTypes))
+	dbConfig := buildDBConfig(objectTypes, config.Indices)
 
 	byID := map[uint64]typeInfo{}
 	byType := map[reflect.Type]typeInfo{}
-	for tableID, o := range objectTypes {
-		t := reflect.TypeOf(o)
-
+	for tableID, t := range dbConfig.Entities {
 		idFType, err := validateType(t)
 		if err != nil {
 			return nil, err
@@ -104,11 +102,9 @@ func New(config Config) (*Client, error) {
 		}
 		byID[msgID] = info
 		byType[t] = info
-
-		dbIndexes = buildDBIndexesForType(dbIndexes, config.Indices, t)
 	}
 
-	db, err := memdb.NewMemDB(dbIndexes)
+	db, err := memdb.NewMemDB(dbConfig)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -141,11 +137,6 @@ func New(config Config) (*Client, error) {
 	}, nil
 }
 
-type pendingEntity struct {
-	TableID uint64
-	Entity  *reflect.Value
-}
-
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
 	config Config
@@ -168,8 +159,6 @@ type Client struct {
 
 	mu         sync.Mutex
 	awaitedTxs map[memdb.ID]chan<- any
-
-	pendingEntities []pendingEntity
 }
 
 type trigger struct {
@@ -430,7 +419,7 @@ func (c *Client) storeTx(
 	txRaw []byte,
 	updatedIDs map[any]struct{},
 ) (retErr error) {
-	c.pendingEntities = c.pendingEntities[:0]
+	dbTx := tx.Txn(true)
 	for len(txRaw) > 0 {
 		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
 		if err != nil {
@@ -444,21 +433,20 @@ func (c *Client) storeTx(
 			return errors.Errorf("unknown type %s", typeDef.Type)
 		}
 
-		o, err := tx.First(typeDef.TableID, memdb.IDIndexID, entityMeta.ID)
+		pointer, err := dbTx.First(typeDef.TableID, memdb.IDIndexID, entityMeta.ID)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		oV := reflect.New(typeDef.Type)
-		if o == nil {
-			copyMetaToEntity(oV, entityMeta)
+		if pointer == defaultPointer {
+			copyMetaToEntity(oV.UnsafePointer(), entityMeta)
 		} else {
-			oV2 := *o
-			if entityMeta.Revision <= revisionFromEntity(oV2) {
+			if entityMeta.Revision <= revisionFromEntity(pointer) {
 				return ErrTxOutdatedTx
 			}
-			oV.Elem().Set(oV2.Elem())
-			setRevisionInEntity(oV, &entityMeta.Revision)
+			oV.Elem().Set(reflect.NewAt(typeDef.Type, pointer).Elem())
+			setRevisionInEntity(oV.UnsafePointer(), &entityMeta.Revision)
 		}
 
 		msgSize, err := c.config.Marshaller.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
@@ -466,16 +454,15 @@ func (c *Client) storeTx(
 			return err
 		}
 
-		c.pendingEntities = append(c.pendingEntities, pendingEntity{TableID: typeDef.TableID, Entity: &oV})
+		if _, err := dbTx.Insert(typeDef.TableID, oV.UnsafePointer()); err != nil {
+			return errors.WithStack(err)
+		}
+
 		txRaw = txRaw[entityMetaSize+msgSize:]
 		updatedIDs[reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType).Interface()] = struct{}{}
 	}
 
-	for _, e := range c.pendingEntities {
-		if _, err := tx.Insert(e.TableID, e.Entity); err != nil {
-			return errors.WithStack(err)
-		}
-	}
+	dbTx.Commit()
 
 	return nil
 }
@@ -548,7 +535,7 @@ func (t *transactor) prepareTx(txF func(tx Tx) error) (retTx txEnvelope, retUsed
 
 	pendingTx := &tx{
 		// By taking a snapshot, we don't block the main DB from processing incoming changes.
-		db:     t.client.db.Snapshot(),
+		txn:    t.client.db.Txn(false),
 		client: t.client,
 		// Checksum size is subtracted here because later we receive the transaction back with checksum included,
 		// so the checksum must fit in max message size.
@@ -673,12 +660,13 @@ func validateType(t reflect.Type) (reflect.Type, error) {
 	return idF.Type, nil
 }
 
-func buildDBIndexesForType(dbIndexes [][]memdb.Index, indices []memdb.Index, t reflect.Type) [][]memdb.Index {
-	table := []memdb.Index{}
-	for _, index := range indices {
-		if index.Type() == t {
-			table = append(table, index)
-		}
+func buildDBConfig(entities []any, indices []memdb.Index) memdb.Config {
+	cfg := memdb.Config{
+		Entities: make([]reflect.Type, 0, len(entities)),
+		Indices:  indices,
 	}
-	return append(dbIndexes, table)
+	for _, e := range entities {
+		cfg.Entities = append(cfg.Entities, reflect.TypeOf(e))
+	}
+	return cfg
 }

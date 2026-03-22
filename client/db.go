@@ -11,6 +11,8 @@ import (
 	"github.com/outofforest/proton"
 )
 
+var defaultPointer unsafe.Pointer
+
 var _ Tx = &tx{}
 
 var emptyID memdb.ID
@@ -66,16 +68,16 @@ func first[T any](v *View, index uint64, args ...any) (T, bool) {
 		panic(errors.Errorf("type %s not defined", t))
 	}
 
-	o, err := v.tx.First(typeDef.TableID, index, args...)
+	pointer, err := v.tx.First(typeDef.TableID, index, args...)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	if o == nil {
+	if pointer == defaultPointer {
 		var o T
 		return o, false
 	}
-	return o.Elem().Interface().(T), true
+	return *(*T)(pointer), true
 }
 
 func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
@@ -91,8 +93,8 @@ func iterate[T any](v *View, index uint64, args ...any) func(func(T) bool) {
 	}
 
 	return func(yield func(e T) bool) {
-		for e := it.Next(); e != nil; e = it.Next() {
-			if !yield(e.Elem().Interface().(T)) {
+		for pointer := it.Next(); pointer != defaultPointer; pointer = it.Next() {
+			if !yield(*(*T)(pointer)) {
 				return
 			}
 		}
@@ -112,17 +114,17 @@ func iterator[T any](v *View, index uint64, args ...any) func() (T, bool) {
 	}
 
 	return func() (T, bool) {
-		e := it.Next()
-		if e == nil {
+		pointer := it.Next()
+		if pointer == defaultPointer {
 			var o T
 			return o, false
 		}
-		return e.Elem().Interface().(T), true
+		return *(*T)(pointer), true
 	}
 }
 
 type change struct {
-	OldValue   *reflect.Value
+	OldValue   unsafe.Pointer
 	StartIndex uint64
 	EndIndex   uint64
 	Added      bool
@@ -135,7 +137,7 @@ type changeID struct {
 
 type tx struct {
 	client       *Client
-	db           *memdb.MemDB
+	txn          *memdb.Txn
 	buf          []byte
 	size         uint64
 	numOfObjects uint64
@@ -145,7 +147,7 @@ type tx struct {
 // View returns non-persistent view of the DB.
 func (tx *tx) View() *View {
 	return &View{
-		tx:     tx.db.Txn(true),
+		tx:     tx.txn.Txn(true),
 		byType: tx.client.byType,
 	}
 }
@@ -168,7 +170,7 @@ func (tx *tx) SoftSet(o any) error {
 }
 
 func (tx *tx) set(o any, isSoftSet bool) error {
-	dbTx := tx.db.Txn(true)
+	dbTx := tx.txn.Txn(true)
 
 	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.byType, o)
 
@@ -212,18 +214,19 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 		}
 	}
 
-	unsafeID := unsafeIDFromEntity(*newValue)
+	newValueRef := reflect.NewAt(typeDef.Type, newValue)
+	unsafeID := unsafeIDFromEntity(newValue)
 	var oldV reflect.Value
 	var isNeeded bool
-	if chg.OldValue == nil {
+	if chg.OldValue == defaultPointer {
 		oldV = reflect.New(typeDef.Type)
-		setIDInEntity(oldV, (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
+		setIDInEntity(oldV.UnsafePointer(), (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 		isNeeded = true
 	} else {
-		oldV = *chg.OldValue
+		oldV = reflect.NewAt(typeDef.Type, chg.OldValue)
 
 		var err error
-		isNeeded, err = tx.client.config.Marshaller.IsPatchNeeded(newValue.Interface(), oldV.Interface())
+		isNeeded, err = tx.client.config.Marshaller.IsPatchNeeded(newValueRef.Interface(), oldV.Interface())
 		if err != nil {
 			return err
 		}
@@ -235,7 +238,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	entityMeta := &wire.EntityMetadata{
 		MessageID: typeDef.MsgID,
 	}
-	copyMetaFromEntity(entityMeta, oldV)
+	copyMetaFromEntity(entityMeta, oldV.UnsafePointer())
 	entityMeta.Revision++
 
 	chg.StartIndex = tx.size
@@ -252,7 +255,8 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 
 	chg.EndIndex += entitySize
 
-	_, msgSize, err := tx.client.config.Marshaller.MakePatch(newValue.Interface(), oldV.Interface(), tx.buf[chg.EndIndex:])
+	_, msgSize, err := tx.client.config.Marshaller.MakePatch(newValueRef.Interface(), oldV.Interface(),
+		tx.buf[chg.EndIndex:])
 
 	switch {
 	case err == nil:
@@ -280,7 +284,7 @@ func insert(
 	tx *memdb.Txn,
 	byType map[reflect.Type]typeInfo,
 	o any,
-) (memdb.ID, typeInfo, *reflect.Value, *reflect.Value) {
+) (memdb.ID, typeInfo, unsafe.Pointer, unsafe.Pointer) {
 	oValue := reflect.ValueOf(o)
 	if oValue.Kind() == reflect.Ptr {
 		panic(errors.New("object must not be a pointer"))
@@ -294,14 +298,14 @@ func insert(
 
 	oPtrValue := reflect.New(oType)
 	oPtrValue.Elem().Set(oValue)
-	id := memdb.ID(unsafeIDFromEntity(oPtrValue))
+	id := memdb.ID(unsafeIDFromEntity(oPtrValue.UnsafePointer()))
 	if id == emptyID {
 		panic(errors.Errorf("id is empty"))
 	}
-	old, err := tx.Insert(typeDef.TableID, &oPtrValue)
+	old, err := tx.Insert(typeDef.TableID, oPtrValue.UnsafePointer())
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
 
-	return id, typeDef, old, &oPtrValue
+	return id, typeDef, old, oPtrValue.UnsafePointer()
 }

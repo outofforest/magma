@@ -797,18 +797,25 @@ func TestOutdatedTx(t *testing.T) {
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c1, c2)
 
-	accountID := memdb.NewID[entities.AccountID]()
+	accountID1 := memdb.NewID[entities.AccountID]()
+	accountID2 := memdb.NewID[entities.AccountID]()
 
 	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx client.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
-			ID:        accountID,
+			ID:        accountID2,
+			FirstName: "ShouldNotPassFirstName",
+			LastName:  "ShouldNotPassLastName",
+		}))
+
+		requireT.NoError(tx.Set(entities.Account{
+			ID:        accountID1,
 			FirstName: "FirstName1",
 			LastName:  "LastName1",
 		}))
 
 		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx client.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{
-				ID:        accountID,
+				ID:        accountID1,
 				FirstName: "FirstName2",
 				LastName:  "LastName2",
 			}))
@@ -818,23 +825,31 @@ func TestOutdatedTx(t *testing.T) {
 		return nil
 	}), client.ErrTxOutdatedTx)
 
-	acc, exists := client.Get[entities.Account](c1.View(), accountID)
+	v := c1.View()
+	acc, exists := client.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
-		ID:        accountID,
+		ID:        accountID1,
 		Revision:  1,
 		FirstName: "FirstName2",
 		LastName:  "LastName2",
 	}, acc)
 
-	acc, exists = client.Get[entities.Account](c2.View(), accountID)
+	_, exists = client.Get[entities.Account](v, accountID2)
+	requireT.False(exists)
+
+	v = c2.View()
+	acc, exists = client.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
-		ID:        accountID,
+		ID:        accountID1,
 		Revision:  1,
 		FirstName: "FirstName2",
 		LastName:  "LastName2",
 	}, acc)
+
+	_, exists = client.Get[entities.Account](v, accountID2)
+	requireT.False(exists)
 }
 
 func TestEmptyTx(t *testing.T) {
