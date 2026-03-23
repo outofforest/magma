@@ -44,7 +44,7 @@ func NewLocalClient(config LocalConfig) (*LocalClient, error) {
 			continue
 		}
 
-		idFType, err := validateType(t)
+		idFType, err := validateType(t, false)
 		if err != nil {
 			return nil, err
 		}

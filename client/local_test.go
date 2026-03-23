@@ -20,19 +20,19 @@ type (
 	staticID2 memdb.ID
 
 	localEntity1 struct {
-		ID       staticID1
-		Revision magmatypes.Revision
-		Value    string
+		ID    staticID1
+		Value string
 	}
 
 	localEntity2 struct {
-		ID       staticID2
+		ID staticID2
+		// Revision is here to verify that types with Revision work too.
 		Revision magmatypes.Revision
 		Value    uint64
 	}
 
 	localInvalid struct {
-		ID    staticID1
+		// ID is missing so using this type should give error.
 		Value uint64
 	}
 )
@@ -290,7 +290,7 @@ func TestLocalClientInvalidEntityErr(t *testing.T) {
 	requireT.NoError(c.WarmUp(ctx))
 	requireT.Panics(func() {
 		_ = c.NewTransactor().Tx(ctx, func(tx Tx) error {
-			return tx.Set(localInvalid{ID: memdb.NewID[staticID1]()})
+			return tx.Set(localInvalid{})
 		})
 	})
 }
