@@ -80,7 +80,7 @@ func New(config Config) (*Client, error) {
 	byID := map[uint64]typeInfo{}
 	byType := map[reflect.Type]typeInfo{}
 	for tableID, t := range dbConfig.Entities {
-		idFType, err := validateType(t)
+		idFType, err := validateType(t, true)
 		if err != nil {
 			return nil, err
 		}
@@ -635,7 +635,7 @@ type typeInfo struct {
 
 var revisionType = reflect.TypeFor[types.Revision]()
 
-func validateType(t reflect.Type) (reflect.Type, error) {
+func validateType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error) {
 	idF, exists := t.FieldByName("ID")
 	if !exists {
 		return nil, errors.Errorf("object %s has no ID field", t)
@@ -646,15 +646,18 @@ func validateType(t reflect.Type) (reflect.Type, error) {
 	if idF.Index[0] != 0 || idF.Offset != 0 {
 		return nil, errors.Errorf("id must be the first field in type %s", t)
 	}
-	revisionF, exists := t.FieldByName("Revision")
-	if !exists {
-		return nil, errors.Errorf("object %s has no Revision field", t)
-	}
-	if revisionF.Type != revisionType {
-		return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
-	}
-	if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
-		return nil, errors.Errorf("revision must be the second field in type %d", t)
+
+	if isRevisionRequired {
+		revisionF, exists := t.FieldByName("Revision")
+		if !exists {
+			return nil, errors.Errorf("object %s has no Revision field", t)
+		}
+		if revisionF.Type != revisionType {
+			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
+		}
+		if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
+			return nil, errors.Errorf("revision must be the second field in type %d", t)
+		}
 	}
 
 	return idF.Type, nil
