@@ -24,8 +24,8 @@ github.com/outofforest/logger v0.7.0 h1:3dI18FbGBoOWG6abzKVd/cEluuGKD1g7tZKH7X2m
 github.com/outofforest/logger v0.7.0/go.mod h1:TE3Y0iskOixEC3P+V8I4sfsPKjyZgSt4/nqXiLKBdws=
 github.com/outofforest/mass v0.2.1 h1:oIzOnoTJqN8eVXo5jxk1htOhW7bL7hy2JHrvnTsfvtU=
 github.com/outofforest/mass v0.2.1/go.mod h1:rqr19KwYSKncmsmZCmMatTsg8pI+ElxerH9v1SGU1CQ=
-github.com/outofforest/memdb v1.19.0 h1:zF0giGw3+QEbXsRDx0GsyNUu2DSDF/kMAu5z83lHqe8=
-github.com/outofforest/memdb v1.19.0/go.mod h1:eXg4NSFybbdFqVPbY8cSfn8mK2OTYsAQP6oihDaGhtk=
+github.com/outofforest/memdb v1.19.1 h1:fAPuwkVLV+2N5q3F8VKYU88LaPUh7GZYoTc1ntrLyGw=
+github.com/outofforest/memdb v1.19.1/go.mod h1:eXg4NSFybbdFqVPbY8cSfn8mK2OTYsAQP6oihDaGhtk=
 github.com/outofforest/parallel v0.2.3 h1:DRIgHr7XTL4LLgsTqrj041kulv4ajtbCkRbkOG5psWY=
 github.com/outofforest/parallel v0.2.3/go.mod h1:cu210xIjJtOMXR2ERzEcNA2kr0Z0xfZjSKw2jTxAQ2E=
 github.com/outofforest/proton v0.21.0 h1:oHPn4MZN53MDni6fa6em4T7+f79iAYkesJtQIC04Mx0=
