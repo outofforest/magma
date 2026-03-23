@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/outofforest/logger v0.7.0
-	github.com/outofforest/memdb v1.20.0
+	github.com/outofforest/memdb v1.20.1
 	github.com/outofforest/parallel v0.2.3
 	github.com/outofforest/proton v0.21.0
 	github.com/outofforest/qa v0.3.0

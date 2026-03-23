@@ -1912,6 +1912,180 @@ func TestReverseIndex(t *testing.T) {
 	requireT.False(ok)
 }
 
+func TestFuncIndex(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	indexName := indices.NewFuncIndex2(func(acc *entities.Account) (*string, *string) {
+		return &acc.LastName, &acc.FirstName
+	})
+
+	c := NewTestClient(t, withIndices(config, indexName))
+
+	accs := []entities.Account{
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First3",
+			LastName:  "Last2",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First2",
+			LastName:  "Last2",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First1",
+			LastName:  "Last1",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "First",
+			LastName:  "Last",
+		},
+		{
+			ID:        memdb.NewID[entities.AccountID](),
+			FirstName: "st",
+			LastName:  "La",
+		},
+	}
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+		for _, acc := range accs {
+			requireT.NoError(tx.Set(acc))
+		}
+		return nil
+	}))
+
+	for i := range accs {
+		accs[i].Revision = 1
+	}
+
+	v := c.View()
+	acc, exists := First[entities.Account](v, indexName)
+	requireT.True(exists)
+	requireT.Equal(accs[4], acc)
+
+	acc, exists = First[entities.Account](v, indexName, "Last2")
+	requireT.True(exists)
+	requireT.Equal(accs[1], acc)
+
+	acc, exists = First[entities.Account](v, indexName, "Last")
+	requireT.True(exists)
+	requireT.Equal(accs[3], acc)
+
+	acc, exists = First[entities.Account](v, indexName, "La")
+	requireT.True(exists)
+	requireT.Equal(accs[4], acc)
+
+	_, exists = First[entities.Account](v, indexName, "Las")
+	requireT.False(exists)
+
+	acc, exists = First[entities.Account](v, indexName, "Last2", "First3")
+	requireT.True(exists)
+	requireT.Equal(accs[0], acc)
+
+	_, exists = First[entities.Account](v, indexName, "Last2", "Fir")
+	requireT.False(exists)
+
+	i := 0
+	for acc := range Iterate[entities.Account](v, indexName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[4], acc)
+		case 1:
+			requireT.Equal(accs[3], acc)
+		case 2:
+			requireT.Equal(accs[2], acc)
+		case 3:
+			requireT.Equal(accs[1], acc)
+		case 4:
+			requireT.Equal(accs[0], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+	requireT.Equal(5, i)
+
+	i = 0
+	for acc := range Iterate[entities.Account](v, indexName, "Last2") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		case 1:
+			requireT.Equal(accs[0], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+	requireT.Equal(2, i)
+
+	i = 0
+	for acc := range Iterate[entities.Account](v, indexName, "Last2", "First2") {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+	requireT.Equal(1, i)
+
+	for range Iterate[entities.Account](v, indexName, "Las") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	for range Iterate[entities.Account](v, indexName, "Last2", "Fir") {
+		requireT.Fail("nothing should be returned")
+	}
+
+	it := Iterator[entities.Account](v, indexName)
+	acc, ok := it()
+	requireT.True(ok)
+	requireT.Equal(accs[4], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[3], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[2], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Account](v, indexName, "Last2")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[1], acc)
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Account](v, indexName, "Last2", "First3")
+	acc, ok = it()
+	requireT.True(ok)
+	requireT.Equal(accs[0], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	it = Iterator[entities.Account](v, indexName, "Las")
+	_, ok = it()
+	requireT.False(ok)
+}
+
 func TestOverrideSingleNonExistingEntity(t *testing.T) {
 	t.Parallel()
 
