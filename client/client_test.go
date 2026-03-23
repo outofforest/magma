@@ -50,6 +50,10 @@ func TestEntityCreation(t *testing.T) {
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
+		accP, exists := GetPointer[entities.Account](tx.View(), acc1.ID)
+		requireT.True(exists)
+		requireT.Equal(acc1, *accP)
+
 		return nil
 	}))
 
@@ -211,6 +215,10 @@ func TestFieldIndexString(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
+	accP, exists := FirstPointer[entities.Account](v, indexLastName)
+	requireT.True(exists)
+	requireT.Equal(accs[1], *accP)
+
 	acc, exists = First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
@@ -227,6 +235,22 @@ func TestFieldIndexString(t *testing.T) {
 			requireT.Equal(accs[0], acc)
 		case 2:
 			requireT.Equal(accs[2], acc)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+	requireT.Equal(3, i)
+
+	i = 0
+	for accP := range IteratePointers[entities.Account](v, indexLastName) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], *accP)
+		case 1:
+			requireT.Equal(accs[0], *accP)
+		case 2:
+			requireT.Equal(accs[2], *accP)
 		default:
 			requireT.Fail("wrong index")
 		}
@@ -260,6 +284,19 @@ func TestFieldIndexString(t *testing.T) {
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
+	_, ok = it()
+	requireT.False(ok)
+
+	itP := IteratorPointers[entities.Account](v, indexLastName)
+	accP, ok = itP()
+	requireT.True(ok)
+	requireT.Equal(accs[1], *accP)
+	accP, ok = itP()
+	requireT.True(ok)
+	requireT.Equal(accs[0], *accP)
+	accP, ok = itP()
+	requireT.True(ok)
+	requireT.Equal(accs[2], *accP)
 	_, ok = it()
 	requireT.False(ok)
 

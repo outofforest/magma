@@ -64,11 +64,22 @@ func TestIDIndex(t *testing.T) {
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
+	accP, exists := GetPointer[entities.Account](v, id0)
+	requireT.True(exists)
+	requireT.Equal(accs[0], *accP)
+
 	acc, exists = Get[entities.Account](v, id1)
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
+	accP, exists = GetPointer[entities.Account](v, id1)
+	requireT.True(exists)
+	requireT.Equal(accs[1], *accP)
+
 	_, exists = Get[entities.Account](v, entities.AccountID{0x09})
+	requireT.False(exists)
+
+	_, exists = GetPointer[entities.Account](v, entities.AccountID{0x09})
 	requireT.False(exists)
 
 	i := 0
@@ -84,6 +95,19 @@ func TestIDIndex(t *testing.T) {
 		i++
 	}
 
+	i = 0
+	for accP := range AllPointers[entities.Account](v) {
+		switch i {
+		case 0:
+			requireT.Equal(accs[1], *accP)
+		case 1:
+			requireT.Equal(accs[0], *accP)
+		default:
+			requireT.Fail("wrong index")
+		}
+		i++
+	}
+
 	it := AllIterator[entities.Account](v)
 	acc, ok := it()
 	requireT.True(ok)
@@ -92,5 +116,15 @@ func TestIDIndex(t *testing.T) {
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
+	requireT.False(ok)
+
+	itP := AllIteratorPointers[entities.Account](v)
+	accP, ok = itP()
+	requireT.True(ok)
+	requireT.Equal(accs[1], *accP)
+	accP, ok = itP()
+	requireT.True(ok)
+	requireT.Equal(accs[0], *accP)
+	_, ok = itP()
 	requireT.False(ok)
 }
