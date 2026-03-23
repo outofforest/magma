@@ -9,6 +9,7 @@ import (
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/memdb"
+	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/proton"
 )
 
@@ -48,7 +49,7 @@ func GetPointer[T any](v *View, id any) (*T, bool) {
 }
 
 // First returns the first object matching indexed values.
-func First[T any](v *View, index memdb.Index, args ...any) (T, bool) {
+func First[T any](v *View, index indices.Index[T], args ...any) (T, bool) {
 	o, exists := first[T](v, index.ID(), args...)
 	if !exists {
 		var o T
@@ -58,7 +59,7 @@ func First[T any](v *View, index memdb.Index, args ...any) (T, bool) {
 }
 
 // FirstPointer returns pointer to the first object matching indexed values.
-func FirstPointer[T any](v *View, index memdb.Index, args ...any) (*T, bool) {
+func FirstPointer[T any](v *View, index indices.Index[T], args ...any) (*T, bool) {
 	return first[T](v, index.ID(), args...)
 }
 
@@ -73,12 +74,12 @@ func AllPointers[T any](v *View) iter.Seq[*T] {
 }
 
 // Iterate iterates over entities matching index in forward direction.
-func Iterate[T any](v *View, index memdb.Index, args ...any) iter.Seq[T] {
+func Iterate[T any](v *View, index indices.Index[T], args ...any) iter.Seq[T] {
 	return iterate[T](v, index.ID(), args...)
 }
 
 // IteratePointers iterates over pointers to entities matching index in forward direction.
-func IteratePointers[T any](v *View, index memdb.Index, args ...any) iter.Seq[*T] {
+func IteratePointers[T any](v *View, index indices.Index[T], args ...any) iter.Seq[*T] {
 	return iteratePointers[T](v, index.ID(), args...)
 }
 
@@ -93,12 +94,12 @@ func AllIteratorPointers[T any](v *View) func() (*T, bool) {
 }
 
 // Iterator returns iterator iterating over entities matching index in forward direction.
-func Iterator[T any](v *View, index memdb.Index, args ...any) func() (T, bool) {
+func Iterator[T any](v *View, index indices.Index[T], args ...any) func() (T, bool) {
 	return iterator[T](v, index.ID(), args...)
 }
 
 // IteratorPointers returns iterator iterating over pointers to entities matching index in forward direction.
-func IteratorPointers[T any](v *View, index memdb.Index, args ...any) func() (*T, bool) {
+func IteratorPointers[T any](v *View, index indices.Index[T], args ...any) func() (*T, bool) {
 	return iteratorPointers[T](v, index.ID(), args...)
 }
 
