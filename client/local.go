@@ -95,23 +95,23 @@ type localTransactor struct {
 
 func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	pendingTx := &localTx{
-		client:     t.c,
-		txn:        t.c.db.Txn(true),
-		updatedIDs: map[any]struct{}{},
+		client:       t.c,
+		txn:          t.c.db.Txn(true),
+		updatedTypes: map[reflect.Type]struct{}{},
 	}
 
 	if err := txF(pendingTx); err != nil {
 		return err
 	}
 
-	if len(pendingTx.updatedIDs) == 0 {
+	if len(pendingTx.updatedTypes) == 0 {
 		return nil
 	}
 
 	pendingTx.txn.Commit()
 
 	if t.c.config.TriggerFunc != nil {
-		if err := t.c.config.TriggerFunc(ctx, pendingTx.View(), pendingTx.updatedIDs); err != nil {
+		if err := t.c.config.TriggerFunc(ctx, pendingTx.View(), pendingTx.updatedTypes); err != nil {
 			return err
 		}
 	}
@@ -120,9 +120,9 @@ func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 }
 
 type localTx struct {
-	client     *LocalClient
-	txn        *memdb.Txn
-	updatedIDs map[any]struct{}
+	client       *LocalClient
+	txn          *memdb.Txn
+	updatedTypes map[reflect.Type]struct{}
 }
 
 func (tx *localTx) View() *View {
@@ -133,8 +133,8 @@ func (tx *localTx) View() *View {
 }
 
 func (tx *localTx) Set(o any) error {
-	id, typeDef, _, _ := insert(tx.txn, tx.client.byType, o)
-	tx.updatedIDs[reflect.ValueOf(id).Convert(typeDef.IDType).Interface()] = struct{}{}
+	_, typeDef, _, _ := insert(tx.txn, tx.client.byType, o)
+	tx.updatedTypes[typeDef.Type] = struct{}{}
 	return nil
 }
 

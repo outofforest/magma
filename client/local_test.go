@@ -109,7 +109,7 @@ func TestLocalClientTrigger(t *testing.T) {
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
 		},
-		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
+		TriggerFunc: func(ctx context.Context, v *View, types map[reflect.Type]struct{}) error {
 			triggered = true
 			return nil
 		},
@@ -137,21 +137,21 @@ func TestLocalClientTriggerReceivesIDs(t *testing.T) {
 	requireT := require.New(t)
 	ctx := qa.NewContext(t)
 
-	var receivedIDs map[any]struct{}
+	var receivedTypes map[reflect.Type]struct{}
 	c, err := NewLocalClient(LocalConfig{
 		Types: []reflect.Type{
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
 		},
-		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
-			receivedIDs = ids
+		TriggerFunc: func(ctx context.Context, v *View, types map[reflect.Type]struct{}) error {
+			receivedTypes = types
 			return nil
 		},
 	})
 	requireT.NoError(err)
 	requireT.NoError(c.WarmUp(ctx))
 
-	requireT.Nil(receivedIDs)
+	requireT.Nil(receivedTypes)
 
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
 		for _, e := range []any{e1, e2, e3, e4} {
@@ -162,12 +162,10 @@ func TestLocalClientTriggerReceivesIDs(t *testing.T) {
 		return nil
 	}))
 
-	requireT.ElementsMatch([]any{
-		e1.ID,
-		e2.ID,
-		e3.ID,
-		e4.ID,
-	}, lo.Keys(receivedIDs))
+	requireT.ElementsMatch([]reflect.Type{
+		reflect.TypeFor[localEntity1](),
+		reflect.TypeFor[localEntity2](),
+	}, lo.Keys(receivedTypes))
 }
 
 func TestLocalClientTriggerViewUpdateIsLocal(t *testing.T) {
@@ -181,7 +179,7 @@ func TestLocalClientTriggerViewUpdateIsLocal(t *testing.T) {
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
 		},
-		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
+		TriggerFunc: func(ctx context.Context, v *View, types map[reflect.Type]struct{}) error {
 			e := e1
 			e.Value = "str2"
 			v.Set(e)
@@ -215,7 +213,7 @@ func TestLocalClientTriggerErr(t *testing.T) {
 			reflect.TypeFor[localEntity1](),
 			reflect.TypeFor[localEntity2](),
 		},
-		TriggerFunc: func(ctx context.Context, v *View, ids map[any]struct{}) error {
+		TriggerFunc: func(ctx context.Context, v *View, types map[reflect.Type]struct{}) error {
 			return errors.New("test")
 		},
 	})
