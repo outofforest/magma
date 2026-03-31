@@ -53,7 +53,7 @@ var (
 var idType = reflect.TypeFor[memdb.ID]()
 
 // TriggerFunc defines function triggered after applying transactions.
-type TriggerFunc func(ctx context.Context, v *View, ids map[any]struct{}) error
+type TriggerFunc func(ctx context.Context, v *View, types map[reflect.Type]struct{}) error
 
 // Config is the configuration of magma client.
 type Config struct {
@@ -162,8 +162,8 @@ type Client struct {
 }
 
 type trigger struct {
-	View       *View
-	UpdatedIDs map[any]struct{}
+	View         *View
+	UpdatedTypes map[reflect.Type]struct{}
 }
 
 // Run runs client.
@@ -205,7 +205,7 @@ func (c *Client) Run(ctx context.Context) error {
 						defer close(triggerCh)
 
 						var tx *memdb.Txn
-						updatedIDs := map[any]struct{}{}
+						updatedTypes := map[reflect.Type]struct{}{}
 						for {
 							m, _, err := conn.ReceiveProton(cMarshaller)
 							if err != nil {
@@ -226,7 +226,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 									length += uint64(len(txRaw))
 
-									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedIDs)
+									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedTypes)
 									if err != nil {
 										return err
 									}
@@ -243,9 +243,9 @@ func (c *Client) Run(ctx context.Context) error {
 
 								commitCh = make(chan struct{})
 
-								c.applyHotEnd(triggerCh, c.View(), updatedIDs)
+								c.applyHotEnd(triggerCh, c.View(), updatedTypes)
 								tx = nil
-								updatedIDs = map[any]struct{}{}
+								updatedTypes = map[reflect.Type]struct{}{}
 							default:
 								return errors.Errorf("unexpected message %T", msg)
 							}
@@ -289,7 +289,7 @@ func (c *Client) Run(ctx context.Context) error {
 					if c.config.TriggerFunc != nil {
 						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
 							for t := range triggerCh {
-								if err := c.config.TriggerFunc(ctx, t.View, t.UpdatedIDs); err != nil {
+								if err := c.config.TriggerFunc(ctx, t.View, t.UpdatedTypes); err != nil {
 									return err
 								}
 							}
@@ -335,7 +335,7 @@ func (c *Client) NewTransactor() Transactor {
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan trigger, view *View, updatedIDs map[any]struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan trigger, view *View, updatedTypes map[reflect.Type]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -345,15 +345,15 @@ func (c *Client) applyHotEnd(triggerCh chan trigger, view *View, updatedIDs map[
 		if len(triggerCh) > 0 {
 			select {
 			case oldT := <-triggerCh:
-				for id := range oldT.UpdatedIDs {
-					updatedIDs[id] = struct{}{}
+				for id := range oldT.UpdatedTypes {
+					updatedTypes[id] = struct{}{}
 				}
 			default:
 			}
 		}
 		triggerCh <- trigger{
-			View:       view,
-			UpdatedIDs: updatedIDs,
+			View:         view,
+			UpdatedTypes: updatedTypes,
 		}
 	}
 }
@@ -363,7 +363,7 @@ func (c *Client) applyTx(
 	previousChecksum uint64,
 	tx *memdb.Txn,
 	txRaw []byte,
-	updatedIDs map[any]struct{},
+	updatedTypes map[reflect.Type]struct{},
 ) (uint64, error) {
 	txLen, n := varuint64.Parse(txRaw)
 
@@ -392,7 +392,7 @@ func (c *Client) applyTx(
 	}
 	meta := metaAny.(*wire.TxMetadata)
 
-	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:], updatedIDs)
+	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:], updatedTypes)
 	if err != nil && !errors.Is(err, ErrTxOutdatedTx) {
 		return 0, err
 	}
@@ -417,7 +417,7 @@ func (c *Client) storeTx(
 	entityMetaID uint64,
 	tx *memdb.Txn,
 	txRaw []byte,
-	updatedIDs map[any]struct{},
+	updatedTypes map[reflect.Type]struct{},
 ) (retErr error) {
 	dbTx := tx.Txn(true)
 	for len(txRaw) > 0 {
@@ -459,7 +459,7 @@ func (c *Client) storeTx(
 		}
 
 		txRaw = txRaw[entityMetaSize+msgSize:]
-		updatedIDs[reflect.ValueOf(entityMeta.ID).Convert(typeDef.IDType).Interface()] = struct{}{}
+		updatedTypes[typeDef.Type] = struct{}{}
 	}
 
 	dbTx.Commit()

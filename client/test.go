@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/binary"
+	"reflect"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -36,8 +37,8 @@ func NewTestConfig(marshaller proton.Marshaller, indices ...memdb.Index) Config 
 
 // TestClient is the client wrapper used in unit tests.
 type TestClient struct {
-	client     *Client
-	updatedIDs map[any]struct{}
+	client       *Client
+	updatedTypes map[reflect.Type]struct{}
 }
 
 // NewTestClient creates new client for tests.
@@ -46,8 +47,8 @@ func NewTestClient(t *testing.T, config Config) *TestClient {
 	require.NoError(t, err)
 
 	return &TestClient{
-		client:     client,
-		updatedIDs: map[any]struct{}{},
+		client:       client,
+		updatedTypes: map[reflect.Type]struct{}{},
 	}
 }
 
@@ -64,8 +65,8 @@ func (tc *TestClient) View() *View {
 // NewTransactor returns new transactor.
 func (tc *TestClient) NewTransactor() Transactor {
 	return &testTransactor{
-		tc:         tc,
-		updatedIDs: tc.updatedIDs,
+		tc:           tc,
+		updatedTypes: tc.updatedTypes,
 	}
 }
 
@@ -75,8 +76,8 @@ func (tc *TestClient) Checksum() uint64 {
 }
 
 type testTransactor struct {
-	tc         *TestClient
-	updatedIDs map[any]struct{}
+	tc           *TestClient
+	updatedTypes map[reflect.Type]struct{}
 }
 
 func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
@@ -101,7 +102,7 @@ func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 
 	txn := t.tc.client.db.Txn(true)
 	previousChecksum, err := t.tc.client.applyTx(nil, t.tc.client.previousChecksum, txn,
-		buf[:size+format.ChecksumSize], t.updatedIDs)
+		buf[:size+format.ChecksumSize], t.updatedTypes)
 	if err != nil {
 		return err
 	}

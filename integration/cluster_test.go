@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -145,7 +146,7 @@ func Test3Peers3Clients(t *testing.T) {
 	results := make(chan map[entities.AccountID]entities.Account, 3)
 	triggerFunc := func() client.TriggerFunc {
 		var found bool
-		return func(ctx context.Context, v *client.View, _ map[any]struct{}) error {
+		return func(ctx context.Context, v *client.View, _ map[reflect.Type]struct{}) error {
 			if found {
 				return nil
 			}
@@ -530,7 +531,7 @@ func TestSyncAfterRestart(t *testing.T) {
 	accCh1 := make(chan entities.Account, 1)
 	accCh2 := make(chan entities.Account, 1)
 	triggerFunc := func(accCh chan<- entities.Account) client.TriggerFunc {
-		return func(ctx context.Context, v *client.View, _ map[any]struct{}) error {
+		return func(ctx context.Context, v *client.View, _ map[reflect.Type]struct{}) error {
 			a, exists := client.Get[entities.Account](v, accID)
 			if exists {
 				select {
@@ -1103,10 +1104,10 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	receivedIDs := make(chan map[any]struct{}, 3)
+	receivedTypes := make(chan map[reflect.Type]struct{}, 3)
 	c := clstr.NewClient(p, "client", m, partitionDefault,
-		func(ctx context.Context, v *client.View, ids map[any]struct{}) error {
-			receivedIDs <- ids
+		func(ctx context.Context, v *client.View, types map[reflect.Type]struct{}) error {
+			receivedTypes <- types
 			return nil
 		},
 	)
@@ -1146,15 +1147,13 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 		return nil
 	}))
 
-	requireT.Empty(<-receivedIDs)
+	requireT.Empty(<-receivedTypes)
 	requireT.ElementsMatch([]any{
-		accountID1,
-		accountID2,
-	}, lo.Keys(<-receivedIDs))
+		reflect.TypeFor[entities.Account](),
+	}, lo.Keys(<-receivedTypes))
 	requireT.ElementsMatch([]any{
-		accountID3,
-		accountID4,
-	}, lo.Keys(<-receivedIDs))
+		reflect.TypeFor[entities.Account](),
+	}, lo.Keys(<-receivedTypes))
 }
 
 func TestTriggerFuncUpdatesView(t *testing.T) {
@@ -1182,8 +1181,8 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	var a1, a2 entities.Account
 	doneCh := make(chan struct{})
 	c := clstr.NewClient(p, "client", m, partitionDefault,
-		func(ctx context.Context, v *client.View, ids map[any]struct{}) error {
-			if _, exists := ids[account1.ID]; !exists {
+		func(ctx context.Context, v *client.View, types map[reflect.Type]struct{}) error {
+			if _, exists := types[reflect.TypeFor[entities.Account]()]; !exists {
 				return nil
 			}
 
