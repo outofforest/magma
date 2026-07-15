@@ -120,7 +120,7 @@ func Run(
 	return raft.Run(
 		ctx,
 		pStates,
-		gossip.New(config.ServerID, config.MaxMessageSize, p2pListener, c2pListener, pStates),
+		gossip.New(config.P2PCA, config.C2PCA, config.ServerID, config.MaxMessageSize, p2pListener, c2pListener, pStates),
 	)
 }
 

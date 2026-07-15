@@ -17,6 +17,7 @@ import (
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
+	"github.com/outofforest/resonance"
 )
 
 // Peer is used to run peers.
@@ -24,7 +25,7 @@ type Peer struct {
 	id          types.ServerID
 	partitions  types.Partitions
 	dir         string
-	c2pListener *net.TCPListener
+	c2pListener net.Listener
 }
 
 // ClientListenAddr returns address of client endpoint listener.
@@ -95,16 +96,30 @@ type Config struct {
 }
 
 // New creates new cluster.
-func New(config Config) *Cluster {
-	return &Cluster{
-		config: config,
-		mesh:   newMesh(config.MaxMessageSize),
-		ch:     make(chan any),
+func New(config Config) (*Cluster, error) {
+	p2pCA, err := resonance.NewCA(nil)
+	if err != nil {
+		return nil, err
 	}
+	c2pCA, err := resonance.NewCA(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	mesh := newMesh(p2pCA, config.MaxMessageSize)
+	return &Cluster{
+		p2pCA:  p2pCA,
+		c2pCA:  c2pCA,
+		config: config,
+		mesh:   mesh,
+		ch:     make(chan any),
+	}, nil
 }
 
 // Cluster runs peers and clients.
 type Cluster struct {
+	p2pCA  *resonance.CA
+	c2pCA  *resonance.CA
 	config Config
 	mesh   *mesh
 	peers  []*Peer
@@ -261,7 +276,7 @@ func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions) (*
 	peer := &Peer{
 		id:          peerID,
 		dir:         filepath.Join(c.config.Directory, string(peerID)),
-		c2pListener: c2pListener.(*net.TCPListener),
+		c2pListener: c2pListener,
 		partitions:  partitions,
 	}
 
@@ -280,6 +295,7 @@ func (c *Cluster) NewClient(
 	indices ...memdb.Index,
 ) (*Client, error) {
 	cl, err := client.New(client.Config{
+		CA:               c.c2pCA,
 		Service:          name,
 		PeerAddress:      peer.c2pListener.Addr().String(),
 		PartitionID:      partitionID,
@@ -391,6 +407,8 @@ func (c *Cluster) DisableLink(ctx context.Context, peer1, peer2 *Peer) error {
 
 func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, error) {
 	config := types.Config{
+		P2PCA:             c.p2pCA,
+		C2PCA:             c.c2pCA,
 		ServerID:          peer.id,
 		MaxMessageSize:    c.config.MaxMessageSize,
 		MaxUncommittedLog: c.config.MaxUncommittedLog,

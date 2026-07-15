@@ -1,5 +1,7 @@
 package types
 
+import "github.com/outofforest/resonance"
+
 // Revision is used to define Revision field in entities.
 type Revision uint64
 
@@ -17,6 +19,8 @@ type PartitionID string
 
 // Config is the config of magma.
 type Config struct {
+	P2PCA             *resonance.CA
+	C2PCA             *resonance.CA
 	ServerID          ServerID
 	Servers           []ServerConfig
 	MaxMessageSize    uint64

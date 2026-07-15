@@ -56,6 +56,8 @@ type client struct {
 
 // New returns gossiping function.
 func New(
+	p2pCA *resonance.CA,
+	c2pCA *resonance.CA,
 	serverID types.ServerID,
 	maxMessageSize uint64,
 	p2pListener,
@@ -84,6 +86,8 @@ func New(
 	}
 
 	return &Gossip{
+		p2pCA:           p2pCA,
+		c2pCA:           c2pCA,
 		serverID:        serverID,
 		maxMessageSize:  maxMessageSize,
 		p2pListener:     p2pListener,
@@ -112,6 +116,8 @@ type partitionState struct {
 
 // Gossip is responsible for gossiping messages between peers and clients.
 type Gossip struct {
+	p2pCA                    *resonance.CA
+	c2pCA                    *resonance.CA
 	serverID                 types.ServerID
 	maxMessageSize           uint64
 	p2pListener, c2pListener net.Listener
@@ -136,7 +142,14 @@ func (g *Gossip) Run(ctx context.Context) error {
 				}
 			}()
 
-			resConfig := resonance.Config{MaxMessageSize: g.maxMessageSize}
+			p2pConfig := resonance.Config{
+				CA:             g.p2pCA,
+				MaxMessageSize: g.maxMessageSize,
+			}
+			c2pConfig := resonance.Config{
+				CA:             g.c2pCA,
+				MaxMessageSize: g.maxMessageSize,
+			}
 			// Checksum size is subtracted because we receive messages without checksums from client,
 			// but later we add them and send back with checksums included. It means, that later
 			// message would be too big.
@@ -144,14 +157,14 @@ func (g *Gossip) Run(ctx context.Context) error {
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 				spawn("p2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.p2pListener, resConfig,
+					return resonance.RunServer(ctx, g.p2pListener, p2pConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
 							return g.peerHandler(ctx, connProperties{}, c, maxTxSize)
 						},
 					)
 				})
 				spawn("c2pListener", parallel.Fail, func(ctx context.Context) error {
-					return resonance.RunServer(ctx, g.c2pListener, resConfig,
+					return resonance.RunServer(ctx, g.c2pListener, c2pConfig,
 						func(ctx context.Context, c *resonance.Connection) error {
 							return g.c2pHandler(ctx, c, maxTxSize)
 						},
@@ -167,7 +180,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 						spawn("p2pConnector", parallel.Fail, func(ctx context.Context) error {
 							log := logger.Get(ctx)
 							for {
-								err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
+								err := resonance.RunClient(ctx, s.P2PAddress, p2pConfig,
 									func(ctx context.Context, c *resonance.Connection) error {
 										return g.peerHandler(ctx, connProperties{
 											PeerID:      s.ID,
@@ -186,7 +199,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 						spawn("l2pConnector", parallel.Fail, func(ctx context.Context) error {
 							log := logger.Get(ctx)
 							for {
-								err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
+								err := resonance.RunClient(ctx, s.P2PAddress, p2pConfig,
 									func(ctx context.Context, c *resonance.Connection) error {
 										return g.peerHandler(ctx, connProperties{
 											PeerID:      s.ID,
@@ -206,7 +219,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 							log := logger.Get(ctx)
 
 							for {
-								err := resonance.RunClient(ctx, s.P2PAddress, resConfig,
+								err := resonance.RunClient(ctx, s.P2PAddress, p2pConfig,
 									func(ctx context.Context, c *resonance.Connection) error {
 										return g.peerHandler(ctx, connProperties{
 											PeerID:      s.ID,

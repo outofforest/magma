@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"sync"
 
@@ -33,6 +34,7 @@ type Pair struct {
 
 // mesh maintains connection mesh between peers.
 type mesh struct {
+	ca             *resonance.CA
 	maxMessageSize uint64
 	mHello         hello.Marshaller
 	mP2P           p2p.Marshaller
@@ -46,8 +48,9 @@ type mesh struct {
 }
 
 // newMesh creates new mesh.
-func newMesh(maxMessageSize uint64) *mesh {
+func newMesh(ca *resonance.CA, maxMessageSize uint64) *mesh {
 	return &mesh{
+		ca:             ca,
 		maxMessageSize: maxMessageSize,
 		listeners:      map[*Peer]net.Listener{},
 		links:          map[Link]*Pair{},
@@ -92,6 +95,11 @@ func (m *mesh) Pair(ctx context.Context, srcPeer, dstPeer *Peer) (*Pair, error) 
 	lnk := Link{SrcPeer: srcPeer, DstPeer: dstPeer}
 	p, exists := m.links[lnk]
 	if !exists {
+		tlsConfig, err := m.ca.Generate()
+		if err != nil {
+			return nil, err
+		}
+
 		dstL, err := m.listener(dstPeer)
 		if err != nil {
 			return nil, err
@@ -100,6 +108,8 @@ func (m *mesh) Pair(ctx context.Context, srcPeer, dstPeer *Peer) (*Pair, error) 
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
+
+		srcL = tls.NewListener(srcL, tlsConfig)
 
 		p = &Pair{
 			Link:        lnk,
@@ -287,8 +297,13 @@ func (m *mesh) runForwarder(ctx context.Context, pair *Pair) error {
 }
 
 func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
+	tlsConfig, err := m.ca.Generate()
+	if err != nil {
+		return err
+	}
+
 	_ = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-		conn2, err := net.Dial("tcp", pair.DstListener.Addr().String())
+		conn2, err := tls.Dial("tcp", pair.DstListener.Addr().String(), tlsConfig)
 		if err != nil {
 			_ = conn.Close()
 			return err
@@ -303,6 +318,7 @@ func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
 		})
 
 		config := resonance.Config{
+			CA:             m.ca,
 			MaxMessageSize: m.maxMessageSize,
 		}
 		c1 := resonance.NewConnection(conn, config)
@@ -405,6 +421,7 @@ func (m *mesh) listener(peer *Peer) (net.Listener, error) {
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
+
 		m.listeners[peer] = l
 	}
 	return l, nil

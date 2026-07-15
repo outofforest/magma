@@ -57,6 +57,7 @@ type TriggerFunc func(ctx context.Context, v *View, types map[reflect.Type]struc
 
 // Config is the configuration of magma client.
 type Config struct {
+	CA               *resonance.CA
 	Service          string
 	PeerAddress      string
 	PartitionID      types.PartitionID
@@ -178,128 +179,130 @@ func (c *Client) Run(ctx context.Context) error {
 	commitCh := make(chan struct{})
 
 	for {
-		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{MaxMessageSize: c.config.MaxMessageSize},
-			func(ctx context.Context, conn *resonance.Connection) error {
-				conn.BufferReads()
-				conn.BufferWrites()
+		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{
+			CA:             c.config.CA,
+			MaxMessageSize: c.config.MaxMessageSize,
+		}, func(ctx context.Context, conn *resonance.Connection) error {
+			conn.BufferReads()
+			conn.BufferWrites()
 
-				if _, err := conn.SendProton(&c2p.InitRequest{
-					PartitionID: c.config.PartitionID,
-					NextIndex:   c.nextIndex,
-				}, cMarshaller); err != nil {
-					return errors.WithStack(err)
-				}
+			if _, err := conn.SendProton(&c2p.InitRequest{
+				PartitionID: c.config.PartitionID,
+				NextIndex:   c.nextIndex,
+			}, cMarshaller); err != nil {
+				return errors.WithStack(err)
+			}
 
-				msg, _, err := conn.ReceiveProton(cMarshaller)
-				if err != nil {
-					return err
-				}
-				if _, ok := msg.(*c2p.InitResponse); !ok {
-					return errors.Errorf("expected init response, got: %T", msg)
-				}
+			msg, _, err := conn.ReceiveProton(cMarshaller)
+			if err != nil {
+				return err
+			}
+			if _, ok := msg.(*c2p.InitResponse); !ok {
+				return errors.Errorf("expected init response, got: %T", msg)
+			}
 
-				return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-					triggerCh := make(chan trigger, 1)
+			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+				triggerCh := make(chan trigger, 1)
 
-					spawn("receiver", parallel.Fail, func(ctx context.Context) error {
-						defer close(triggerCh)
+				spawn("receiver", parallel.Fail, func(ctx context.Context) error {
+					defer close(triggerCh)
 
-						var tx *memdb.Txn
-						updatedTypes := map[reflect.Type]struct{}{}
-						for {
-							m, _, err := conn.ReceiveProton(cMarshaller)
-							if err != nil {
-								return err
-							}
-
-							switch msg := m.(type) {
-							case *gossipwire.StartLogStream:
-								if tx == nil {
-									tx = c.db.Txn(true)
-								}
-								var length uint64
-								for length < msg.Length {
-									txRaw, _, err := conn.ReceiveRawBytes()
-									if err != nil {
-										return err
-									}
-
-									length += uint64(len(txRaw))
-
-									checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedTypes)
-									if err != nil {
-										return err
-									}
-									c.previousChecksum = checksum
-									c.nextIndex += types.Index(len(txRaw))
-								}
-							case *gossipwire.HotEnd:
-								if tx == nil {
-									continue
-								}
-
-								tx.Commit()
-								close(commitCh)
-
-								commitCh = make(chan struct{})
-
-								c.applyHotEnd(triggerCh, c.View(), updatedTypes)
-								tx = nil
-								updatedTypes = map[reflect.Type]struct{}{}
-							default:
-								return errors.Errorf("unexpected message %T", msg)
-							}
+					var tx *memdb.Txn
+					updatedTypes := map[reflect.Type]struct{}{}
+					for {
+						m, _, err := conn.ReceiveProton(cMarshaller)
+						if err != nil {
+							return err
 						}
-					})
-					spawn("sender", parallel.Fail, func(ctx context.Context) error {
-						for {
-							select {
-							case <-ctx.Done():
-								return errors.WithStack(ctx.Err())
-							case tx := <-c.txCh:
-								c.mu.Lock()
-								delete(c.awaitedTxs, tx.PreviousTxID)
-								c.awaitedTxs[tx.ID] = tx.ReceivedCh
-								c.mu.Unlock()
 
-								if _, err := conn.SendRawBytes(tx.Tx); err != nil {
-									return errors.WithStack(err)
-								}
+						switch msg := m.(type) {
+						case *gossipwire.StartLogStream:
+							if tx == nil {
+								tx = c.db.Txn(true)
 							}
-						}
-					})
-					spawn("cleaner", parallel.Fail, func(ctx context.Context) error {
-						for {
-							select {
-							case <-ctx.Done():
-								return errors.WithStack(ctx.Err())
-							case <-time.After(c.config.AwaitTimeout):
-								c.mu.Lock()
-								for _, id := range awaitedTxsToClean {
-									delete(c.awaitedTxs, id)
-								}
-								awaitedTxsToClean = make([]memdb.ID, 0, len(c.awaitedTxs))
-								for id := range c.awaitedTxs {
-									awaitedTxsToClean = append(awaitedTxsToClean, id)
-								}
-								c.mu.Unlock()
-							}
-						}
-					})
-					if c.config.TriggerFunc != nil {
-						spawn("trigger", parallel.Fail, func(ctx context.Context) error {
-							for t := range triggerCh {
-								if err := c.config.TriggerFunc(ctx, t.View, t.UpdatedTypes); err != nil {
+							var length uint64
+							for length < msg.Length {
+								txRaw, _, err := conn.ReceiveRawBytes()
+								if err != nil {
 									return err
 								}
-							}
-							return errors.WithStack(ctx.Err())
-						})
-					}
 
-					return nil
+								length += uint64(len(txRaw))
+
+								checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedTypes)
+								if err != nil {
+									return err
+								}
+								c.previousChecksum = checksum
+								c.nextIndex += types.Index(len(txRaw))
+							}
+						case *gossipwire.HotEnd:
+							if tx == nil {
+								continue
+							}
+
+							tx.Commit()
+							close(commitCh)
+
+							commitCh = make(chan struct{})
+
+							c.applyHotEnd(triggerCh, c.View(), updatedTypes)
+							tx = nil
+							updatedTypes = map[reflect.Type]struct{}{}
+						default:
+							return errors.Errorf("unexpected message %T", msg)
+						}
+					}
 				})
-			},
+				spawn("sender", parallel.Fail, func(ctx context.Context) error {
+					for {
+						select {
+						case <-ctx.Done():
+							return errors.WithStack(ctx.Err())
+						case tx := <-c.txCh:
+							c.mu.Lock()
+							delete(c.awaitedTxs, tx.PreviousTxID)
+							c.awaitedTxs[tx.ID] = tx.ReceivedCh
+							c.mu.Unlock()
+
+							if _, err := conn.SendRawBytes(tx.Tx); err != nil {
+								return errors.WithStack(err)
+							}
+						}
+					}
+				})
+				spawn("cleaner", parallel.Fail, func(ctx context.Context) error {
+					for {
+						select {
+						case <-ctx.Done():
+							return errors.WithStack(ctx.Err())
+						case <-time.After(c.config.AwaitTimeout):
+							c.mu.Lock()
+							for _, id := range awaitedTxsToClean {
+								delete(c.awaitedTxs, id)
+							}
+							awaitedTxsToClean = make([]memdb.ID, 0, len(c.awaitedTxs))
+							for id := range c.awaitedTxs {
+								awaitedTxsToClean = append(awaitedTxsToClean, id)
+							}
+							c.mu.Unlock()
+						}
+					}
+				})
+				if c.config.TriggerFunc != nil {
+					spawn("trigger", parallel.Fail, func(ctx context.Context) error {
+						for t := range triggerCh {
+							if err := c.config.TriggerFunc(ctx, t.View, t.UpdatedTypes); err != nil {
+								return err
+							}
+						}
+						return errors.WithStack(ctx.Err())
+					})
+				}
+
+				return nil
+			})
+		},
 		)
 		if ctx.Err() != nil {
 			return errors.WithStack(ctx.Err())
