@@ -29,15 +29,20 @@ type ConfigTesting struct {
 
 // NewTesting returns new testing cluster wrapper.
 func NewTesting(group *parallel.Group, t *testing.T, config ConfigTesting) TestingCluster {
+	requireT := require.New(t)
+
+	cluster, err := New(Config{
+		Directory:         t.TempDir(),
+		MaxMessageSize:    config.MaxMessageSize,
+		MaxUncommittedLog: config.MaxUncommittedLog,
+		PageSize:          config.PageSize,
+	})
+	requireT.NoError(err)
+
 	tc := TestingCluster{
-		cluster: New(Config{
-			Directory:         t.TempDir(),
-			MaxMessageSize:    config.MaxMessageSize,
-			MaxUncommittedLog: config.MaxUncommittedLog,
-			PageSize:          config.PageSize,
-		}),
+		cluster:  cluster,
 		ctx:      group.Context(),
-		requireT: require.New(t),
+		requireT: requireT,
 	}
 	group.Spawn("cluster", parallel.Fail, tc.cluster.Run)
 	return tc
