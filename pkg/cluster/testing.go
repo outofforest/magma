@@ -11,6 +11,7 @@ import (
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
+	"github.com/outofforest/resonance"
 )
 
 // TestingCluster is a set of helper around cluster for testing.
@@ -31,7 +32,11 @@ type ConfigTesting struct {
 func NewTesting(group *parallel.Group, t *testing.T, config ConfigTesting) TestingCluster {
 	requireT := require.New(t)
 
+	c2pCA, err := resonance.NewCA(nil)
+	requireT.NoError(err)
+
 	cluster, err := New(Config{
+		C2PCA:             c2pCA,
 		Directory:         t.TempDir(),
 		MaxMessageSize:    config.MaxMessageSize,
 		MaxUncommittedLog: config.MaxUncommittedLog,

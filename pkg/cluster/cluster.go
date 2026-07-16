@@ -89,6 +89,7 @@ func (c *Client) warmUp(ctx context.Context) error {
 
 // Config is the config of the cluster.
 type Config struct {
+	C2PCA             *resonance.CA
 	Directory         string
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
@@ -101,15 +102,11 @@ func New(config Config) (*Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	c2pCA, err := resonance.NewCA(nil)
-	if err != nil {
-		return nil, err
-	}
 
 	mesh := newMesh(p2pCA, config.MaxMessageSize)
 	return &Cluster{
 		p2pCA:  p2pCA,
-		c2pCA:  c2pCA,
+		c2pCA:  config.C2PCA,
 		config: config,
 		mesh:   mesh,
 		ch:     make(chan any),
