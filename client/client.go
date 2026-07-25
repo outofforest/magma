@@ -198,6 +198,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 			if _, err := conn.SendProton(&c2p.InitRequest{
 				PartitionID: c.config.PartitionID,
+				Namespace:   gossipwire.NamespaceFromMarshaller(c.config.Marshaller),
 				NextIndex:   c.nextIndex,
 			}, cMarshaller); err != nil {
 				return errors.WithStack(err)
@@ -207,8 +208,15 @@ func (c *Client) Run(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if _, ok := msg.(*c2p.InitResponse); !ok {
-				return errors.Errorf("expected init response, got: %T", msg)
+
+			initResponse, ok := msg.(*c2p.InitResponse)
+			if !ok {
+				failure = errors.Errorf("expected init response, got: %T", msg)
+				return failure
+			}
+			if initResponse.Error != "" {
+				failure = errors.Errorf("protocol error: %s", initResponse.Error)
+				return failure
 			}
 
 			return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {

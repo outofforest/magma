@@ -33,6 +33,12 @@ var clusterConfig = cluster.ConfigTesting{
 	MaxMessageSize:    3 * 1024,
 	MaxUncommittedLog: 15 * 1024,
 	PageSize:          uint64(os.Getpagesize()),
+	Marshallers: map[types.PartitionID]proton.Marshaller{
+		partitionDefault: entities.NewMarshaller(),
+		partition1:       entities.NewMarshaller(),
+		partition2:       entities.NewMarshaller(),
+		partition3:       entities.NewMarshaller(),
+	},
 }
 
 func TestBenchmark(t *testing.T) {
@@ -219,6 +225,7 @@ func Test3Peers3Clients(t *testing.T) {
 	}
 }
 
+// FIXME (wojciech): This test is flaky.
 func TestPeerRestart(t *testing.T) {
 	t.Parallel()
 
@@ -1216,7 +1223,7 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	requireT.Equal(account1, a)
 }
 
-func TestClientExitsOnError(t *testing.T) {
+func TestClientExitsOnInvalidMarshaler(t *testing.T) {
 	t.Parallel()
 
 	requireT := require.New(t)
@@ -1228,7 +1235,37 @@ func TestClientExitsOnError(t *testing.T) {
 	})
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
+	m := fakeMarshaller{m: entities.NewMarshaller()}
+
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
+
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
+
+	group.Exit(nil)
+	requireT.Error(group.Wait())
+}
+
+func TestClientExitsOnMarshallingError(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := parallel.NewGroup(ctx)
+	t.Cleanup(func() {
+		group.Exit(nil)
+		_ = group.Wait()
+	})
+
+	clusterConfig := clusterConfig
+	clusterConfig.Marshallers = map[types.PartitionID]proton.Marshaller{
+		partitionDefault: fakeMarshaller{},
+	}
+
+	clstr := cluster.NewTesting(group, t, clusterConfig)
+	mBase := entities.NewMarshaller()
+	m := fakeMarshaller{m: mBase}
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
@@ -1247,7 +1284,7 @@ func TestClientExitsOnError(t *testing.T) {
 		return tx.Set(account)
 	}))
 
-	fc := clstr.NewClient(p, "client", fakeMarshaller{}, partitionDefault, nil)
+	fc := clstr.NewClient(p, "client", fakeMarshaller{fail: true, m: mBase}, partitionDefault, nil)
 	clstr.StartClients(fc)
 
 	group.Exit(nil)
@@ -1257,36 +1294,56 @@ func TestClientExitsOnError(t *testing.T) {
 var _ proton.Marshaller = fakeMarshaller{}
 
 type fakeMarshaller struct {
+	fail bool
+	m    proton.Marshaller
 }
 
 func (f fakeMarshaller) Messages() []any {
-	return []any{entities.Blob{}}
+	return f.m.Messages()
 }
 
 func (f fakeMarshaller) ID(msg any) (uint64, error) {
-	return 1, nil
+	return f.m.ID(msg)
 }
 
 func (f fakeMarshaller) Size(msg any) (uint64, error) {
-	return 0, errors.New("error")
+	if f.fail {
+		return 0, errors.New("error")
+	}
+	return f.m.Size(msg)
 }
 
 func (f fakeMarshaller) Marshal(msg any, buf []byte) (uint64, uint64, error) {
-	return 0, 0, errors.New("error")
+	if f.fail {
+		return 0, 0, errors.New("error")
+	}
+	return f.m.Marshal(msg, buf)
 }
 
 func (f fakeMarshaller) Unmarshal(id uint64, buf []byte) (any, uint64, error) {
-	return nil, 0, errors.New("error")
+	if f.fail {
+		return nil, 0, errors.New("error")
+	}
+	return f.m.Unmarshal(id, buf)
 }
 
 func (f fakeMarshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
-	return false, errors.New("error")
+	if f.fail {
+		return false, errors.New("error")
+	}
+	return f.m.IsPatchNeeded(msgDst, msgSrc)
 }
 
 func (f fakeMarshaller) MakePatch(msgDst, msgSrc any, buf []byte) (uint64, uint64, error) {
-	return 0, 0, errors.New("error")
+	if f.fail {
+		return 0, 0, errors.New("error")
+	}
+	return f.m.MakePatch(msgDst, msgSrc, buf)
 }
 
 func (f fakeMarshaller) ApplyPatch(msg any, buf []byte) (uint64, error) {
-	return 0, errors.New("error")
+	if f.fail {
+		return 0, errors.New("error")
+	}
+	return f.m.ApplyPatch(msg, buf)
 }

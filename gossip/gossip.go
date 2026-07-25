@@ -62,7 +62,8 @@ func New(
 	maxMessageSize uint64,
 	p2pListener,
 	c2pListener net.Listener,
-	partitions map[types.PartitionID]partition.State) *Gossip {
+	partitions map[types.PartitionID]partition.State,
+) *Gossip {
 	pStates := map[types.PartitionID]partitionState{}
 	for id, p := range partitions {
 		validPeers := map[types.ServerID]struct{}{}
@@ -489,7 +490,7 @@ func (g *Gossip) peerHandler(
 	prop connProperties,
 	c *resonance.Connection,
 	maxTxSize uint64,
-) error {
+) (retErr error) {
 	prop, pState, err := g.hello(c, prop)
 	if err != nil {
 		return err
@@ -748,6 +749,14 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection, maxTxS
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
 	}
 
+	if msgInit.Namespace != pState.Namespace {
+		err := errors.Errorf("invalid namespace, got: %s, expected: %s", msgInit.Namespace, pState.Namespace)
+		if _, err := c.SendProton(&c2p.InitResponse{Error: err.Error()}, g.c2pMarshaller); err != nil {
+			return err
+		}
+		return err
+	}
+
 	if _, err := c.SendProton(&c2p.InitResponse{}, g.c2pMarshaller); err != nil {
 		return err
 	}
@@ -833,9 +842,19 @@ func (g *Gossip) hello(
 	c *resonance.Connection,
 	prop connProperties,
 ) (connProperties, partitionState, error) {
+	var namespace wire.Namespace
+	if prop.PartitionID != "" {
+		pState, exists := g.partitions[prop.PartitionID]
+		if !exists {
+			return connProperties{}, partitionState{}, errors.Errorf("partition %s is not defined", prop.PartitionID)
+		}
+		namespace = pState.Namespace
+	}
+
 	if _, err := c.SendProton(&wire.Hello{
 		ServerID:    g.serverID,
 		PartitionID: prop.PartitionID,
+		Namespace:   namespace,
 		Channel:     prop.Channel,
 	}, g.helloMarshaller); err != nil {
 		return connProperties{}, partitionState{}, err
@@ -848,7 +867,7 @@ func (g *Gossip) hello(
 
 	h, ok := m.(*wire.Hello)
 	if !ok {
-		return connProperties{}, partitionState{}, errors.New("expected hello, got sth else")
+		return connProperties{}, partitionState{}, errors.Errorf("expected hello, got %T", m)
 	}
 
 	switch {
@@ -868,12 +887,15 @@ func (g *Gossip) hello(
 		}
 
 		prop.PartitionID = h.PartitionID
+		namespace = h.Namespace
 	case h.ServerID != prop.PeerID:
 		return connProperties{}, partitionState{}, errors.New("unexpected peer")
 	case h.Channel != wire.ChannelNone:
 		return connProperties{}, partitionState{}, errors.New("peer must not announce requested channel")
 	case h.PartitionID != "":
 		return connProperties{}, partitionState{}, errors.New("peer must not announce partition")
+	case h.Namespace != "":
+		return connProperties{}, partitionState{}, errors.New("peer must not announce namespace")
 	}
 
 	prop.PeerID = h.ServerID
@@ -885,6 +907,32 @@ func (g *Gossip) hello(
 
 	if _, exists := pState.validPeers[prop.PeerID]; !exists {
 		return connProperties{}, partitionState{}, errors.New("unknown peer")
+	}
+
+	if namespace != pState.Namespace {
+		err := errors.Errorf("invalid namespace, got: %s, expected: %s", namespace, pState.Namespace)
+		if _, err := c.SendProton(&wire.HelloResponse{Error: err.Error()}, g.helloMarshaller); err != nil {
+			return connProperties{}, partitionState{}, err
+		}
+		return connProperties{}, partitionState{}, err
+	}
+
+	if _, err := c.SendProton(&wire.HelloResponse{}, g.helloMarshaller); err != nil {
+		return connProperties{}, partitionState{}, err
+	}
+
+	m, _, err = c.ReceiveProton(g.helloMarshaller)
+	if err != nil {
+		return connProperties{}, partitionState{}, err
+	}
+
+	hResp, ok := m.(*wire.HelloResponse)
+	if !ok {
+		return connProperties{}, partitionState{}, errors.Errorf("expected hello, got %T", m)
+	}
+
+	if hResp.Error != "" {
+		return connProperties{}, partitionState{}, errors.Errorf("protocol error: %s", hResp.Error)
 	}
 
 	return prop, pState, nil

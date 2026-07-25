@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/outofforest/magma/gossip"
+	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/partition"
 	"github.com/outofforest/magma/raft/reactor"
@@ -103,7 +104,12 @@ func Run(
 			}
 		}
 
+		m := config.Marshallers[pID]
+		if m == nil {
+			return errors.Errorf("no marshaller for partition %s", pID)
+		}
 		pStates[pID] = partition.State{
+			Namespace:     wire.NamespaceFromMarshaller(m),
 			Repo:          repo,
 			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, config.MaxUncommittedLog, s),
 			Peers:         peers,

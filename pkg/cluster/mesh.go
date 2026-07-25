@@ -342,6 +342,16 @@ func (m *mesh) runConn(ctx context.Context, conn net.Conn, pair *Pair) error {
 			return err
 		}
 
+		err = m.interceptHelloResponse(c2, c1)
+		if err != nil {
+			return err
+		}
+
+		err = m.interceptHelloResponse(c1, c2)
+		if err != nil {
+			return err
+		}
+
 		channel := helloMsg1.Channel
 		if channel == wire.ChannelNone {
 			channel = helloMsg2.Channel
@@ -411,6 +421,20 @@ func (m *mesh) interceptHello(dstC, srcC *resonance.Connection) (*wire.Hello, er
 	}
 
 	return helloMsg, nil
+}
+func (m *mesh) interceptHelloResponse(dstC, srcC *resonance.Connection) error {
+	msg, _, err := srcC.ReceiveProton(m.mHello)
+	if err != nil {
+		return err
+	}
+
+	helloRespMsg, ok := msg.(*wire.HelloResponse)
+	if !ok {
+		return errors.Errorf("hello response expected, got: %T", msg)
+	}
+
+	_, err = dstC.SendProton(helloRespMsg, m.mHello)
+	return err
 }
 
 func (m *mesh) listener(peer *Peer) (net.Listener, error) {
