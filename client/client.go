@@ -177,6 +177,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	cMarshaller := c2p.NewMarshaller()
 	commitCh := make(chan struct{})
+	var failure error
 
 	for {
 		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{
@@ -231,6 +232,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 								checksum, err := c.applyTx(commitCh, c.previousChecksum, tx, txRaw, updatedTypes)
 								if err != nil {
+									failure = err
 									return err
 								}
 								c.previousChecksum = checksum
@@ -250,7 +252,8 @@ func (c *Client) Run(ctx context.Context) error {
 							tx = nil
 							updatedTypes = map[reflect.Type]struct{}{}
 						default:
-							return errors.Errorf("unexpected message %T", msg)
+							failure = errors.Errorf("unexpected message %T", msg)
+							return failure
 						}
 					}
 				})
@@ -302,8 +305,12 @@ func (c *Client) Run(ctx context.Context) error {
 
 				return nil
 			})
-		},
-		)
+		})
+
+		if failure != nil {
+			return failure
+		}
+
 		if ctx.Err() != nil {
 			return errors.WithStack(ctx.Err())
 		}
