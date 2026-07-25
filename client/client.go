@@ -59,7 +59,7 @@ type TriggerFunc func(ctx context.Context, v *View, types map[reflect.Type]struc
 type Config struct {
 	CA               *resonance.CA
 	Service          string
-	PeerAddress      string
+	PeerAddresses    []string
 	PartitionID      types.PartitionID
 	MaxMessageSize   uint64
 	BroadcastTimeout time.Duration
@@ -71,6 +71,10 @@ type Config struct {
 
 // New creates new magma client.
 func New(config Config) (*Client, error) {
+	if len(config.PeerAddresses) == 0 {
+		return nil, errors.New("no peer addresses has been provided")
+	}
+
 	objectTypes := config.Marshaller.Messages()
 	if len(objectTypes) == 0 {
 		return nil, errors.New("no object types provided")
@@ -177,13 +181,18 @@ func (c *Client) Run(ctx context.Context) error {
 
 	cMarshaller := c2p.NewMarshaller()
 	commitCh := make(chan struct{})
+	var peerIndex uint64
 	var failure error
 
 	for {
-		err := resonance.RunClient(ctx, c.config.PeerAddress, resonance.Config{
+		tryPeerIndex := peerIndex
+		peerIndex = (peerIndex + 1) % uint64(len(c.config.PeerAddresses))
+		err := resonance.RunClient(ctx, c.config.PeerAddresses[tryPeerIndex], resonance.Config{
 			CA:             c.config.CA,
 			MaxMessageSize: c.config.MaxMessageSize,
 		}, func(ctx context.Context, conn *resonance.Connection) error {
+			peerIndex = 0
+
 			conn.BufferReads()
 			conn.BufferWrites()
 
