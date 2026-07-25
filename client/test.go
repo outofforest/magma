@@ -32,6 +32,7 @@ func NewTestConfig(marshaller proton.Marshaller, indices ...memdb.Index) Config 
 		MaxMessageSize: maxMsgSize,
 		Marshaller:     marshaller,
 		Indices:        indices,
+		PeerAddresses:  []string{""},
 	}
 }
 

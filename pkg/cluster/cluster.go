@@ -293,7 +293,7 @@ func (c *Cluster) NewClient(
 	cl, err := client.New(client.Config{
 		CA:               c.c2pCA,
 		Service:          name,
-		PeerAddress:      peer.c2pListener.Addr().String(),
+		PeerAddresses:    []string{peer.c2pListener.Addr().String()},
 		PartitionID:      partitionID,
 		MaxMessageSize:   c.config.MaxMessageSize,
 		BroadcastTimeout: time.Second,
