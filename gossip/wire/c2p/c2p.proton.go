@@ -33,7 +33,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		InitRequest{},
 		InitResponse{},
 		wire.StartLogStream{},
@@ -312,7 +312,7 @@ func unmarshal2(m *InitResponse, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Error = string(b[o : o+l])
+				m.Error = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -365,7 +365,7 @@ func applyPatch2(m *InitResponse, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Error = string(b[o : o+l])
+					m.Error = string(b[o:o+l])
 					o += l
 				}
 			}
@@ -443,7 +443,7 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.PartitionID = types.PartitionID(b[o : o+l])
+				m.PartitionID = types.PartitionID(b[o:o+l])
 				o += l
 			}
 		}
@@ -455,7 +455,7 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Namespace = wire.Namespace(b[o : o+l])
+				m.Namespace = wire.Namespace(b[o:o+l])
 				o += l
 			}
 		}
@@ -554,7 +554,7 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.PartitionID = types.PartitionID(b[o : o+l])
+					m.PartitionID = types.PartitionID(b[o:o+l])
 					o += l
 				}
 			}
@@ -568,7 +568,7 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Namespace = wire.Namespace(b[o : o+l])
+					m.Namespace = wire.Namespace(b[o:o+l])
 					o += l
 				}
 			}
