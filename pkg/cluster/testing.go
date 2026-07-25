@@ -26,6 +26,7 @@ type ConfigTesting struct {
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
 	PageSize          uint64
+	Marshallers       map[types.PartitionID]proton.Marshaller
 }
 
 // NewTesting returns new testing cluster wrapper.
@@ -41,6 +42,7 @@ func NewTesting(group *parallel.Group, t *testing.T, config ConfigTesting) Testi
 		MaxMessageSize:    config.MaxMessageSize,
 		MaxUncommittedLog: config.MaxUncommittedLog,
 		PageSize:          config.PageSize,
+		Marshallers:       config.Marshallers,
 	})
 	requireT.NoError(err)
 

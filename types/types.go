@@ -1,6 +1,9 @@
 package types
 
-import "github.com/outofforest/resonance"
+import (
+	"github.com/outofforest/proton"
+	"github.com/outofforest/resonance"
+)
 
 // Revision is used to define Revision field in entities.
 type Revision uint64
@@ -22,6 +25,7 @@ type Config struct {
 	P2PCA             *resonance.CA
 	C2PCA             *resonance.CA
 	ServerID          ServerID
+	Marshallers       map[PartitionID]proton.Marshaller
 	Servers           []ServerConfig
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64

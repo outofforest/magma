@@ -94,6 +94,7 @@ type Config struct {
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
 	PageSize          uint64
+	Marshallers       map[types.PartitionID]proton.Marshaller
 }
 
 // New creates new cluster.
@@ -410,6 +411,7 @@ func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, 
 		MaxUncommittedLog: c.config.MaxUncommittedLog,
 		PageSize:          c.config.PageSize,
 		Directory:         c.config.Directory,
+		Marshallers:       c.config.Marshallers,
 	}
 
 	for _, p := range c.peers {

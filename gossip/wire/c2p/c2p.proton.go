@@ -274,46 +274,123 @@ func applyPatch1(m *wire.StartLogStream, b []byte) uint64 {
 }
 
 func size2(m *InitResponse) uint64 {
-	var n uint64
+	var n uint64 = 1
+	{
+		// Error
+
+		{
+			l := uint64(len(m.Error))
+			helpers.UInt64Size(l, &n)
+			n += l
+		}
+	}
 	return n
 }
 
 func marshal2(m *InitResponse, b []byte) uint64 {
 	var o uint64
+	{
+		// Error
+
+		{
+			l := uint64(len(m.Error))
+			helpers.UInt64Marshal(l, b, &o)
+			copy(b[o:o+l], m.Error)
+			o += l
+		}
+	}
 
 	return o
 }
 
 func unmarshal2(m *InitResponse, b []byte) uint64 {
 	var o uint64
+	{
+		// Error
+
+		{
+			var l uint64
+			helpers.UInt64Unmarshal(&l, b, &o)
+			if l > 0 {
+				m.Error = string(b[o:o+l])
+				o += l
+			}
+		}
+	}
 
 	return o
 }
 
 func isPatchNeeded2(m, mSrc *InitResponse) bool {
+	{
+		// Error
+
+		if !reflect.DeepEqual(m.Error, mSrc.Error) {
+			return true
+		}
+
+	}
 
 	return false
 }
 
 func makePatch2(m, mSrc *InitResponse, b []byte) uint64 {
-	var o uint64
+	var o uint64 = 1
+	{
+		// Error
+
+		if reflect.DeepEqual(m.Error, mSrc.Error) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			{
+				l := uint64(len(m.Error))
+				helpers.UInt64Marshal(l, b, &o)
+				copy(b[o:o+l], m.Error)
+				o += l
+			}
+		}
+	}
 
 	return o
 }
 
 func applyPatch2(m *InitResponse, b []byte) uint64 {
-	var o uint64
+	var o uint64 = 1
+	{
+		// Error
+
+		if b[0]&0x01 != 0 {
+			{
+				var l uint64
+				helpers.UInt64Unmarshal(&l, b, &o)
+				if l > 0 {
+					m.Error = string(b[o:o+l])
+					o += l
+				}
+			}
+		}
+	}
 
 	return o
 }
 
 func size3(m *InitRequest) uint64 {
-	var n uint64 = 2
+	var n uint64 = 3
 	{
 		// PartitionID
 
 		{
 			l := uint64(len(m.PartitionID))
+			helpers.UInt64Size(l, &n)
+			n += l
+		}
+	}
+	{
+		// Namespace
+
+		{
+			l := uint64(len(m.Namespace))
 			helpers.UInt64Size(l, &n)
 			n += l
 		}
@@ -335,6 +412,16 @@ func marshal3(m *InitRequest, b []byte) uint64 {
 			l := uint64(len(m.PartitionID))
 			helpers.UInt64Marshal(l, b, &o)
 			copy(b[o:o+l], m.PartitionID)
+			o += l
+		}
+	}
+	{
+		// Namespace
+
+		{
+			l := uint64(len(m.Namespace))
+			helpers.UInt64Marshal(l, b, &o)
+			copy(b[o:o+l], m.Namespace)
 			o += l
 		}
 	}
@@ -362,6 +449,18 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
+		// Namespace
+
+		{
+			var l uint64
+			helpers.UInt64Unmarshal(&l, b, &o)
+			if l > 0 {
+				m.Namespace = wire.Namespace(b[o:o+l])
+				o += l
+			}
+		}
+	}
+	{
 		// NextIndex
 
 		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
@@ -375,6 +474,14 @@ func isPatchNeeded3(m, mSrc *InitRequest) bool {
 		// PartitionID
 
 		if !reflect.DeepEqual(m.PartitionID, mSrc.PartitionID) {
+			return true
+		}
+
+	}
+	{
+		// Namespace
+
+		if !reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
 			return true
 		}
 
@@ -409,12 +516,27 @@ func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextIndex
+		// Namespace
 
-		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+		if reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
+			{
+				l := uint64(len(m.Namespace))
+				helpers.UInt64Marshal(l, b, &o)
+				copy(b[o:o+l], m.Namespace)
+				o += l
+			}
+		}
+	}
+	{
+		// NextIndex
+
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
 			helpers.UInt64Marshal(m.NextIndex, b, &o)
 		}
 	}
@@ -439,9 +561,23 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// NextIndex
+		// Namespace
 
 		if b[0]&0x02 != 0 {
+			{
+				var l uint64
+				helpers.UInt64Unmarshal(&l, b, &o)
+				if l > 0 {
+					m.Namespace = wire.Namespace(b[o:o+l])
+					o += l
+				}
+			}
+		}
+	}
+	{
+		// NextIndex
+
+		if b[0]&0x04 != 0 {
 			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 		}
 	}
