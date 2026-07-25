@@ -18,6 +18,7 @@ import (
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/parallel"
+	"github.com/outofforest/proton"
 	"github.com/outofforest/qa"
 )
 
@@ -1213,4 +1214,79 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	a, exists := client.Get[entities.Account](c.View(), account1.ID)
 	requireT.True(exists)
 	requireT.Equal(account1, a)
+}
+
+func TestClientExitsOnError(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := parallel.NewGroup(ctx)
+	t.Cleanup(func() {
+		group.Exit(nil)
+		_ = group.Wait()
+	})
+
+	clstr := cluster.NewTesting(group, t, clusterConfig)
+	m := entities.NewMarshaller()
+
+	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
+
+	account := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "FirstName",
+		LastName:  "LastName",
+	}
+
+	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
+
+	clstr.StartPeers(p)
+	clstr.StartClients(c)
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+		return tx.Set(account)
+	}))
+
+	fc := clstr.NewClient(p, "client", fakeMarshaller{}, partitionDefault, nil)
+	clstr.StartClients(fc)
+
+	group.Exit(nil)
+	requireT.Error(group.Wait())
+}
+
+var _ proton.Marshaller = fakeMarshaller{}
+
+type fakeMarshaller struct {
+}
+
+func (f fakeMarshaller) Messages() []any {
+	return []any{entities.Blob{}}
+}
+
+func (f fakeMarshaller) ID(msg any) (uint64, error) {
+	return 1, nil
+}
+
+func (f fakeMarshaller) Size(msg any) (uint64, error) {
+	return 0, errors.New("error")
+}
+
+func (f fakeMarshaller) Marshal(msg any, buf []byte) (uint64, uint64, error) {
+	return 0, 0, errors.New("error")
+}
+
+func (f fakeMarshaller) Unmarshal(id uint64, buf []byte) (any, uint64, error) {
+	return nil, 0, errors.New("error")
+}
+
+func (f fakeMarshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
+	return false, errors.New("error")
+}
+
+func (f fakeMarshaller) MakePatch(msgDst, msgSrc any, buf []byte) (uint64, uint64, error) {
+	return 0, 0, errors.New("error")
+}
+
+func (f fakeMarshaller) ApplyPatch(msg any, buf []byte) (uint64, error) {
+	return 0, errors.New("error")
 }

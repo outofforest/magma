@@ -211,6 +211,7 @@ func (c *Cluster) Run(ctx context.Context) error {
 							return err
 						}
 					case startClients:
+						//nolint:contextcheck
 						err := func() error {
 							defer close(cmd.Done)
 
@@ -221,9 +222,7 @@ func (c *Cluster) Run(ctx context.Context) error {
 								group := parallel.NewSubgroup(spawn, "client", parallel.Continue)
 								runningClients[c] = group
 								group.Spawn("client", parallel.Continue, c.run)
-							}
-							for _, cl := range cmd.Clients {
-								if err := cl.warmUp(ctx); err != nil {
+								if err := c.warmUp(group.Context()); err != nil {
 									return err
 								}
 							}
