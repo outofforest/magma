@@ -37,7 +37,7 @@ func (s State) vote(candidate magmatypes.ServerID) State {
 }
 
 // Open opens event database.
-func Open(dir string) (*Store, error) {
+func Open(dir string) (retStore *Store, retErr error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -51,6 +51,11 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	defer func() {
+		if retErr != nil {
+			_ = f.Close()
+		}
+	}()
 
 	m := format.NewMarshaller()
 	n, checksumSeed, s, err := state(codec.NewDecoder(bufio.NewReader(f), m))
@@ -88,7 +93,7 @@ func (s *Store) State() State {
 }
 
 // Term stores new term.
-func (s *Store) Term(term rafttypes.Term) (State, error) {
+func (s *Store) Term(term rafttypes.Term) (retState State, retErr error) {
 	if term == 0 {
 		return State{}, errors.New("invalid term")
 	}
@@ -100,12 +105,21 @@ func (s *Store) Term(term rafttypes.Term) (State, error) {
 		if err := s.f.Close(); err != nil {
 			return State{}, errors.WithStack(err)
 		}
+		s.f = nil
+
 		var err error
 		s.f, err = os.OpenFile(filepath.Join(s.dir, strconv.FormatUint(fileIndex, 10)),
 			os.O_RDWR|os.O_CREATE|os.O_SYNC, 0o600)
 		if err != nil {
 			return State{}, errors.WithStack(err)
 		}
+		defer func() {
+			if retErr != nil {
+				_ = s.f.Close()
+				s.f = nil
+			}
+		}()
+
 		s.encoder = codec.NewEncoder(0, s.f, s.m)
 		s.fileIndex = fileIndex
 	}
@@ -138,6 +152,9 @@ func (s *Store) Vote(candidate magmatypes.ServerID) (State, error) {
 
 // Close closes the store.
 func (s *Store) Close() error {
+	if s.f == nil {
+		return nil
+	}
 	return errors.WithStack(s.f.Close())
 }
 
