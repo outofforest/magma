@@ -74,6 +74,7 @@ func Run(
 		if err != nil {
 			return err
 		}
+		defer em.Close()
 
 		s, sCloser, err := state.New(repo, em)
 		if err != nil {
