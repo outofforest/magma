@@ -225,7 +225,6 @@ func Test3Peers3Clients(t *testing.T) {
 	}
 }
 
-// FIXME (wojciech): This test is flaky.
 func TestPeerRestart(t *testing.T) {
 	t.Parallel()
 
