@@ -225,7 +225,6 @@ func Test3Peers3Clients(t *testing.T) {
 	}
 }
 
-// FIXME (wojciech): This test is flaky.
 func TestPeerRestart(t *testing.T) {
 	t.Parallel()
 
@@ -1243,6 +1242,8 @@ func TestClientExitsOnInvalidMarshaler(t *testing.T) {
 	clstr.StartPeers(p)
 	clstr.StartClients(c)
 
+	requireT.Error(c.WarmUp(group.Context()))
+
 	group.Exit(nil)
 	requireT.Error(group.Wait())
 }
@@ -1286,6 +1287,8 @@ func TestClientExitsOnMarshallingError(t *testing.T) {
 
 	fc := clstr.NewClient(p, "client", fakeMarshaller{fail: true, m: mBase}, partitionDefault, nil)
 	clstr.StartClients(fc)
+
+	requireT.Error(fc.WarmUp(group.Context()))
 
 	group.Exit(nil)
 	requireT.Error(group.Wait())

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -213,8 +214,8 @@ func (r *Repository) OpenByIndex(index magmatypes.Index) (*File, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for i := len(r.files) - 1; i >= 0; i-- {
-		if f := r.files[i]; f.Header.NextIndex <= index {
+	for i, f := range slices.Backward(r.files) {
+		if f.Header.NextIndex <= index {
 			offset := uint64(index - f.Header.NextIndex)
 			if offset >= r.pageSize-maxHeaderSize {
 				return nil, errors.New("index does not exist")
@@ -233,11 +234,10 @@ func (r *Repository) Iterator(provider *TailProvider, offset magmatypes.Index) *
 
 	var fileIndex uint64
 	fileOffset := offset
-	for i := len(r.files) - 1; i >= 0; i-- {
-		file := r.files[i]
-		if offset >= file.Header.NextIndex {
+	for i, f := range slices.Backward(r.files) {
+		if offset >= f.Header.NextIndex {
 			fileIndex = uint64(i)
-			fileOffset -= file.Header.NextIndex
+			fileOffset -= f.Header.NextIndex
 			break
 		}
 	}
@@ -256,11 +256,10 @@ func (r *Repository) Revert(nextIndex magmatypes.Index) types.Term {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for i := len(r.files) - 1; i >= 0; i-- {
-		h := r.files[i].Header
-		if h.NextIndex < nextIndex {
+	for i, f := range slices.Backward(r.files) {
+		if f.Header.NextIndex < nextIndex {
 			r.files = r.files[:i+1]
-			return h.Term
+			return f.Header.Term
 		}
 	}
 
@@ -288,16 +287,15 @@ func (r *Repository) PreviousTerm(index magmatypes.Index) (types.Term, magmatype
 	var term types.Term
 	var startTerm types.Term
 	var termStartIndex magmatypes.Index
-	for i := len(r.files) - 1; i >= 0; i-- {
-		h := r.files[i].Header
-		if h.NextIndex < index && h.Term >= startTerm {
-			startTerm = h.Term
-			termStartIndex = h.NextIndex
+	for _, f := range slices.Backward(r.files) {
+		if f.Header.NextIndex < index && f.Header.Term >= startTerm {
+			startTerm = f.Header.Term
+			termStartIndex = f.Header.NextIndex
 		}
-		if h.NextIndex < index && term == 0 {
-			term = h.Term
+		if f.Header.NextIndex < index && term == 0 {
+			term = f.Header.Term
 		}
-		if h.PreviousTerm < startTerm && term > 0 {
+		if f.Header.PreviousTerm < startTerm && term > 0 {
 			break
 		}
 	}

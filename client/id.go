@@ -20,13 +20,13 @@ func unsafeIDFromEntity(eValue unsafe.Pointer) []byte {
 
 func setRevisionInEntity(eValue unsafe.Pointer, revision *types.Revision) {
 	copy(
-		unsafe.Slice((*byte)(unsafe.Pointer(uintptr(eValue)+memdb.IDLength)), revisionLength),
+		unsafe.Slice((*byte)(unsafe.Add(eValue, memdb.IDLength)), revisionLength),
 		unsafe.Slice((*byte)(unsafe.Pointer(revision)), revisionLength),
 	)
 }
 
 func revisionFromEntity(eValue unsafe.Pointer) types.Revision {
-	return *(*types.Revision)(unsafe.Pointer(uintptr(eValue) + memdb.IDLength))
+	return *(*types.Revision)(unsafe.Add(eValue, memdb.IDLength))
 }
 
 func copyMetaFromEntity(meta *wire.EntityMetadata, eValue unsafe.Pointer) {
