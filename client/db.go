@@ -348,7 +348,7 @@ func insert(
 	o any,
 ) (memdb.ID, typeInfo, unsafe.Pointer, unsafe.Pointer) {
 	oValue := reflect.ValueOf(o)
-	if oValue.Kind() == reflect.Ptr {
+	if oValue.Kind() == reflect.Pointer {
 		panic(errors.New("object must not be a pointer"))
 	}
 

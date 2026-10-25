@@ -67,6 +67,11 @@ func (c *Client) View() *client.View {
 	return c.client.View()
 }
 
+// WarmUp waits until hot end is reached for the first time.
+func (c *Client) WarmUp(ctx context.Context) error {
+	return c.client.WarmUp(ctx)
+}
+
 // NewTransactor returns new transactor.
 func (c *Client) NewTransactor() client.Transactor {
 	return c.client.NewTransactor()
