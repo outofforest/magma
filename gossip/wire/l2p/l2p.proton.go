@@ -33,7 +33,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		types.LogSyncRequest{},
 		types.LogSyncResponse{},
 		wire.StartLogStream{},
@@ -200,7 +200,12 @@ func applyPatch0(m *wire.HotEnd, b []byte) uint64 {
 }
 
 func size1(m *wire.StartLogStream) uint64 {
-	var n uint64 = 1
+	var n uint64 = 2
+	{
+		// Version
+
+		helpers.UInt64Size(m.Version, &n)
+	}
 	{
 		// Length
 
@@ -211,6 +216,11 @@ func size1(m *wire.StartLogStream) uint64 {
 
 func marshal1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Marshal(m.Version, b, &o)
+	}
 	{
 		// Length
 
@@ -223,6 +233,11 @@ func marshal1(m *wire.StartLogStream, b []byte) uint64 {
 func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64
 	{
+		// Version
+
+		helpers.UInt64Unmarshal(&m.Version, b, &o)
+	}
+	{
 		// Length
 
 		helpers.UInt64Unmarshal(&m.Length, b, &o)
@@ -232,6 +247,14 @@ func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 }
 
 func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
+	{
+		// Version
+
+		if !reflect.DeepEqual(m.Version, mSrc.Version) {
+			return true
+		}
+
+	}
 	{
 		// Length
 
@@ -247,12 +270,22 @@ func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
 func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// Length
+		// Version
 
-		if reflect.DeepEqual(m.Length, mSrc.Length) {
+		if reflect.DeepEqual(m.Version, mSrc.Version) {
 			b[0] &= 0xFE
 		} else {
 			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Version, b, &o)
+		}
+	}
+	{
+		// Length
+
+		if reflect.DeepEqual(m.Length, mSrc.Length) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
 			helpers.UInt64Marshal(m.Length, b, &o)
 		}
 	}
@@ -263,9 +296,16 @@ func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
 func applyPatch1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// Length
+		// Version
 
 		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Version, b, &o)
+		}
+	}
+	{
+		// Length
+
+		if b[0]&0x02 != 0 {
 			helpers.UInt64Unmarshal(&m.Length, b, &o)
 		}
 	}

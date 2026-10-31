@@ -31,7 +31,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
 		wire.Hello{},
 		wire.HelloResponse{},
 	}
@@ -170,7 +170,7 @@ func unmarshal0(m *wire.HelloResponse, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Error = string(b[o:o+l])
+				m.Error = string(b[o : o+l])
 				o += l
 			}
 		}
@@ -223,7 +223,7 @@ func applyPatch0(m *wire.HelloResponse, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Error = string(b[o:o+l])
+					m.Error = string(b[o : o+l])
 					o += l
 				}
 			}
@@ -234,7 +234,7 @@ func applyPatch0(m *wire.HelloResponse, b []byte) uint64 {
 }
 
 func size1(m *wire.Hello) uint64 {
-	var n uint64 = 4
+	var n uint64 = 3
 	{
 		// ServerID
 
@@ -249,15 +249,6 @@ func size1(m *wire.Hello) uint64 {
 
 		{
 			l := uint64(len(m.PartitionID))
-			helpers.UInt64Size(l, &n)
-			n += l
-		}
-	}
-	{
-		// Namespace
-
-		{
-			l := uint64(len(m.Namespace))
 			helpers.UInt64Size(l, &n)
 			n += l
 		}
@@ -288,16 +279,6 @@ func marshal1(m *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
-
-		{
-			l := uint64(len(m.Namespace))
-			helpers.UInt64Marshal(l, b, &o)
-			copy(b[o:o+l], m.Namespace)
-			o += l
-		}
-	}
-	{
 		// Channel
 
 		b[o] = byte(m.Channel)
@@ -316,7 +297,7 @@ func unmarshal1(m *wire.Hello, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.ServerID = types.ServerID(b[o:o+l])
+				m.ServerID = types.ServerID(b[o : o+l])
 				o += l
 			}
 		}
@@ -328,19 +309,7 @@ func unmarshal1(m *wire.Hello, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.PartitionID = types.PartitionID(b[o:o+l])
-				o += l
-			}
-		}
-	}
-	{
-		// Namespace
-
-		{
-			var l uint64
-			helpers.UInt64Unmarshal(&l, b, &o)
-			if l > 0 {
-				m.Namespace = wire.Namespace(b[o:o+l])
+				m.PartitionID = types.PartitionID(b[o : o+l])
 				o += l
 			}
 		}
@@ -368,14 +337,6 @@ func isPatchNeeded1(m, mSrc *wire.Hello) bool {
 		// PartitionID
 
 		if !reflect.DeepEqual(m.PartitionID, mSrc.PartitionID) {
-			return true
-		}
-
-	}
-	{
-		// Namespace
-
-		if !reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
 			return true
 		}
 
@@ -425,27 +386,12 @@ func makePatch1(m, mSrc *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
-
-		if reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
-			b[0] &= 0xFB
-		} else {
-			b[0] |= 0x04
-			{
-				l := uint64(len(m.Namespace))
-				helpers.UInt64Marshal(l, b, &o)
-				copy(b[o:o+l], m.Namespace)
-				o += l
-			}
-		}
-	}
-	{
 		// Channel
 
 		if reflect.DeepEqual(m.Channel, mSrc.Channel) {
-			b[0] &= 0xF7
+			b[0] &= 0xFB
 		} else {
-			b[0] |= 0x08
+			b[0] |= 0x04
 			b[o] = byte(m.Channel)
 			o++
 		}
@@ -464,7 +410,7 @@ func applyPatch1(m *wire.Hello, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.ServerID = types.ServerID(b[o:o+l])
+					m.ServerID = types.ServerID(b[o : o+l])
 					o += l
 				}
 			}
@@ -478,21 +424,7 @@ func applyPatch1(m *wire.Hello, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.PartitionID = types.PartitionID(b[o:o+l])
-					o += l
-				}
-			}
-		}
-	}
-	{
-		// Namespace
-
-		if b[0]&0x04 != 0 {
-			{
-				var l uint64
-				helpers.UInt64Unmarshal(&l, b, &o)
-				if l > 0 {
-					m.Namespace = wire.Namespace(b[o:o+l])
+					m.PartitionID = types.PartitionID(b[o : o+l])
 					o += l
 				}
 			}
@@ -501,7 +433,7 @@ func applyPatch1(m *wire.Hello, b []byte) uint64 {
 	{
 		// Channel
 
-		if b[0]&0x08 != 0 {
+		if b[0]&0x04 != 0 {
 			m.Channel = wire.Channel(b[o])
 			o++
 		}

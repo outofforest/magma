@@ -151,7 +151,7 @@ func (g *Gossip) Run(ctx context.Context) error {
 				CA:             g.c2pCA,
 				MaxMessageSize: g.maxMessageSize,
 			}
-			// Checksum size is subtracted because we receive messages without checksums from client,
+			// PreviousChecksum size is subtracted because we receive messages without checksums from client,
 			// but later we add them and send back with checksums included. It means, that later
 			// message would be too big.
 			maxTxSize := g.maxMessageSize - format.ChecksumSize
@@ -602,6 +602,7 @@ func (g *Gossip) l2pHandler(
 				PeerID: peerID,
 			}
 
+			var version types.Version
 			for {
 				m, _, err := c.ReceiveProton(g.l2pMarshaller)
 				if err != nil {
@@ -610,6 +611,14 @@ func (g *Gossip) l2pHandler(
 
 				switch msg := m.(type) {
 				case *wire.StartLogStream:
+					if msg.Version != version {
+						version = msg.Version
+						cmdCh <- rafttypes.Command{
+							PeerID: peerID,
+							Cmd:    version,
+						}
+					}
+
 					var length uint64
 					for length < msg.Length {
 						tx, _, err := c.ReceiveRawBytes()
@@ -643,7 +652,7 @@ func (g *Gossip) l2pHandler(
 				switch m := msg.(type) {
 				case *repository.Iterator:
 					for {
-						r, length, err := m.Reader(false)
+						r, length, version, err := m.Reader(false)
 						if err != nil {
 							return err
 						}
@@ -653,14 +662,15 @@ func (g *Gossip) l2pHandler(
 								return err
 							}
 
-							r, length, err = m.Reader(true)
+							r, length, version, err = m.Reader(true)
 							if err != nil {
 								return err
 							}
 						}
 
 						if _, err := c.SendProton(&wire.StartLogStream{
-							Length: length,
+							Version: version,
+							Length:  length,
 						}, g.l2pMarshaller); err != nil {
 							return err
 						}
@@ -749,19 +759,32 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection, maxTxS
 		return errors.Errorf("partition %s is not defined", msgInit.PartitionID)
 	}
 
-	if msgInit.Namespace != pState.Namespace {
-		err := errors.Errorf("invalid namespace, got: %s, expected: %s", msgInit.Namespace, pState.Namespace)
-		if _, err := c.SendProton(&c2p.InitResponse{Error: err.Error()}, g.c2pMarshaller); err != nil {
-			return err
+	versionOffset, initReader, initSize, err := pState.Repo.InitReader(msgInit.Version)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if initReader != nil {
+			_ = initReader.Close()
 		}
+	}()
+
+	if msgInit.NextIndex > 0 && initReader != nil {
+		ir := initReader
+		initReader = nil
+		initSize = 0
+		if err := ir.Close(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	if _, err := c.SendProton(&c2p.InitResponse{
+		InitSize: initSize,
+	}, g.c2pMarshaller); err != nil {
 		return err
 	}
 
-	if _, err := c.SendProton(&c2p.InitResponse{}, g.c2pMarshaller); err != nil {
-		return err
-	}
-
-	it := pState.Repo.Iterator(pState.providerClients, msgInit.NextIndex)
+	it := pState.Repo.Iterator(pState.providerClients, versionOffset+msgInit.NextIndex)
 
 	ch2 := make(chan peerTx2P, 1)
 	var leaderCh <-chan peerTx2P = ch2
@@ -809,8 +832,19 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection, maxTxS
 		spawn("send", parallel.Fail, func(ctx context.Context) error {
 			defer c.Close()
 
+			if initReader != nil {
+				if err := c.SendStream(initReader); err != nil {
+					return err
+				}
+				ir := initReader
+				initReader = nil
+				if err := ir.Close(); err != nil {
+					return errors.WithStack(err)
+				}
+			}
+
 			for {
-				r, length, err := it.Reader(true)
+				r, length, version, err := it.Reader(true)
 				if err != nil {
 					return err
 				}
@@ -824,7 +858,8 @@ func (g *Gossip) c2pHandler(ctx context.Context, c *resonance.Connection, maxTxS
 				}
 
 				if _, err := c.SendProton(&wire.StartLogStream{
-					Length: length,
+					Version: version,
+					Length:  length,
 				}, g.c2pMarshaller); err != nil {
 					return err
 				}
@@ -842,19 +877,9 @@ func (g *Gossip) hello(
 	c *resonance.Connection,
 	prop connProperties,
 ) (connProperties, partitionState, error) {
-	var namespace wire.Namespace
-	if prop.PartitionID != "" {
-		pState, exists := g.partitions[prop.PartitionID]
-		if !exists {
-			return connProperties{}, partitionState{}, errors.Errorf("partition %s is not defined", prop.PartitionID)
-		}
-		namespace = pState.Namespace
-	}
-
 	if _, err := c.SendProton(&wire.Hello{
 		ServerID:    g.serverID,
 		PartitionID: prop.PartitionID,
-		Namespace:   namespace,
 		Channel:     prop.Channel,
 	}, g.helloMarshaller); err != nil {
 		return connProperties{}, partitionState{}, err
@@ -887,15 +912,12 @@ func (g *Gossip) hello(
 		}
 
 		prop.PartitionID = h.PartitionID
-		namespace = h.Namespace
 	case h.ServerID != prop.PeerID:
 		return connProperties{}, partitionState{}, errors.New("unexpected peer")
 	case h.Channel != wire.ChannelNone:
 		return connProperties{}, partitionState{}, errors.New("peer must not announce requested channel")
 	case h.PartitionID != "":
 		return connProperties{}, partitionState{}, errors.New("peer must not announce partition")
-	case h.Namespace != "":
-		return connProperties{}, partitionState{}, errors.New("peer must not announce namespace")
 	}
 
 	prop.PeerID = h.ServerID
@@ -907,14 +929,6 @@ func (g *Gossip) hello(
 
 	if _, exists := pState.validPeers[prop.PeerID]; !exists {
 		return connProperties{}, partitionState{}, errors.New("unknown peer")
-	}
-
-	if namespace != pState.Namespace {
-		err := errors.Errorf("invalid namespace, got: %s, expected: %s", namespace, pState.Namespace)
-		if _, err := c.SendProton(&wire.HelloResponse{Error: err.Error()}, g.helloMarshaller); err != nil {
-			return connProperties{}, partitionState{}, err
-		}
-		return connProperties{}, partitionState{}, err
 	}
 
 	if _, err := c.SendProton(&wire.HelloResponse{}, g.helloMarshaller); err != nil {

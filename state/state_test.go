@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/state/repository/format"
@@ -2040,7 +2041,7 @@ func TestAppendManyFiles(t *testing.T) {
 
 	buf := bytes.NewBuffer(nil)
 	for range 270 {
-		reader, _, err := it.Reader(true)
+		reader, _, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -2089,7 +2090,7 @@ func TestAppendManyTerms(t *testing.T) {
 
 	buf := bytes.NewBuffer(nil)
 	for range 120 {
-		reader, _, err := it.Reader(true)
+		reader, _, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -2440,7 +2441,7 @@ func newState(t *testing.T, dir string) (*State, string) {
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	repo, err := repository.Open(filepath.Join(dir, "repo"), 4*1024)
+	repo, err := repository.Open(filepath.Join(dir, "repo"), 4*1024, config.PartitionConfig{}, 1024*1024)
 	require.NoError(t, err)
 	em, err := events.Open(filepath.Join(dir, "events"))
 	require.NoError(t, err)
@@ -2466,7 +2467,7 @@ func logEqual(requireT *require.Assertions, s *State, expectedLog ...byte) {
 
 	buf := bytes.NewBuffer(nil)
 	for buf.Len() < len(expectedLog) {
-		reader, _, err := it.Reader(true)
+		reader, _, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)

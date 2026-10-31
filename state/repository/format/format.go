@@ -10,8 +10,11 @@ const ChecksumSize = 8
 
 // Header is the file header.
 type Header struct {
-	PreviousTerm   types.Term
-	Term           types.Term
-	NextIndex      magmatypes.Index
-	HeaderChecksum uint64
+	Version          magmatypes.Version
+	FileIndex        uint64
+	PreviousTerm     types.Term
+	Term             types.Term
+	NextIndex        magmatypes.Index
+	PreviousChecksum uint64
+	HeaderChecksum   uint64
 }

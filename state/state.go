@@ -21,6 +21,21 @@ var ErrInvalidTransaction = errors.New("invalid transaction")
 // Closer represents function closing the state.
 type Closer func() error
 
+// State represents the persistent state of the Raft consensus algorithm.
+type State struct {
+	repo             *repository.Repository
+	em               *events.Store
+	evState          events.State
+	nextIndex        types.Index
+	previousChecksum uint64
+
+	currentFile     *repository.File
+	log             []byte
+	nextIndexInFile types.Index
+
+	highestTermSeen rafttypes.Term
+}
+
 // New creates new state manager.
 func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) {
 	currentFile, err := repo.OpenCurrent()
@@ -75,19 +90,9 @@ func New(repo *repository.Repository, em *events.Store) (*State, Closer, error) 
 	return s, s.close, nil
 }
 
-// State represents the persistent state of the Raft consensus algorithm.
-type State struct {
-	repo             *repository.Repository
-	em               *events.Store
-	evState          events.State
-	nextIndex        types.Index
-	previousChecksum uint64
-
-	currentFile     *repository.File
-	log             []byte
-	nextIndexInFile types.Index
-
-	highestTermSeen rafttypes.Term
+// SetCurrentVersion sets current version.
+func (s *State) SetCurrentVersion(version types.Version) error {
+	return s.repo.SetCurrentVersion(version)
 }
 
 // CurrentTerm returns the current term of the state.
@@ -307,7 +312,7 @@ func (s *State) appendTx(
 				}
 
 				var err error
-				s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextIndex)
+				s.currentFile, err = s.repo.Create(rafttypes.Term(term), s.nextIndex, s.previousChecksum)
 				if err != nil {
 					return 0, 0, err
 				}
@@ -360,7 +365,7 @@ func (s *State) appendTx(
 func (s *State) append(data []byte) error {
 	if s.currentFile == nil {
 		var err error
-		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex)
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex, s.previousChecksum)
 		if err != nil {
 			return err
 		}
@@ -380,7 +385,7 @@ func (s *State) append(data []byte) error {
 		}
 
 		var err error
-		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex)
+		s.currentFile, err = s.repo.Create(s.repo.LastTerm(), s.nextIndex, s.previousChecksum)
 		if err != nil {
 			return err
 		}

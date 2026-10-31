@@ -1,7 +1,7 @@
 package partition
 
 import (
-	"github.com/outofforest/magma/gossip/wire"
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/raft/reactor"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository"
@@ -10,8 +10,7 @@ import (
 
 // State keeps the partition state used by other components.
 type State struct {
-	Namespace     wire.Namespace
-	Peers         []magmatypes.ServerConfig
+	Peers         []config.ServerConfig
 	ActiveServers map[magmatypes.ServerID]struct{}
 	Repo          *repository.Repository
 	Reactor       *reactor.Reactor

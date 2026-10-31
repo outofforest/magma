@@ -1,12 +1,13 @@
 package types
 
-import (
-	"github.com/outofforest/proton"
-	"github.com/outofforest/resonance"
-)
+// RevisionLength defines length in bytes of revision.
+const RevisionLength = 8
 
 // Revision is used to define Revision field in entities.
 type Revision uint64
+
+// Version represents db version.
+type Version uint64
 
 // Index represents the index of a log entry.
 type Index uint64
@@ -19,19 +20,6 @@ var ZeroServerID ServerID
 
 // PartitionID represents the partition ID.
 type PartitionID string
-
-// Config is the config of magma.
-type Config struct {
-	P2PCA             *resonance.CA
-	C2PCA             *resonance.CA
-	ServerID          ServerID
-	Marshallers       map[PartitionID]proton.Marshaller
-	Servers           []ServerConfig
-	MaxMessageSize    uint64
-	MaxUncommittedLog uint64
-	PageSize          uint64
-	Directory         string
-}
 
 // Partitions represents the role of server in partitions.
 type Partitions map[PartitionID]PartitionRole
@@ -46,10 +34,3 @@ const (
 	// PartitionRolePassive means server is passive in the partition.
 	PartitionRolePassive PartitionRole = false
 )
-
-// ServerConfig stores configuration of server.
-type ServerConfig struct {
-	ID         ServerID
-	P2PAddress string
-	Partitions Partitions
-}

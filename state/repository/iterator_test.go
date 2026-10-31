@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/outofforest/magma/config"
 )
 
 func TestIterator(t *testing.T) {
@@ -12,22 +14,22 @@ func TestIterator(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x04, 0x05})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 5)
+	file, err = r.Create(3, 5, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -38,26 +40,29 @@ func TestIterator(t *testing.T) {
 	tp.SetTail(6, 0)
 	it := r.Iterator(tp, 0)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x01, 0x02, 0x03}, data)
 	requireT.EqualValues(3, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04, 0x05}, data)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x06}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -67,22 +72,22 @@ func TestIteratorWithOffset2(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x04, 0x05})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 5)
+	file, err = r.Create(3, 5, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -93,26 +98,29 @@ func TestIteratorWithOffset2(t *testing.T) {
 	tp.SetTail(6, 0)
 	it := r.Iterator(tp, 2)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x03}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04, 0x05}, data)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x06}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -122,22 +130,22 @@ func TestIteratorWithOffset3(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x04, 0x05})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 5)
+	file, err = r.Create(3, 5, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -148,19 +156,21 @@ func TestIteratorWithOffset3(t *testing.T) {
 	tp.SetTail(6, 0)
 	it := r.Iterator(tp, 3)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04, 0x05}, data)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x06}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -170,22 +180,22 @@ func TestIteratorWithOffset5(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x04, 0x05})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 5)
+	file, err = r.Create(3, 5, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -196,12 +206,13 @@ func TestIteratorWithOffset5(t *testing.T) {
 	tp.SetTail(6, 0)
 	it := r.Iterator(tp, 5)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x06}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -211,8 +222,8 @@ func TestIteratorWithOffsetAtTheTail(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -222,7 +233,7 @@ func TestIteratorWithOffsetAtTheTail(t *testing.T) {
 	tp := NewTailProvider()
 	it := r.Iterator(tp, 3)
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -231,12 +242,13 @@ func TestIteratorWithOffsetAtTheTail(t *testing.T) {
 
 	tp.SetTail(5, 0)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04, 0x05}, data)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -246,22 +258,22 @@ func TestIteratorWithTail(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x01, 0x02, 0x03})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
 	copy(data, []byte{0x04, 0x05})
 	requireT.NoError(file.Close())
 
-	file, err = r.Create(3, 5)
+	file, err = r.Create(3, 5, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -272,35 +284,39 @@ func TestIteratorWithTail(t *testing.T) {
 	tp.SetTail(4, 0)
 	it := r.Iterator(tp, 0)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x01, 0x02, 0x03}, data)
 	requireT.EqualValues(3, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
 	tp.SetTail(7, 0)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x05}, data)
 	requireT.EqualValues(1, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x06, 0x00}, data)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -310,8 +326,8 @@ func TestIteratorNonBlocking(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -322,17 +338,19 @@ func TestIteratorNonBlocking(t *testing.T) {
 	tp.SetTail(3, 0)
 	it := r.Iterator(tp, 0)
 
-	reader, size, err := it.Reader(false)
+	reader, size, version, err := it.Reader(false)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x01, 0x02, 0x03}, data)
 	requireT.EqualValues(3, size)
+	requireT.Zero(version)
 
-	reader, size, err = it.Reader(false)
+	reader, size, version, err = it.Reader(false)
 	requireT.NoError(err)
 	requireT.Nil(reader)
 	requireT.Zero(size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -342,8 +360,8 @@ func TestIteratorHotEnd(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
-	file, err := r.Create(1, 0)
+	r, _ := newRepo(t, "", config.PartitionConfig{})
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -354,19 +372,21 @@ func TestIteratorHotEnd(t *testing.T) {
 	tp.SetTail(3, 0)
 	it := r.Iterator(tp, 0)
 
-	reader, size, err := it.Reader(true)
+	reader, size, version, err := it.Reader(true)
 	requireT.NoError(err)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x01, 0x02, 0x03}, data)
 	requireT.EqualValues(3, size)
+	requireT.Zero(version)
 
 	tp.SetTail(3, 3)
 
-	reader, size, err = it.Reader(true)
+	reader, size, version, err = it.Reader(true)
 	requireT.NoError(err)
 	requireT.Nil(reader)
 	requireT.Zero(size)
+	requireT.Zero(version)
 
 	requireT.NoError(it.Close())
 }
@@ -376,17 +396,18 @@ func TestIteratorWithNextIndexInTheFuture(t *testing.T) {
 
 	requireT := require.New(t)
 
-	r, _ := newRepo(t, "")
+	r, _ := newRepo(t, "", config.PartitionConfig{})
 
 	tp := NewTailProvider()
 	it := r.Iterator(tp, 3)
 
-	reader, size, err := it.Reader(false)
+	reader, size, version, err := it.Reader(false)
 	requireT.NoError(err)
 	requireT.Nil(reader)
 	requireT.Zero(size)
+	requireT.Zero(version)
 
-	file, err := r.Create(1, 0)
+	file, err := r.Create(1, 0, 0)
 	requireT.NoError(err)
 	data, err := file.Map()
 	requireT.NoError(err)
@@ -394,12 +415,13 @@ func TestIteratorWithNextIndexInTheFuture(t *testing.T) {
 	requireT.NoError(file.Close())
 
 	tp.SetTail(3, 0)
-	reader, size, err = it.Reader(false)
+	reader, size, version, err = it.Reader(false)
 	requireT.NoError(err)
 	requireT.Nil(reader)
 	requireT.Zero(size)
+	requireT.Zero(version)
 
-	file, err = r.Create(2, 3)
+	file, err = r.Create(2, 3, 0)
 	requireT.NoError(err)
 	data, err = file.Map()
 	requireT.NoError(err)
@@ -407,10 +429,11 @@ func TestIteratorWithNextIndexInTheFuture(t *testing.T) {
 	requireT.NoError(file.Close())
 
 	tp.SetTail(5, 0)
-	reader, size, err = it.Reader(false)
+	reader, size, version, err = it.Reader(false)
 	requireT.NoError(err)
 	requireT.NotNil(reader)
 	requireT.EqualValues(2, size)
+	requireT.Zero(version)
 	data, err = io.ReadAll(reader)
 	requireT.NoError(err)
 	requireT.Equal([]byte{0x04, 0x05}, data)

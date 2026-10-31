@@ -90,25 +90,25 @@ type Iterator struct {
 }
 
 // Reader returns next reader.
-func (i *Iterator) Reader(block bool) (io.Reader, uint64, error) {
+func (i *Iterator) Reader(block bool) (io.Reader, uint64, magmatypes.Version, error) {
 	tail, valid, err := i.provider.Wait(i.current, &i.hotEnd, block, &i.closed)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	if !valid {
-		return nil, 0, nil
+		return nil, 0, 0, nil
 	}
 
 	file, validUntil, err := i.file(i.current, tail)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	size := validUntil - i.current
 	i.current = validUntil
 
-	return io.LimitReader(file.Reader(), int64(size)), uint64(size), nil
+	return io.LimitReader(file.Reader(), int64(size)), uint64(size), file.header.Version, nil
 }
 
 // Close closes iterator.
@@ -140,7 +140,7 @@ func (i *Iterator) file(current, tail magmatypes.Index) (*File, magmatypes.Index
 	defer i.mu.Unlock()
 
 	lastFileIndex := uint64(len(i.r.files)) - 1
-	if i.fileIndex < lastFileIndex && current == i.r.files[i.fileIndex+1].Header.NextIndex {
+	if i.fileIndex < lastFileIndex && current == i.r.files[i.fileIndex+1].NextIndex {
 		i.fileIndex++
 		i.offset = 0
 		if file := i.currentFile; file != nil {
@@ -159,8 +159,8 @@ func (i *Iterator) file(current, tail magmatypes.Index) (*File, magmatypes.Index
 		}
 	}
 
-	if i.fileIndex < lastFileIndex && i.r.files[i.fileIndex+1].Header.NextIndex < tail {
-		return i.currentFile, i.r.files[i.fileIndex+1].Header.NextIndex, nil
+	if i.fileIndex < lastFileIndex && i.r.files[i.fileIndex+1].NextIndex < tail {
+		return i.currentFile, i.r.files[i.fileIndex+1].NextIndex, nil
 	}
 
 	return i.currentFile, tail, nil

@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	id1 uint64 = iota + 1
+	id3 uint64 = iota + 1
+	id2
+	id1
 	id0
 )
 
@@ -31,18 +33,24 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any {
+	return []any{
+		InitMetadata{},
+		InitEntityMetadata{},
 		TxMetadata{},
-		EntityMetadata{},
+		TxEntityMetadata{},
 	}
 }
 
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
+	case *InitMetadata:
+		return id3, nil
+	case *InitEntityMetadata:
+		return id2, nil
 	case *TxMetadata:
 		return id1, nil
-	case *EntityMetadata:
+	case *TxEntityMetadata:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -52,9 +60,13 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
+	case *InitMetadata:
+		return size3(msg2), nil
+	case *InitEntityMetadata:
+		return size2(msg2), nil
 	case *TxMetadata:
 		return size1(msg2), nil
-	case *EntityMetadata:
+	case *TxEntityMetadata:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -66,9 +78,13 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
+	case *InitMetadata:
+		return id3, marshal3(msg2, buf), nil
+	case *InitEntityMetadata:
+		return id2, marshal2(msg2, buf), nil
 	case *TxMetadata:
 		return id1, marshal1(msg2, buf), nil
-	case *EntityMetadata:
+	case *TxEntityMetadata:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -80,11 +96,17 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
+	case id3:
+		msg := &InitMetadata{}
+		return msg, unmarshal3(msg, buf), nil
+	case id2:
+		msg := &InitEntityMetadata{}
+		return msg, unmarshal2(msg, buf), nil
 	case id1:
 		msg := &TxMetadata{}
 		return msg, unmarshal1(msg, buf), nil
 	case id0:
-		msg := &EntityMetadata{}
+		msg := &TxEntityMetadata{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
@@ -94,10 +116,14 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 // IsPatchNeeded checks if non-empty patch exists.
 func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
 	switch msg2 := msgDst.(type) {
+	case *InitMetadata:
+		return isPatchNeeded3(msg2, msgSrc.(*InitMetadata)), nil
+	case *InitEntityMetadata:
+		return isPatchNeeded2(msg2, msgSrc.(*InitEntityMetadata)), nil
 	case *TxMetadata:
 		return isPatchNeeded1(msg2, msgSrc.(*TxMetadata)), nil
-	case *EntityMetadata:
-		return isPatchNeeded0(msg2, msgSrc.(*EntityMetadata)), nil
+	case *TxEntityMetadata:
+		return isPatchNeeded0(msg2, msgSrc.(*TxEntityMetadata)), nil
 	default:
 		return false, errors.Errorf("unknown message type %T", msgDst)
 	}
@@ -108,10 +134,14 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 	defer helpers.RecoverMakePatch(&retErr)
 
 	switch msg2 := msgDst.(type) {
+	case *InitMetadata:
+		return id3, makePatch3(msg2, msgSrc.(*InitMetadata), buf), nil
+	case *InitEntityMetadata:
+		return id2, makePatch2(msg2, msgSrc.(*InitEntityMetadata), buf), nil
 	case *TxMetadata:
 		return id1, makePatch1(msg2, msgSrc.(*TxMetadata), buf), nil
-	case *EntityMetadata:
-		return id0, makePatch0(msg2, msgSrc.(*EntityMetadata), buf), nil
+	case *TxEntityMetadata:
+		return id0, makePatch0(msg2, msgSrc.(*TxEntityMetadata), buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
 	}
@@ -122,16 +152,20 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 	defer helpers.RecoverApplyPatch(&retErr)
 
 	switch msg2 := msg.(type) {
+	case *InitMetadata:
+		return applyPatch3(msg2, buf), nil
+	case *InitEntityMetadata:
+		return applyPatch2(msg2, buf), nil
 	case *TxMetadata:
 		return applyPatch1(msg2, buf), nil
-	case *EntityMetadata:
+	case *TxEntityMetadata:
 		return applyPatch0(msg2, buf), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
 	}
 }
 
-func size0(m *EntityMetadata) uint64 {
+func size0(m *TxEntityMetadata) uint64 {
 	var n uint64 = 18
 	{
 		// Revision
@@ -146,7 +180,7 @@ func size0(m *EntityMetadata) uint64 {
 	return n
 }
 
-func marshal0(m *EntityMetadata, b []byte) uint64 {
+func marshal0(m *TxEntityMetadata, b []byte) uint64 {
 	var o uint64
 	{
 		// ID
@@ -168,7 +202,7 @@ func marshal0(m *EntityMetadata, b []byte) uint64 {
 	return o
 }
 
-func unmarshal0(m *EntityMetadata, b []byte) uint64 {
+func unmarshal0(m *TxEntityMetadata, b []byte) uint64 {
 	var o uint64
 	{
 		// ID
@@ -190,7 +224,7 @@ func unmarshal0(m *EntityMetadata, b []byte) uint64 {
 	return o
 }
 
-func isPatchNeeded0(m, mSrc *EntityMetadata) bool {
+func isPatchNeeded0(m, mSrc *TxEntityMetadata) bool {
 	{
 		// ID
 
@@ -219,7 +253,7 @@ func isPatchNeeded0(m, mSrc *EntityMetadata) bool {
 	return false
 }
 
-func makePatch0(m, mSrc *EntityMetadata, b []byte) uint64 {
+func makePatch0(m, mSrc *TxEntityMetadata, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// ID
@@ -256,7 +290,7 @@ func makePatch0(m, mSrc *EntityMetadata, b []byte) uint64 {
 	return o
 }
 
-func applyPatch0(m *EntityMetadata, b []byte) uint64 {
+func applyPatch0(m *TxEntityMetadata, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// ID
@@ -357,7 +391,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 		var nanoseconds uint32
 		helpers.Int64Unmarshal(&seconds, b, &o)
 		helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-		m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
+		m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
 	}
 	{
 		// Service
@@ -366,7 +400,7 @@ func unmarshal1(m *TxMetadata, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Service = string(b[o:o+l])
+				m.Service = string(b[o : o+l])
 				o += l
 			}
 		}
@@ -488,7 +522,7 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 			var nanoseconds uint32
 			helpers.Int64Unmarshal(&seconds, b, &o)
 			helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-			m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
+			m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
 		}
 	}
 	{
@@ -499,7 +533,7 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Service = string(b[o:o+l])
+					m.Service = string(b[o : o+l])
 					o += l
 				}
 			}
@@ -509,6 +543,353 @@ func applyPatch1(m *TxMetadata, b []byte) uint64 {
 		// EntityMetadataID
 
 		if b[0]&0x08 != 0 {
+			helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func size2(m *InitEntityMetadata) uint64 {
+	var n uint64 = 17
+	{
+		// MessageID
+
+		helpers.UInt64Size(m.MessageID, &n)
+	}
+	return n
+}
+
+func marshal2(m *InitEntityMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// ID
+
+		copy(b[o:o+16], unsafe.Slice(&m.ID[0], 16))
+		o += 16
+	}
+	{
+		// MessageID
+
+		helpers.UInt64Marshal(m.MessageID, b, &o)
+	}
+
+	return o
+}
+
+func unmarshal2(m *InitEntityMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// ID
+
+		copy(unsafe.Slice(&m.ID[0], 16), b[o:o+16])
+		o += 16
+	}
+	{
+		// MessageID
+
+		helpers.UInt64Unmarshal(&m.MessageID, b, &o)
+	}
+
+	return o
+}
+
+func isPatchNeeded2(m, mSrc *InitEntityMetadata) bool {
+	{
+		// ID
+
+		if !reflect.DeepEqual(m.ID, mSrc.ID) {
+			return true
+		}
+
+	}
+	{
+		// MessageID
+
+		if !reflect.DeepEqual(m.MessageID, mSrc.MessageID) {
+			return true
+		}
+
+	}
+
+	return false
+}
+
+func makePatch2(m, mSrc *InitEntityMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if reflect.DeepEqual(m.ID, mSrc.ID) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			copy(b[o:o+16], unsafe.Slice(&m.ID[0], 16))
+			o += 16
+		}
+	}
+	{
+		// MessageID
+
+		if reflect.DeepEqual(m.MessageID, mSrc.MessageID) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.MessageID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch2(m *InitEntityMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// ID
+
+		if b[0]&0x01 != 0 {
+			copy(unsafe.Slice(&m.ID[0], 16), b[o:o+16])
+			o += 16
+		}
+	}
+	{
+		// MessageID
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.MessageID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func size3(m *InitMetadata) uint64 {
+	var n uint64 = 5
+	{
+		// Version
+
+		helpers.UInt64Size(m.Version, &n)
+	}
+	{
+		// Term
+
+		helpers.UInt64Size(m.Term, &n)
+	}
+	{
+		// PreviousChecksum
+
+		helpers.UInt64Size(m.PreviousChecksum, &n)
+	}
+	{
+		// NextIndex
+
+		helpers.UInt64Size(m.NextIndex, &n)
+	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Size(m.EntityMetadataID, &n)
+	}
+	return n
+}
+
+func marshal3(m *InitMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Marshal(m.Version, b, &o)
+	}
+	{
+		// Term
+
+		helpers.UInt64Marshal(m.Term, b, &o)
+	}
+	{
+		// PreviousChecksum
+
+		helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
+	}
+	{
+		// NextIndex
+
+		helpers.UInt64Marshal(m.NextIndex, b, &o)
+	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Marshal(m.EntityMetadataID, b, &o)
+	}
+
+	return o
+}
+
+func unmarshal3(m *InitMetadata, b []byte) uint64 {
+	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Unmarshal(&m.Version, b, &o)
+	}
+	{
+		// Term
+
+		helpers.UInt64Unmarshal(&m.Term, b, &o)
+	}
+	{
+		// PreviousChecksum
+
+		helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
+	}
+	{
+		// NextIndex
+
+		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
+	}
+	{
+		// EntityMetadataID
+
+		helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
+	}
+
+	return o
+}
+
+func isPatchNeeded3(m, mSrc *InitMetadata) bool {
+	{
+		// Version
+
+		if !reflect.DeepEqual(m.Version, mSrc.Version) {
+			return true
+		}
+
+	}
+	{
+		// Term
+
+		if !reflect.DeepEqual(m.Term, mSrc.Term) {
+			return true
+		}
+
+	}
+	{
+		// PreviousChecksum
+
+		if !reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
+			return true
+		}
+
+	}
+	{
+		// NextIndex
+
+		if !reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			return true
+		}
+
+	}
+	{
+		// EntityMetadataID
+
+		if !reflect.DeepEqual(m.EntityMetadataID, mSrc.EntityMetadataID) {
+			return true
+		}
+
+	}
+
+	return false
+}
+
+func makePatch3(m, mSrc *InitMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Version
+
+		if reflect.DeepEqual(m.Version, mSrc.Version) {
+			b[0] &= 0xFE
+		} else {
+			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Version, b, &o)
+		}
+	}
+	{
+		// Term
+
+		if reflect.DeepEqual(m.Term, mSrc.Term) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.Term, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
+			helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
+		}
+	}
+	{
+		// NextIndex
+
+		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
+			b[0] &= 0xF7
+		} else {
+			b[0] |= 0x08
+			helpers.UInt64Marshal(m.NextIndex, b, &o)
+		}
+	}
+	{
+		// EntityMetadataID
+
+		if reflect.DeepEqual(m.EntityMetadataID, mSrc.EntityMetadataID) {
+			b[0] &= 0xEF
+		} else {
+			b[0] |= 0x10
+			helpers.UInt64Marshal(m.EntityMetadataID, b, &o)
+		}
+	}
+
+	return o
+}
+
+func applyPatch3(m *InitMetadata, b []byte) uint64 {
+	var o uint64 = 1
+	{
+		// Version
+
+		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Version, b, &o)
+		}
+	}
+	{
+		// Term
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.Term, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
+		}
+	}
+	{
+		// NextIndex
+
+		if b[0]&0x08 != 0 {
+			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
+		}
+	}
+	{
+		// EntityMetadataID
+
+		if b[0]&0x10 != 0 {
 			helpers.UInt64Unmarshal(&m.EntityMetadataID, b, &o)
 		}
 	}

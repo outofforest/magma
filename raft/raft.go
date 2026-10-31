@@ -64,6 +64,8 @@ func Run(
 		for _, pState := range partitions {
 			spawn("reactor", parallel.Fail, func(ctx context.Context) error {
 				defer func() {
+					close(pState.ResultCh)
+
 					spawn("cmdP2PChCleaner", parallel.Fail, func(ctx context.Context) error {
 						for range pState.CmdP2PCh {
 						}
@@ -75,7 +77,6 @@ func Run(
 						return errors.WithStack(ctx.Err())
 					})
 				}()
-				defer close(pState.ResultCh)
 
 				return runReactor(ctx, pState.Reactor, pState.CmdP2PCh, pState.CmdC2PCh, pState.ResultCh, pState.RoleCh)
 			})

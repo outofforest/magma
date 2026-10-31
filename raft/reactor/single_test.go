@@ -11,7 +11,7 @@ import (
 )
 
 func newReactorSingleMode(s *state.State) *Reactor {
-	return New(serverID, nil, []magmatypes.ServerID{passivePeerID}, 4096, s)
+	return New(serverID, nil, []magmatypes.ServerID{passivePeerID}, 4096, 0, s)
 }
 
 func TestSingleModeApplyElectionTickTransitionToLeader(t *testing.T) {

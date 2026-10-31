@@ -9,7 +9,7 @@ require (
 	github.com/outofforest/parallel v0.2.4
 	github.com/outofforest/proton v0.21.1
 	github.com/outofforest/qa v0.3.1
-	github.com/outofforest/resonance v0.27.1
+	github.com/outofforest/resonance v0.28.0
 	github.com/outofforest/varuint64 v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.53.0

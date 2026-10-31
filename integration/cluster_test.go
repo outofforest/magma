@@ -12,13 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/client"
+	"github.com/outofforest/magma/client/db"
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/pkg/cluster"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/parallel"
-	"github.com/outofforest/proton"
 	"github.com/outofforest/qa"
 )
 
@@ -33,11 +34,23 @@ var clusterConfig = cluster.ConfigTesting{
 	MaxMessageSize:    3 * 1024,
 	MaxUncommittedLog: 15 * 1024,
 	PageSize:          uint64(os.Getpagesize()),
-	Marshallers: map[types.PartitionID]proton.Marshaller{
-		partitionDefault: entities.NewMarshaller(),
-		partition1:       entities.NewMarshaller(),
-		partition2:       entities.NewMarshaller(),
-		partition3:       entities.NewMarshaller(),
+	Partitions: []config.PartitionConfig{
+		{
+			ID:                partitionDefault,
+			InitialMarshaller: entities.NewMarshaller(),
+		},
+		{
+			ID:                partition1,
+			InitialMarshaller: entities.NewMarshaller(),
+		},
+		{
+			ID:                partition2,
+			InitialMarshaller: entities.NewMarshaller(),
+		},
+		{
+			ID:                partition3,
+			InitialMarshaller: entities.NewMarshaller(),
+		},
 	},
 }
 
@@ -53,7 +66,6 @@ func TestBenchmark(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 	peers := []*cluster.Peer{
 		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
 		clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive}),
@@ -67,7 +79,7 @@ func TestBenchmark(t *testing.T) {
 
 	clients := make([]*cluster.Client, 0, numOfClients)
 	for i := range numOfClients {
-		clients = append(clients, clstr.NewClient(peers[i%len(peers)], fmt.Sprintf("client-%d", i), m,
+		clients = append(clients, clstr.NewClient(peers[i%len(peers)], fmt.Sprintf("client-%d", i),
 			partitionDefault, nil, indexLastName, indexFirstName, indexName))
 	}
 
@@ -79,7 +91,7 @@ func TestBenchmark(t *testing.T) {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
 			for j := range transactionsPerClient {
-				err := tr.Tx(ctx, func(tx client.Tx) error {
+				err := tr.Tx(ctx, func(tx db.Tx) error {
 					requireT.NoError(tx.Set(entities.Account{
 						ID:        memdb.NewID[entities.AccountID](),
 						FirstName: fmt.Sprintf("FirstName-%d-%d", i, j),
@@ -104,17 +116,16 @@ func TestSinglePeer(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(p, "client", partitionDefault, nil)
 
 	clstr.StartPeers(p)
 	clstr.StartClients(c)
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
@@ -124,7 +135,7 @@ func TestSinglePeer(t *testing.T) {
 	}))
 
 	v := c.View()
-	account, exists := client.Get[entities.Account](v, accountID)
+	account, exists := db.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -141,7 +152,6 @@ func Test3Peers3Clients(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peers := []*cluster.Peer{
 		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
@@ -153,14 +163,14 @@ func Test3Peers3Clients(t *testing.T) {
 	results := make(chan map[entities.AccountID]entities.Account, 3)
 	triggerFunc := func() client.TriggerFunc {
 		var found bool
-		return func(ctx context.Context, v *client.View, _ map[reflect.Type]struct{}) error {
+		return func(ctx context.Context, v *db.View, _ map[reflect.Type]struct{}) error {
 			if found {
 				return nil
 			}
 
 			accounts := map[entities.AccountID]entities.Account{}
 			for _, id := range ids {
-				acc, exists := client.Get[entities.Account](v, id)
+				acc, exists := db.Get[entities.Account](v, id)
 				if !exists {
 					return nil
 				}
@@ -181,7 +191,7 @@ func Test3Peers3Clients(t *testing.T) {
 	clients := make([]*cluster.Client, 0, len(peers))
 	idCh := make(chan entities.AccountID, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), m, partitionDefault,
+		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), partitionDefault,
 			triggerFunc()))
 		id := memdb.NewID[entities.AccountID]()
 		ids = append(ids, id)
@@ -194,7 +204,7 @@ func Test3Peers3Clients(t *testing.T) {
 	clientGroup := qa.NewGroup(ctx, t)
 	for _, c := range clients {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
-			return c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+			return c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 				requireT.NoError(tx.Set(entities.Account{
 					ID:        <-idCh,
 					FirstName: "FirstName",
@@ -232,7 +242,6 @@ func TestPeerRestart(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peers := []*cluster.Peer{
 		clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive}),
@@ -242,7 +251,7 @@ func TestPeerRestart(t *testing.T) {
 
 	clients := make([]*cluster.Client, 0, len(peers))
 	for i, peer := range peers {
-		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), m, partitionDefault,
+		clients = append(clients, clstr.NewClient(peer, fmt.Sprintf("client-%d", i), partitionDefault,
 			nil))
 	}
 
@@ -257,7 +266,7 @@ func TestPeerRestart(t *testing.T) {
 
 	loop:
 		for j := range 5 {
-			err := clients[cI].NewTransactor().Tx(ctx, func(tx client.Tx) error {
+			err := clients[cI].NewTransactor().Tx(ctx, func(tx db.Tx) error {
 				requireT.NoError(tx.Set(entities.Account{
 					ID:        memdb.NewID[entities.AccountID](),
 					FirstName: "FirstName",
@@ -268,8 +277,8 @@ func TestPeerRestart(t *testing.T) {
 			switch {
 			case err == nil:
 				break loop
-			case errors.Is(err, client.ErrTxBroadcastTimeout):
-			case errors.Is(err, client.ErrTxAwaitTimeout):
+			case errors.Is(err, db.ErrTxBroadcastTimeout):
+			case errors.Is(err, db.ErrTxAwaitTimeout):
 			default:
 				requireT.NoError(err)
 			}
@@ -290,7 +299,6 @@ func TestPassivePeers(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -299,7 +307,7 @@ func TestPassivePeers(t *testing.T) {
 	peerObserver1 := clstr.NewPeer("P0", types.Partitions{partitionDefault: types.PartitionRolePassive})
 	peerObserver2 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRolePassive})
 
-	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c)
@@ -324,7 +332,7 @@ func TestPassivePeers(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs {
-		requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -332,8 +340,8 @@ func TestPassivePeers(t *testing.T) {
 
 	clstr.StopClients(c)
 
-	cp1 := clstr.NewClient(peerObserver1, "client1", m, partitionDefault, nil)
-	cp2 := clstr.NewClient(peerObserver2, "client2", m, partitionDefault, nil)
+	cp1 := clstr.NewClient(peerObserver1, "client1", partitionDefault, nil)
+	cp2 := clstr.NewClient(peerObserver2, "client2", partitionDefault, nil)
 	clstr.StartPeers(peerObserver1, peerObserver2)
 	clstr.StartClients(cp1, cp2)
 
@@ -342,11 +350,11 @@ func TestPassivePeers(t *testing.T) {
 	for _, acc := range accs {
 		acc.Revision = 1
 
-		acc2, exists := client.Get[entities.Account](v1, acc.ID)
+		acc2, exists := db.Get[entities.Account](v1, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
 
-		acc2, exists = client.Get[entities.Account](v2, acc.ID)
+		acc2, exists = db.Get[entities.Account](v2, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
 	}
@@ -359,13 +367,12 @@ func TestSyncWhileRunning(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c)
@@ -406,14 +413,14 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs[:3] {
-		requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
 	}
 
 	clstr.StartPeers(peer3)
-	c2 := clstr.NewClient(peer3, "client2", m, partitionDefault, nil)
+	c2 := clstr.NewClient(peer3, "client2", partitionDefault, nil)
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
@@ -421,17 +428,17 @@ func TestSyncWhileRunning(t *testing.T) {
 	clstr.DisableLink(peer3, peer2)
 
 	for _, acc := range accs[3:] {
-		requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
 	}
 
-	c2 = clstr.NewClient(peer3, "client2", m, partitionDefault, nil)
+	c2 = clstr.NewClient(peer3, "client2", partitionDefault, nil)
 	clstr.StartClients(c2)
 
 	tr2 := c2.NewTransactor()
-	requireT.Error(tr2.Tx(ctx, func(tx client.Tx) error {
+	requireT.Error(tr2.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName100",
@@ -440,11 +447,11 @@ func TestSyncWhileRunning(t *testing.T) {
 		return nil
 	}))
 
-	c3 := clstr.NewClient(peer3, "client3", m, partitionDefault, nil)
+	c3 := clstr.NewClient(peer3, "client3", partitionDefault, nil)
 	clstr.StartClients(c3)
 
 	v := c3.View()
-	acc, exists := client.Get[entities.Account](v, accID)
+	acc, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	acc.Revision = 0
 	requireT.Equal(accs[2], acc)
@@ -454,7 +461,7 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	var err error
 	for range 10 {
-		err = tr2.Tx(ctx, func(tx client.Tx) error {
+		err = tr2.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{
 				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "FirstName100",
@@ -469,7 +476,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	requireT.NoError(err)
 
 	v = c2.View()
-	acc, exists = client.Get[entities.Account](v, accID)
+	acc, exists = db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	acc.Revision = 0
 	requireT.Equal(accs[5], acc)
@@ -482,13 +489,12 @@ func TestSyncAfterRestart(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c)
@@ -529,7 +535,7 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs[:3] {
-		requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -538,8 +544,8 @@ func TestSyncAfterRestart(t *testing.T) {
 	accCh1 := make(chan entities.Account, 1)
 	accCh2 := make(chan entities.Account, 1)
 	triggerFunc := func(accCh chan<- entities.Account) client.TriggerFunc {
-		return func(ctx context.Context, v *client.View, _ map[reflect.Type]struct{}) error {
-			a, exists := client.Get[entities.Account](v, accID)
+		return func(ctx context.Context, v *db.View, _ map[reflect.Type]struct{}) error {
+			a, exists := db.Get[entities.Account](v, accID)
 			if exists {
 				select {
 				case accCh <- a:
@@ -550,16 +556,16 @@ func TestSyncAfterRestart(t *testing.T) {
 		}
 	}
 
-	c2 := clstr.NewClient(peer3, "client2", m, partitionDefault, triggerFunc(accCh1))
-	c3 := clstr.NewClient(peer3, "client3", m, partitionDefault, triggerFunc(accCh2))
+	c2 := clstr.NewClient(peer3, "client2", partitionDefault, triggerFunc(accCh1))
+	c3 := clstr.NewClient(peer3, "client3", partitionDefault, triggerFunc(accCh2))
 	clstr.StartPeers(peer3)
 	clstr.StartClients(c2, c3)
 
-	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
@@ -578,22 +584,22 @@ func TestSyncAfterRestart(t *testing.T) {
 	requireT.Equal(accs[2], acc)
 
 	for _, acc := range accs[3:] {
-		requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
 	}
 
-	c2 = clstr.NewClient(peer3, "client2", m, partitionDefault, triggerFunc(accCh1))
+	c2 = clstr.NewClient(peer3, "client2", partitionDefault, triggerFunc(accCh1))
 
 	clstr.StartPeers(peer3)
 	clstr.StartClients(c2)
 
-	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
@@ -619,7 +625,6 @@ func TestPartitions(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{
 		partition1: types.PartitionRoleActive,
@@ -634,9 +639,9 @@ func TestPartitions(t *testing.T) {
 		partition1: types.PartitionRoleActive,
 	})
 
-	c1 := clstr.NewClient(peer1, "client1", m, partition1, nil)
-	c2 := clstr.NewClient(peer2, "client2", m, partition2, nil)
-	c3 := clstr.NewClient(peer3, "client3", m, partition3, nil)
+	c1 := clstr.NewClient(peer1, "client1", partition1, nil)
+	c2 := clstr.NewClient(peer2, "client2", partition2, nil)
+	c3 := clstr.NewClient(peer3, "client3", partition3, nil)
 
 	clstr.StartPeers(peer1, peer2, peer3)
 	clstr.StartClients(c1, c2, c3)
@@ -700,7 +705,7 @@ func TestPartitions(t *testing.T) {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
 			for _, acc := range accs[i] {
-				err := tr.Tx(ctx, func(tx client.Tx) error {
+				err := tr.Tx(ctx, func(tx db.Tx) error {
 					requireT.NoError(tx.Set(acc))
 					return nil
 				})
@@ -715,9 +720,9 @@ func TestPartitions(t *testing.T) {
 
 	clstr.StopClients(c1, c2, c3)
 
-	c1 = clstr.NewClient(peer3, "client1", m, partition1, nil)
-	c2 = clstr.NewClient(peer1, "client2", m, partition2, nil)
-	c3 = clstr.NewClient(peer2, "client3", m, partition3, nil)
+	c1 = clstr.NewClient(peer3, "client1", partition1, nil)
+	c2 = clstr.NewClient(peer1, "client2", partition2, nil)
+	c3 = clstr.NewClient(peer2, "client3", partition3, nil)
 
 	clstr.StartClients(c1, c2, c3)
 
@@ -725,7 +730,7 @@ func TestPartitions(t *testing.T) {
 		v := c.View()
 		for j, accs := range accs {
 			for _, acc := range accs {
-				acc2, exists := client.Get[entities.Account](v, acc.ID)
+				acc2, exists := db.Get[entities.Account](v, acc.ID)
 				if i == j {
 					requireT.True(exists)
 					acc2.Revision = 0
@@ -745,11 +750,10 @@ func TestTimeouts(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c)
@@ -758,18 +762,18 @@ func TestTimeouts(t *testing.T) {
 	accountID := memdb.NewID[entities.AccountID]()
 
 	tr := c.NewTransactor()
-	requireT.ErrorIs(tr.Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
 			LastName:  "LastName",
 		}))
 		return nil
-	}), client.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	clstr.StopPeers(peer1)
 
-	requireT.Error(tr.Tx(ctx, func(tx client.Tx) error {
+	requireT.Error(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
@@ -778,14 +782,14 @@ func TestTimeouts(t *testing.T) {
 		return nil
 	}))
 
-	requireT.ErrorIs(tr.Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
 			LastName:  "LastName",
 		}))
 		return nil
-	}), client.ErrTxBroadcastTimeout)
+	}), db.ErrTxBroadcastTimeout)
 }
 
 func TestOutdatedTx(t *testing.T) {
@@ -795,12 +799,11 @@ func TestOutdatedTx(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
-	c2 := clstr.NewClient(peer2, "client2", m, partitionDefault, nil)
+	c1 := clstr.NewClient(peer1, "client1", partitionDefault, nil)
+	c2 := clstr.NewClient(peer2, "client2", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2)
 	clstr.StartClients(c1, c2)
@@ -808,7 +811,7 @@ func TestOutdatedTx(t *testing.T) {
 	accountID1 := memdb.NewID[entities.AccountID]()
 	accountID2 := memdb.NewID[entities.AccountID]()
 
-	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID2,
 			FirstName: "ShouldNotPassFirstName",
@@ -821,7 +824,7 @@ func TestOutdatedTx(t *testing.T) {
 			LastName:  "LastName1",
 		}))
 
-		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{
 				ID:        accountID1,
 				FirstName: "FirstName2",
@@ -831,10 +834,10 @@ func TestOutdatedTx(t *testing.T) {
 		}))
 
 		return nil
-	}), client.ErrTxOutdatedTx)
+	}), db.ErrTxOutdatedTx)
 
 	v := c1.View()
-	acc, exists := client.Get[entities.Account](v, accountID1)
+	acc, exists := db.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID1,
@@ -843,11 +846,11 @@ func TestOutdatedTx(t *testing.T) {
 		LastName:  "LastName2",
 	}, acc)
 
-	_, exists = client.Get[entities.Account](v, accountID2)
+	_, exists = db.Get[entities.Account](v, accountID2)
 	requireT.False(exists)
 
 	v = c2.View()
-	acc, exists = client.Get[entities.Account](v, accountID1)
+	acc, exists = db.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID1,
@@ -856,7 +859,7 @@ func TestOutdatedTx(t *testing.T) {
 		LastName:  "LastName2",
 	}, acc)
 
-	_, exists = client.Get[entities.Account](v, accountID2)
+	_, exists = db.Get[entities.Account](v, accountID2)
 	requireT.False(exists)
 }
 
@@ -867,16 +870,15 @@ func TestEmptyTx(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(p, "client", partitionDefault, nil)
 
 	clstr.StartPeers(p)
 	clstr.StartClients(c)
 	clstr.StopPeers(p)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		return nil
 	}))
 }
@@ -888,13 +890,12 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
-	c := clstr.NewClient(peer1, "client", m, partitionDefault, nil)
+	c := clstr.NewClient(peer1, "client", partitionDefault, nil)
 
 	clstr.StartPeers(peer1, peer2, peer3)
 	clstr.StartClients(c)
@@ -911,7 +912,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		return nil
 	}))
@@ -919,7 +920,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	acc1.FirstName = "FirstName1"
 	acc1.LastName = "LastName1"
 
-	requireT.NoError(tr.Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		return nil
 	}))
@@ -930,7 +931,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 
 	var err error
 	for range 5 {
-		err = tr.Tx(ctx, func(tx client.Tx) error {
+		err = tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc2))
 			return nil
 		})
@@ -945,11 +946,11 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 
 	v := c.View()
 
-	acc, exists := client.Get[entities.Account](v, acc1.ID)
+	acc, exists := db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, acc)
 
-	acc, exists = client.Get[entities.Account](v, acc2.ID)
+	acc, exists = db.Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc2, acc)
 }
@@ -961,7 +962,6 @@ func TestSplitAndResync(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
@@ -969,8 +969,8 @@ func TestSplitAndResync(t *testing.T) {
 
 	clstr.ForceLeader(peer3)
 
-	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
-	c3 := clstr.NewClient(peer3, "client1", m, partitionDefault, nil)
+	c1 := clstr.NewClient(peer1, "client1", partitionDefault, nil)
+	c3 := clstr.NewClient(peer3, "client1", partitionDefault, nil)
 	tr1 := c1.NewTransactor()
 	tr3 := c3.NewTransactor()
 
@@ -978,12 +978,12 @@ func TestSplitAndResync(t *testing.T) {
 	clstr.StartClients(c1, c3)
 
 	acc1ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(tr1.Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc1ID}))
 		return nil
 	}))
 	acc3ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(tr3.Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(tr3.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc3ID}))
 		return nil
 	}))
@@ -993,15 +993,15 @@ func TestSplitAndResync(t *testing.T) {
 	clstr.DisableLink(peer3, peer2)
 
 	acc4ID := memdb.NewID[entities.AccountID]()
-	requireT.ErrorIs(tr3.Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(tr3.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc4ID}))
 		return nil
-	}), client.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 	acc5ID := memdb.NewID[entities.AccountID]()
 
 	var err error
 	for range 5 {
-		err = tr1.Tx(ctx, func(tx client.Tx) error {
+		err = tr1.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{ID: acc5ID}))
 			return nil
 		})
@@ -1016,7 +1016,7 @@ func TestSplitAndResync(t *testing.T) {
 
 	acc6ID := memdb.NewID[entities.AccountID]()
 	for range 5 {
-		err = c3.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+		err = c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{ID: acc6ID}))
 			return nil
 		})
@@ -1025,21 +1025,21 @@ func TestSplitAndResync(t *testing.T) {
 		}
 	}
 	requireT.NoError(err)
-	requireT.NoError(tr1.Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
 
 	v := c1.View()
-	_, exists := client.Get[entities.Account](v, acc1ID)
+	_, exists := db.Get[entities.Account](v, acc1ID)
 	requireT.True(exists)
-	_, exists = client.Get[entities.Account](v, acc3ID)
+	_, exists = db.Get[entities.Account](v, acc3ID)
 	requireT.True(exists)
-	_, exists = client.Get[entities.Account](v, acc4ID)
+	_, exists = db.Get[entities.Account](v, acc4ID)
 	requireT.False(exists)
-	_, exists = client.Get[entities.Account](v, acc5ID)
+	_, exists = db.Get[entities.Account](v, acc5ID)
 	requireT.True(exists)
-	_, exists = client.Get[entities.Account](v, acc6ID)
+	_, exists = db.Get[entities.Account](v, acc6ID)
 	requireT.True(exists)
 }
 
@@ -1050,14 +1050,13 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	peer1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
 	peer2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	clstr.ForceLeader(peer1)
 
-	c1 := clstr.NewClient(peer1, "client1", m, partitionDefault, nil)
+	c1 := clstr.NewClient(peer1, "client1", partitionDefault, nil)
 	tr1 := c1.NewTransactor()
 
 	clstr.StartPeers(peer1, peer2)
@@ -1065,38 +1064,38 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	clstr.StopPeers(peer2)
 
 	blob1ID := memdb.NewID[memdb.ID]()
-	requireT.ErrorIs(tr1.Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Blob{ID: blob1ID}))
 		return nil
-	}), client.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	// This one should exceed the limit.
 	for {
-		err := tr1.Tx(ctx, func(tx client.Tx) error {
+		err := tr1.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Blob{ID: memdb.NewID[memdb.ID](),
 				Data: make([]byte, clusterConfig.MaxMessageSize/2)}))
 			return nil
 		})
-		if errors.Is(err, client.ErrTxAwaitTimeout) {
+		if errors.Is(err, db.ErrTxAwaitTimeout) {
 			break
 		}
 	}
 
 	blob2ID := memdb.NewID[memdb.ID]()
-	requireT.ErrorIs(tr1.Tx(ctx, func(tx client.Tx) error {
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Blob{ID: blob2ID}))
 		return nil
-	}), client.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	clstr.StartPeers(peer2)
 
-	c2 := clstr.NewClient(peer2, "client2", m, partitionDefault, nil)
+	c2 := clstr.NewClient(peer2, "client2", partitionDefault, nil)
 	clstr.StartClients(c2)
 
 	v := c2.View()
-	_, exists := client.Get[entities.Blob](v, blob1ID)
+	_, exists := db.Get[entities.Blob](v, blob1ID)
 	requireT.True(exists)
-	_, exists = client.Get[entities.Blob](v, blob2ID)
+	_, exists = db.Get[entities.Blob](v, blob2ID)
 	requireT.True(exists)
 }
 
@@ -1107,13 +1106,12 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
 	receivedTypes := make(chan map[reflect.Type]struct{}, 3)
-	c := clstr.NewClient(p, "client", m, partitionDefault,
-		func(ctx context.Context, v *client.View, types map[reflect.Type]struct{}) error {
+	c := clstr.NewClient(p, "client", partitionDefault,
+		func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error {
 			receivedTypes <- types
 			return nil
 		},
@@ -1127,7 +1125,7 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 	accountID3 := memdb.NewID[entities.AccountID]()
 	accountID4 := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID1,
 			FirstName: "FirstName1",
@@ -1140,7 +1138,7 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 		}))
 		return nil
 	}))
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID3,
 			FirstName: "FirstName3",
@@ -1170,7 +1168,6 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	ctx := qa.NewContext(t)
 	group := qa.NewGroup(ctx, t)
 	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := entities.NewMarshaller()
 
 	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
 
@@ -1187,17 +1184,17 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 
 	var a1, a2 entities.Account
 	doneCh := make(chan struct{})
-	c := clstr.NewClient(p, "client", m, partitionDefault,
-		func(ctx context.Context, v *client.View, types map[reflect.Type]struct{}) error {
+	c := clstr.NewClient(p, "client", partitionDefault,
+		func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error {
 			if _, exists := types[reflect.TypeFor[entities.Account]()]; !exists {
 				return nil
 			}
 
-			a1, _ = client.Get[entities.Account](v, account1.ID)
+			a1, _ = db.Get[entities.Account](v, account1.ID)
 
 			v.Set(account2)
 
-			a2, _ = client.Get[entities.Account](v, account1.ID)
+			a2, _ = db.Get[entities.Account](v, account1.ID)
 
 			close(doneCh)
 			return nil
@@ -1207,7 +1204,7 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	clstr.StartPeers(p)
 	clstr.StartClients(c)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		return tx.Set(account1)
 	}))
 
@@ -1217,136 +1214,7 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	requireT.Equal(account1, a1)
 	requireT.Equal(account2, a2)
 
-	a, exists := client.Get[entities.Account](c.View(), account1.ID)
+	a, exists := db.Get[entities.Account](c.View(), account1.ID)
 	requireT.True(exists)
 	requireT.Equal(account1, a)
-}
-
-func TestClientExitsOnInvalidMarshaler(t *testing.T) {
-	t.Parallel()
-
-	requireT := require.New(t)
-	ctx := qa.NewContext(t)
-	group := parallel.NewGroup(ctx)
-	t.Cleanup(func() {
-		group.Exit(nil)
-		_ = group.Wait()
-	})
-
-	clstr := cluster.NewTesting(group, t, clusterConfig)
-	m := fakeMarshaller{m: entities.NewMarshaller()}
-
-	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
-
-	clstr.StartPeers(p)
-	clstr.StartClients(c)
-
-	requireT.Error(c.WarmUp(group.Context()))
-
-	group.Exit(nil)
-	requireT.Error(group.Wait())
-}
-
-func TestClientExitsOnMarshallingError(t *testing.T) {
-	t.Parallel()
-
-	requireT := require.New(t)
-	ctx := qa.NewContext(t)
-	group := parallel.NewGroup(ctx)
-	t.Cleanup(func() {
-		group.Exit(nil)
-		_ = group.Wait()
-	})
-
-	clusterConfig := clusterConfig
-	clusterConfig.Marshallers = map[types.PartitionID]proton.Marshaller{
-		partitionDefault: fakeMarshaller{},
-	}
-
-	clstr := cluster.NewTesting(group, t, clusterConfig)
-	mBase := entities.NewMarshaller()
-	m := fakeMarshaller{m: mBase}
-
-	p := clstr.NewPeer("P", types.Partitions{partitionDefault: types.PartitionRoleActive})
-
-	account := entities.Account{
-		ID:        memdb.NewID[entities.AccountID](),
-		FirstName: "FirstName",
-		LastName:  "LastName",
-	}
-
-	c := clstr.NewClient(p, "client", m, partitionDefault, nil)
-
-	clstr.StartPeers(p)
-	clstr.StartClients(c)
-
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx client.Tx) error {
-		return tx.Set(account)
-	}))
-
-	fc := clstr.NewClient(p, "client", fakeMarshaller{fail: true, m: mBase}, partitionDefault, nil)
-	clstr.StartClients(fc)
-
-	requireT.Error(fc.WarmUp(group.Context()))
-
-	group.Exit(nil)
-	requireT.Error(group.Wait())
-}
-
-var _ proton.Marshaller = fakeMarshaller{}
-
-type fakeMarshaller struct {
-	fail bool
-	m    proton.Marshaller
-}
-
-func (f fakeMarshaller) Messages() []any {
-	return f.m.Messages()
-}
-
-func (f fakeMarshaller) ID(msg any) (uint64, error) {
-	return f.m.ID(msg)
-}
-
-func (f fakeMarshaller) Size(msg any) (uint64, error) {
-	if f.fail {
-		return 0, errors.New("error")
-	}
-	return f.m.Size(msg)
-}
-
-func (f fakeMarshaller) Marshal(msg any, buf []byte) (uint64, uint64, error) {
-	if f.fail {
-		return 0, 0, errors.New("error")
-	}
-	return f.m.Marshal(msg, buf)
-}
-
-func (f fakeMarshaller) Unmarshal(id uint64, buf []byte) (any, uint64, error) {
-	if f.fail {
-		return nil, 0, errors.New("error")
-	}
-	return f.m.Unmarshal(id, buf)
-}
-
-func (f fakeMarshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
-	if f.fail {
-		return false, errors.New("error")
-	}
-	return f.m.IsPatchNeeded(msgDst, msgSrc)
-}
-
-func (f fakeMarshaller) MakePatch(msgDst, msgSrc any, buf []byte) (uint64, uint64, error) {
-	if f.fail {
-		return 0, 0, errors.New("error")
-	}
-	return f.m.MakePatch(msgDst, msgSrc, buf)
-}
-
-func (f fakeMarshaller) ApplyPatch(msg any, buf []byte) (uint64, error) {
-	if f.fail {
-		return 0, errors.New("error")
-	}
-	return f.m.ApplyPatch(msg, buf)
 }
