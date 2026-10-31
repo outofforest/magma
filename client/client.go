@@ -2,13 +2,11 @@ package client
 
 import (
 	"context"
-	"encoding/binary"
 	"reflect"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/zeebo/xxh3"
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
@@ -75,38 +73,9 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("no peer addresses has been provided")
 	}
 
-	objectTypes := config.Marshaller.Messages()
-	if len(objectTypes) == 0 {
-		return nil, errors.New("no object types provided")
-	}
-
-	dbConfig := buildDBConfig(objectTypes, config.Indices)
-
-	byID := map[uint64]typeInfo{}
-	byType := map[reflect.Type]typeInfo{}
-	for tableID, t := range dbConfig.Entities {
-		idFType, err := validateType(t, true)
-		if err != nil {
-			return nil, err
-		}
-
-		if _, exists := byType[t]; exists {
-			return nil, errors.Errorf("double registration of object %s", t)
-		}
-
-		msgID, err := config.Marshaller.ID(reflect.New(t).Interface())
-		if err != nil {
-			return nil, err
-		}
-
-		info := typeInfo{
-			Type:    t,
-			IDType:  idFType,
-			MsgID:   msgID,
-			TableID: uint64(tableID),
-		}
-		byID[msgID] = info
-		byType[t] = info
+	dbConfig, err := buildDBConfig(config.Marshaller, config.Indices)
+	if err != nil {
+		return nil, err
 	}
 
 	db, err := memdb.NewMemDB(dbConfig)
@@ -114,26 +83,27 @@ func New(config Config) (*Client, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	metaM := wire.NewMarshaller()
-
-	metaID, err := metaM.ID(&wire.TxMetadata{})
+	applier, err := NewApplier(config.Marshaller)
 	if err != nil {
 		return nil, err
 	}
 
-	entityMetadataID, err := metaM.ID(&wire.EntityMetadata{})
+	metaID, err := applier.metaM.ID(&wire.TxMetadata{})
+	if err != nil {
+		return nil, err
+	}
+
+	entityMetadataID, err := applier.metaM.ID(&wire.EntityMetadata{})
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		config:           config,
+		applier:          applier,
 		txCh:             make(chan txEnvelope),
-		metaM:            metaM,
 		doneCh:           make(chan struct{}),
 		bufSize:          max(10*(config.MaxMessageSize+2*varuint64.MaxSize), 4*1024),
-		byID:             byID,
-		byType:           byType,
 		db:               db,
 		metaID:           metaID,
 		entityMetadataID: entityMetadataID,
@@ -144,14 +114,12 @@ func New(config Config) (*Client, error) {
 
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
-	config Config
-	txCh   chan txEnvelope
-	metaM  proton.Marshaller
-	doneCh chan struct{}
+	config  Config
+	applier *Applier
+	txCh    chan txEnvelope
+	doneCh  chan struct{}
 
-	byID   map[uint64]typeInfo
-	byType map[reflect.Type]typeInfo
-	db     *memdb.MemDB
+	db *memdb.MemDB
 
 	bufSize          uint64
 	metaID           uint64
@@ -350,7 +318,7 @@ func (c *Client) WarmUp(ctx context.Context) error {
 func (c *Client) View() *View {
 	return &View{
 		tx:     c.db.Txn(true),
-		byType: c.byType,
+		byType: c.applier.byType,
 	}
 }
 
@@ -385,6 +353,8 @@ func (c *Client) applyHotEnd(triggerCh chan trigger, view *View, updatedTypes ma
 	}
 }
 
+var emptyTxID = memdb.ID{}
+
 func (c *Client) applyTx(
 	commitCh <-chan struct{},
 	previousChecksum uint64,
@@ -392,41 +362,19 @@ func (c *Client) applyTx(
 	txRaw []byte,
 	updatedTypes map[reflect.Type]struct{},
 ) (uint64, error) {
-	txLen, n := varuint64.Parse(txRaw)
-
-	if txLen < format.ChecksumSize {
-		return 0, errors.New("unexpected tx size")
-	}
-
-	i := len(txRaw) - format.ChecksumSize
-	checksum := xxh3.HashSeed(txRaw[:i], previousChecksum)
-	if binary.LittleEndian.Uint64(txRaw[i:]) != checksum {
-		return 0, errors.New("tx checksum mismatch")
-	}
-
-	txLen -= format.ChecksumSize
-	txRaw = txRaw[n : n+txLen]
-
-	if _, n2 := varuint64.Parse(txRaw); n2 == txLen {
-		// This is a term mark. Ignore.
-		return checksum, nil
-	}
-
-	metaID, n := varuint64.Parse(txRaw)
-	metaAny, metaSize, err := c.metaM.Unmarshal(metaID, txRaw[n:])
-	if err != nil {
-		return 0, err
-	}
-	meta := metaAny.(*wire.TxMetadata)
-
-	err = c.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:], updatedTypes)
-	if err != nil && !errors.Is(err, ErrTxOutdatedTx) {
+	txID, checksum, err := c.applier.ApplyTx(previousChecksum, tx, txRaw, updatedTypes)
+	switch {
+	case err == nil:
+		if txID == emptyTxID {
+			return checksum, nil
+		}
+	case !errors.Is(err, ErrTxOutdatedTx):
 		return 0, err
 	}
 
 	c.mu.Lock()
-	receivedCh := c.awaitedTxs[meta.ID]
-	delete(c.awaitedTxs, meta.ID)
+	receivedCh := c.awaitedTxs[txID]
+	delete(c.awaitedTxs, txID)
 	c.mu.Unlock()
 
 	if receivedCh != nil {
@@ -438,60 +386,6 @@ func (c *Client) applyTx(
 	}
 
 	return checksum, nil
-}
-
-func (c *Client) storeTx(
-	entityMetaID uint64,
-	tx *memdb.Txn,
-	txRaw []byte,
-	updatedTypes map[reflect.Type]struct{},
-) (retErr error) {
-	dbTx := tx.Txn(true)
-	for len(txRaw) > 0 {
-		entityMetaRaw, entityMetaSize, err := c.metaM.Unmarshal(entityMetaID, txRaw)
-		if err != nil {
-			return err
-		}
-
-		entityMeta := entityMetaRaw.(*wire.EntityMetadata)
-
-		typeDef, exists := c.byID[entityMeta.MessageID]
-		if !exists {
-			return errors.Errorf("unknown type %s", typeDef.Type)
-		}
-
-		pointer, err := dbTx.First(typeDef.TableID, memdb.IDIndexID, entityMeta.ID)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		oV := reflect.New(typeDef.Type)
-		if pointer == defaultPointer {
-			copyMetaToEntity(oV.UnsafePointer(), entityMeta)
-		} else {
-			if entityMeta.Revision <= revisionFromEntity(pointer) {
-				return ErrTxOutdatedTx
-			}
-			oV.Elem().Set(reflect.NewAt(typeDef.Type, pointer).Elem())
-			setRevisionInEntity(oV.UnsafePointer(), &entityMeta.Revision)
-		}
-
-		msgSize, err := c.config.Marshaller.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
-		if err != nil {
-			return err
-		}
-
-		if _, err := dbTx.Insert(typeDef.TableID, oV.UnsafePointer()); err != nil {
-			return errors.WithStack(err)
-		}
-
-		txRaw = txRaw[entityMetaSize+msgSize:]
-		updatedTypes[typeDef.Type] = struct{}{}
-	}
-
-	dbTx.Commit()
-
-	return nil
 }
 
 type txEnvelope struct {
@@ -554,7 +448,7 @@ func (t *transactor) prepareTx(txF func(tx Tx) error) (retTx txEnvelope, retUsed
 	}
 
 	metaSize += varuint64.Put(t.buf[metaSize:], t.client.metaID)
-	_, metaMsgSize, err := t.client.metaM.Marshal(meta, t.buf[metaSize:])
+	_, metaMsgSize, err := t.client.applier.metaM.Marshal(meta, t.buf[metaSize:])
 	if err != nil {
 		return txEnvelope{}, 0, err
 	}
@@ -653,13 +547,6 @@ func txRecover(err *error) {
 	}
 }
 
-type typeInfo struct {
-	Type    reflect.Type
-	IDType  reflect.Type
-	MsgID   uint64
-	TableID uint64
-}
-
 var revisionType = reflect.TypeFor[types.Revision]()
 
 func validateType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error) {
@@ -690,13 +577,28 @@ func validateType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error)
 	return idF.Type, nil
 }
 
-func buildDBConfig(entities []any, indices []memdb.Index) memdb.Config {
-	cfg := memdb.Config{
-		Entities: make([]reflect.Type, 0, len(entities)),
+func buildDBConfig(m proton.Marshaller, indices []memdb.Index) (memdb.Config, error) {
+	entities, err := typesFromMarshaller(m)
+	if err != nil {
+		return memdb.Config{}, err
+	}
+
+	return memdb.Config{
+		Entities: entities,
 		Indices:  indices,
+	}, nil
+}
+
+func typesFromMarshaller(m proton.Marshaller) ([]reflect.Type, error) {
+	entities := m.Messages()
+	if len(entities) == 0 {
+		return nil, errors.New("no object types provided")
 	}
+
+	types := make([]reflect.Type, 0, len(entities))
 	for _, e := range entities {
-		cfg.Entities = append(cfg.Entities, reflect.TypeOf(e))
+		types = append(types, reflect.TypeOf(e))
 	}
-	return cfg
+
+	return types, nil
 }
