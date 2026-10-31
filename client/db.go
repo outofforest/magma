@@ -210,7 +210,7 @@ type tx struct {
 func (tx *tx) View() *View {
 	return &View{
 		tx:     tx.txn.Txn(true),
-		byType: tx.client.byType,
+		byType: tx.client.applier.byType,
 	}
 }
 
@@ -234,7 +234,7 @@ func (tx *tx) SoftSet(o any) error {
 func (tx *tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.txn.Txn(true)
 
-	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.byType, o)
+	id, typeDef, oldValue, newValue := insert(dbTx, tx.client.applier.byType, o)
 
 	chID := changeID{
 		ID:    id,
@@ -305,7 +305,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 
 	chg.StartIndex = tx.size
 	chg.EndIndex = chg.StartIndex
-	_, entitySize, err := tx.client.metaM.Marshal(entityMeta, tx.buf[chg.EndIndex:])
+	_, entitySize, err := tx.client.applier.metaM.Marshal(entityMeta, tx.buf[chg.EndIndex:])
 
 	switch {
 	case err == nil:
