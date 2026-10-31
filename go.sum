@@ -18,8 +18,8 @@ github.com/outofforest/proton v0.21.1 h1:zUlKXa02r/yQhYiOAVBGuvpKMmq0XqAKi9Bv866
 github.com/outofforest/proton v0.21.1/go.mod h1:RnDWD2U6gCdOEcUBMBKFQvfXOBTyorX872tV3n6ylRc=
 github.com/outofforest/qa v0.3.1 h1:JyVxBdntZuvi/CrqKkFNYe/4/lBqQBJQEX/DO7/Xsvs=
 github.com/outofforest/qa v0.3.1/go.mod h1:nY3wZnpJz6mZ9KVcUwqsjwoei5pblXYo/8SbsKJITFg=
-github.com/outofforest/resonance v0.27.1 h1:dc0293cnV7tdIoyk/B6VGnTFOTzI2cLcY1uf0LxC91c=
-github.com/outofforest/resonance v0.27.1/go.mod h1:Fln1GtuqK2qKcrvjey8LXit8KqVSUQgGFcbKtdBqvMs=
+github.com/outofforest/resonance v0.28.0 h1:vQvQep8Fce3lZoEGhO9uPLh12c2g1kR7+cXPkn2eqQA=
+github.com/outofforest/resonance v0.28.0/go.mod h1:Fln1GtuqK2qKcrvjey8LXit8KqVSUQgGFcbKtdBqvMs=
 github.com/outofforest/run v0.9.0 h1:aK+pWZR+68a+A8iXAQRJmMmwIdFS+bQuP2ekZaUdaE0=
 github.com/outofforest/run v0.9.0/go.mod h1:cZHx6VJdOWrUBlUdzL6irupbJt1u3RrxI33ZriF+uzc=
 github.com/outofforest/spin v0.3.1 h1:iF1t4zgbt7KaarrnBqmYWMfoSichqY4/KiKMC/dE524=

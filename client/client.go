@@ -73,7 +73,7 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("no peer addresses has been provided")
 	}
 
-	dbConfig, err := buildDBConfig(config.Marshaller, config.Indices)
+	dbConfig, err := NewDBConfig(config.Marshaller, config.Indices)
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +577,7 @@ func validateType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error)
 	return idF.Type, nil
 }
 
-func buildDBConfig(m proton.Marshaller, indices []memdb.Index) (memdb.Config, error) {
+func NewDBConfig(m proton.Marshaller, indices []memdb.Index) (memdb.Config, error) {
 	entities, err := typesFromMarshaller(m)
 	if err != nil {
 		return memdb.Config{}, err
