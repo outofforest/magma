@@ -1,12 +1,6 @@
-package db
+package internal
 
-import (
-	"context"
-
-	"github.com/pkg/errors"
-
-	"github.com/outofforest/proton"
-)
+import "github.com/pkg/errors"
 
 var (
 	// ErrTxTooBig means that adding new entity to transaction caused it to exceed the max size limit.
@@ -27,24 +21,3 @@ var (
 	// ErrTxOutdatedTx means that awaited transaction is outdated and hasn't been applied.
 	ErrTxOutdatedTx = errors.Wrap(ErrTxFailure, "outdated transaction")
 )
-
-// Transactor builds and broadcasts transactions.
-type Transactor interface {
-	Tx(ctx context.Context, txF func(tx Tx) error) error
-}
-
-// Tx prepares transaction.
-type Tx interface {
-	View() *View
-	Set(o any) error
-	SoftSet(o any) error
-}
-
-// UpgradeFunc defines the function for db conversion.
-type UpgradeFunc func(view *View, ch chan<- any) error
-
-// Upgrade defines db upgrade.
-type Upgrade struct {
-	Marshaller  proton.Marshaller
-	UpgradeFunc UpgradeFunc
-}

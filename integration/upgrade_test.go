@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/client/db"
+	db2 "github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/integration/entities2"
 	"github.com/outofforest/magma/pkg/cluster"
@@ -38,7 +38,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName1",
@@ -47,8 +47,8 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName2"
@@ -56,8 +56,8 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName2"
@@ -75,8 +75,8 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName3"
@@ -84,8 +84,8 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName3"
@@ -99,11 +99,11 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	// ======= Version 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.FirstName += ".1"
 					ch <- a
 				}
@@ -122,7 +122,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	clstr.StartClients(c)
 
 	v := c.View()
-	account, exists := db.Get[entities.Account](v, accountID)
+	account, exists := db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -131,8 +131,8 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 		LastName:  "LastName3",
 	}, account)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName4"
@@ -145,10 +145,10 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 
 	// ======= Version 2, Term 4
 
-	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
-			for a := range db.All[entities.Account](view) {
+		UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+			for a := range db2.All[entities.Account](view) {
 				a.LastName += ".2"
 				ch <- a
 			}
@@ -166,7 +166,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	clstr.StartClients(c)
 
 	v = c.View()
-	account, exists = db.Get[entities.Account](v, accountID)
+	account, exists = db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -199,7 +199,7 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName1",
@@ -208,8 +208,8 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName2"
@@ -217,8 +217,8 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName2"
@@ -236,8 +236,8 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName3"
@@ -245,8 +245,8 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName3"
@@ -260,11 +260,11 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	// ======= Version 2, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.FirstName += ".1"
 					ch <- a
 				}
@@ -273,8 +273,8 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 		},
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.LastName += ".2"
 					ch <- a
 				}
@@ -293,7 +293,7 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	clstr.StartClients(c)
 
 	v := c.View()
-	account, exists := db.Get[entities.Account](v, accountID)
+	account, exists := db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -329,7 +329,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName1",
@@ -338,8 +338,8 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName2"
@@ -347,8 +347,8 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName2"
@@ -366,8 +366,8 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName3"
@@ -375,8 +375,8 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName3"
@@ -390,11 +390,11 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	// ======= Version 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.FirstName += ".1"
 					ch <- a
 				}
@@ -416,7 +416,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	clstr.StartClients(c)
 
 	v := c.View()
-	account, exists := db.Get[entities.Account](v, accountID)
+	account, exists := db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -425,8 +425,8 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 		LastName:  "LastName3",
 	}, account)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName4"
@@ -439,10 +439,10 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 
 	// ======= Version 2, Term 4
 
-	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
-			for a := range db.All[entities.Account](view) {
+		UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+			for a := range db2.All[entities.Account](view) {
 				a.LastName += ".2"
 				ch <- a
 			}
@@ -463,7 +463,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	clstr.StartClients(c)
 
 	v = c.View()
-	account, exists = db.Get[entities.Account](v, accountID)
+	account, exists = db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -499,7 +499,7 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName1",
@@ -508,8 +508,8 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName2"
@@ -517,8 +517,8 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName2"
@@ -536,8 +536,8 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName3"
@@ -545,8 +545,8 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName3"
@@ -560,11 +560,11 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	// ======= Version 2, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.FirstName += ".1"
 					ch <- a
 				}
@@ -573,8 +573,8 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 		},
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.LastName += ".2"
 					ch <- a
 				}
@@ -596,7 +596,7 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	clstr.StartClients(c)
 
 	v := c.View()
-	account, exists := db.Get[entities.Account](v, accountID)
+	account, exists := db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -632,7 +632,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName1",
@@ -641,8 +641,8 @@ func TestColdPeerUpgrade(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName2"
@@ -650,8 +650,8 @@ func TestColdPeerUpgrade(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName2"
@@ -669,8 +669,8 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.FirstName = "FirstName3"
@@ -678,8 +678,8 @@ func TestColdPeerUpgrade(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName3"
@@ -693,11 +693,11 @@ func TestColdPeerUpgrade(t *testing.T) {
 	// ======= Version 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					a.FirstName += ".1"
 					ch <- a
 				}
@@ -719,7 +719,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clstr.StartClients(c)
 
 	v := c.View()
-	account, exists := db.Get[entities.Account](v, accountID)
+	account, exists := db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -728,8 +728,8 @@ func TestColdPeerUpgrade(t *testing.T) {
 		LastName:  "LastName3",
 	}, account)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID)
 		requireT.True(exists)
 
 		acc.LastName = "LastName4"
@@ -742,10 +742,10 @@ func TestColdPeerUpgrade(t *testing.T) {
 
 	// ======= Version 2, Term 4
 
-	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
-			for a := range db.All[entities.Account](view) {
+		UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+			for a := range db2.All[entities.Account](view) {
 				a.LastName += ".2"
 				ch <- a
 			}
@@ -766,7 +766,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clstr.StartClients(c)
 
 	v = c.View()
-	account, exists = db.Get[entities.Account](v, accountID)
+	account, exists = db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -781,7 +781,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clstr.StartClients(c)
 
 	v = c.View()
-	account, exists = db.Get[entities.Account](v, accountID)
+	account, exists = db2.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -824,7 +824,7 @@ func TestUpgradeComplex(t *testing.T) {
 	blobID2 := memdb.NewID[memdb.ID]()
 	blobID3 := memdb.NewID[memdb.ID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID1,
 			FirstName: "FirstName1",
@@ -833,7 +833,7 @@ func TestUpgradeComplex(t *testing.T) {
 		return nil
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		v := tx.View()
 
 		requireT.NoError(tx.Set(entities.Account{
@@ -842,7 +842,7 @@ func TestUpgradeComplex(t *testing.T) {
 			LastName:  "LastName2",
 		}))
 
-		for acc := range db.All[entities.Account](v) {
+		for acc := range db2.All[entities.Account](v) {
 			acc.LastName += ".2"
 			requireT.NoError(tx.Set(acc))
 		}
@@ -859,7 +859,7 @@ func TestUpgradeComplex(t *testing.T) {
 	clstr.StartClients(c2)
 	clstr.StopClients(c2)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		requireT.NoError(tx.Set(entities.Blob{
 			ID:   blobID1,
 			Data: []byte{0x01, 0x01},
@@ -883,17 +883,17 @@ func TestUpgradeComplex(t *testing.T) {
 	// ======= Version 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
-	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
-				for a := range db.All[entities.Account](view) {
+			UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+				for a := range db2.All[entities.Account](view) {
 					if a.ID == accountID1 {
 						a.FirstName += ".1"
 					}
 					ch <- a
 				}
-				for b := range db.All[entities.Blob](view) {
+				for b := range db2.All[entities.Blob](view) {
 					b.Data = slices.Clone(b.Data)
 					b.Data = append(b.Data, b.Data[0]+1)
 					ch <- b
@@ -914,8 +914,8 @@ func TestUpgradeComplex(t *testing.T) {
 	clstr.StartPeers(p1, p2, p3)
 	clstr.StartClients(c)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), accountID2)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), accountID2)
 		requireT.True(exists)
 
 		acc.LastName += ".2"
@@ -934,10 +934,10 @@ func TestUpgradeComplex(t *testing.T) {
 
 	// ======= Version 2, Term 4
 
-	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
+	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m2,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
-			for a := range db.All[entities.Account](view) {
+		UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+			for a := range db2.All[entities.Account](view) {
 				ch <- entities2.Account{
 					ID:        entities2.AccountID(a.ID),
 					Name:      a.FirstName + " " + a.LastName,
@@ -945,7 +945,7 @@ func TestUpgradeComplex(t *testing.T) {
 					LastName:  a.LastName + ".3",
 				}
 			}
-			for b := range db.All[entities.Blob](view) {
+			for b := range db2.All[entities.Blob](view) {
 				data := slices.Clone(b.Data)
 				data[0]++
 				ch <- entities2.Blob{
@@ -968,8 +968,8 @@ func TestUpgradeComplex(t *testing.T) {
 	clstr.StartPeers(p1, p2, p3)
 	clstr.StartClients(c)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		blob, exists := db.Get[entities2.Blob](tx.View(), blobID1)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		blob, exists := db2.Get[entities2.Blob](tx.View(), blobID1)
 		requireT.True(exists)
 
 		blob.Data = blob.Data[1:]
@@ -980,7 +980,7 @@ func TestUpgradeComplex(t *testing.T) {
 
 	v := c.View()
 
-	acc, exists := db.Get[entities2.Account](v, accountID1)
+	acc, exists := db2.Get[entities2.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities2.Account{
 		ID:        entities2.AccountID(accountID1),
@@ -990,7 +990,7 @@ func TestUpgradeComplex(t *testing.T) {
 		LastName:  "LastName1.2.3",
 	}, acc)
 
-	acc, exists = db.Get[entities2.Account](v, accountID2)
+	acc, exists = db2.Get[entities2.Account](v, accountID2)
 	requireT.True(exists)
 	requireT.Equal(entities2.Account{
 		ID:        entities2.AccountID(accountID2),
@@ -1000,7 +1000,7 @@ func TestUpgradeComplex(t *testing.T) {
 		LastName:  "LastName2.2.3",
 	}, acc)
 
-	acc, exists = db.Get[entities2.Account](v, accountID3)
+	acc, exists = db2.Get[entities2.Account](v, accountID3)
 	requireT.True(exists)
 	requireT.Equal(entities2.Account{
 		ID:        entities2.AccountID(accountID3),
@@ -1010,7 +1010,7 @@ func TestUpgradeComplex(t *testing.T) {
 		LastName:  "LastName3.3",
 	}, acc)
 
-	blob, exists := db.Get[entities2.Blob](v, blobID1)
+	blob, exists := db2.Get[entities2.Blob](v, blobID1)
 	requireT.True(exists)
 	requireT.Equal(entities2.Blob{
 		ID:       blobID1,
@@ -1018,7 +1018,7 @@ func TestUpgradeComplex(t *testing.T) {
 		Data:     []byte{0x01, 0x02},
 	}, blob)
 
-	blob, exists = db.Get[entities2.Blob](v, blobID2)
+	blob, exists = db2.Get[entities2.Blob](v, blobID2)
 	requireT.True(exists)
 	requireT.Equal(entities2.Blob{
 		ID:       blobID2,
@@ -1026,7 +1026,7 @@ func TestUpgradeComplex(t *testing.T) {
 		Data:     []byte{0x03, 0x02, 0x03},
 	}, blob)
 
-	blob, exists = db.Get[entities2.Blob](v, blobID3)
+	blob, exists = db2.Get[entities2.Blob](v, blobID3)
 	requireT.True(exists)
 	requireT.Equal(entities2.Blob{
 		ID:       blobID3,

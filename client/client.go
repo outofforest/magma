@@ -11,11 +11,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/outofforest/logger"
-	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/config"
+	db2 "github.com/outofforest/magma/db"
 	gossipwire "github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
+	"github.com/outofforest/magma/internal"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
@@ -26,15 +27,15 @@ import (
 )
 
 var (
-	_ ReadClient    = &Client{}
-	_ WriteClient   = &Client{}
-	_ db.Transactor = &transactor{}
+	_ ReadClient     = &Client{}
+	_ WriteClient    = &Client{}
+	_ db2.Transactor = &transactor{}
 )
 
 var defaultPointer unsafe.Pointer
 
 // TriggerFunc defines function triggered after applying transactions.
-type TriggerFunc func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error
+type TriggerFunc func(ctx context.Context, v *db2.View, types map[reflect.Type]struct{}) error
 
 // Config is the configuration of magma client.
 type Config struct {
@@ -54,7 +55,7 @@ type Client struct {
 	config  Config
 	metaM   proton.Marshaller
 	m       proton.Marshaller
-	applier *db.Applier
+	applier *internal.Applier
 	txCh    chan txEnvelope
 	doneCh  chan struct{}
 
@@ -84,7 +85,7 @@ func New(config Config) (*Client, error) {
 		m = config.Partition.Upgrades[len(config.Partition.Upgrades)-1].Marshaller
 	}
 
-	dbConfig, err := db.NewDBConfig(m, config.Indices)
+	dbConfig, err := internal.NewDBConfig(m, config.Indices)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +97,7 @@ func New(config Config) (*Client, error) {
 
 	metaM := wire.NewMarshaller()
 
-	applier, err := db.NewApplier(metaM, m)
+	applier, err := internal.NewApplier(metaM, m)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +129,7 @@ func New(config Config) (*Client, error) {
 }
 
 type trigger struct {
-	View         *db.View
+	View         *db2.View
 	UpdatedTypes map[reflect.Type]struct{}
 }
 
@@ -327,19 +328,19 @@ func (c *Client) WarmUp(ctx context.Context) error {
 }
 
 // View returns db view.
-func (c *Client) View() *db.View {
+func (c *Client) View() *db2.View {
 	return c.applier.View(c.db.Txn(true))
 }
 
 // NewTransactor creates new transactor.
-func (c *Client) NewTransactor() db.Transactor {
+func (c *Client) NewTransactor() db2.Transactor {
 	return &transactor{
 		client:  c,
 		changes: map[changeID]change{},
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan trigger, view *db.View, updatedTypes map[reflect.Type]struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan trigger, view *db2.View, updatedTypes map[reflect.Type]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -377,7 +378,7 @@ func (c *Client) applyTx(
 		if txID == emptyTxID {
 			return checksum, nil
 		}
-	case !errors.Is(err, db.ErrTxOutdatedTx):
+	case !errors.Is(err, db2.ErrTxOutdatedTx):
 		return 0, err
 	}
 
@@ -412,7 +413,7 @@ type transactor struct {
 }
 
 // Tx creates and broadcasts transaction to the magma network.
-func (t *transactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
+func (t *transactor) Tx(ctx context.Context, txF func(tx db2.Tx) error) error {
 	tx, usedSize, err := t.prepareTx(memdb.NewID[memdb.ID](), time.Now(), txF)
 	if err != nil {
 		return err
@@ -430,7 +431,7 @@ func (t *transactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
 func (t *transactor) prepareTx(
 	txID memdb.ID,
 	txTime time.Time,
-	txF func(tx db.Tx) error,
+	txF func(tx db2.Tx) error,
 ) (
 	retTx txEnvelope,
 	retUsedSize uint64,
@@ -505,7 +506,7 @@ func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.BroadcastTimeout):
-		return db.ErrTxBroadcastTimeout
+		return db2.ErrTxBroadcastTimeout
 	case t.client.txCh <- tx:
 	}
 
@@ -518,7 +519,7 @@ func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.AwaitTimeout):
-		return db.ErrTxAwaitTimeout
+		return db2.ErrTxAwaitTimeout
 	case result := <-tx.ReceivedCh:
 		switch r := result.(type) {
 		case error:
@@ -553,7 +554,7 @@ type changeID struct {
 	MsgID uint64
 }
 
-var _ db.Tx = &tx{}
+var _ db2.Tx = &tx{}
 
 type tx struct {
 	client       *Client
@@ -565,7 +566,7 @@ type tx struct {
 }
 
 // View returns non-persistent view of the DB.
-func (tx *tx) View() *db.View {
+func (tx *tx) View() *db2.View {
 	return tx.client.applier.View(tx.txn.Txn(true))
 }
 
@@ -632,12 +633,12 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	}
 
 	newValueRef := reflect.NewAt(typeDef.Type, newValue)
-	unsafeID := db.UnsafeIDFromEntity(newValue)
+	unsafeID := internal.UnsafeIDFromEntity(newValue)
 	var oldV reflect.Value
 	var isNeeded bool
 	if chg.OldValue == defaultPointer {
 		oldV = reflect.New(typeDef.Type)
-		db.SetIDInEntity(oldV.UnsafePointer(), (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
+		internal.SetIDInEntity(oldV.UnsafePointer(), (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
 		isNeeded = true
 	} else {
 		oldV = reflect.NewAt(typeDef.Type, chg.OldValue)
@@ -655,7 +656,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	entityMeta := &wire.TxEntityMetadata{
 		MessageID: typeDef.MsgID,
 	}
-	db.CopyMetaFromEntity(entityMeta, oldV.UnsafePointer())
+	internal.CopyMetaFromEntity(entityMeta, oldV.UnsafePointer())
 	entityMeta.Revision++
 
 	chg.StartIndex = tx.size
@@ -665,7 +666,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	switch {
 	case err == nil:
 	case errors.Is(err, proton.ErrBufferFailure):
-		return db.ErrTxTooBig
+		return db2.ErrTxTooBig
 	default:
 		return err
 	}
@@ -678,7 +679,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	switch {
 	case err == nil:
 	case errors.Is(err, proton.ErrBufferFailure):
-		return db.ErrTxTooBig
+		return db2.ErrTxTooBig
 	default:
 		return err
 	}

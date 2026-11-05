@@ -18,9 +18,10 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
-	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/config"
+	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/internal"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository/format"
 	magmatypes "github.com/outofforest/magma/types"
@@ -490,14 +491,14 @@ func (r *Repository) fillInitFile(
 	header *format.Header,
 	previousVersion magmatypes.Version,
 	initialMarshaller proton.Marshaller,
-	upgrades []db.Upgrade,
+	upgrades []db2.Upgrade,
 ) error {
 	initEntityMetaMsgID, err := r.metaM.ID(&wire.InitEntityMetadata{})
 	if err != nil {
 		return err
 	}
 
-	dbConfig, err := db.NewDBConfig(initialMarshaller, nil)
+	dbConfig, err := internal.NewDBConfig(initialMarshaller, nil)
 	if err != nil {
 		return err
 	}
@@ -507,7 +508,7 @@ func (r *Repository) fillInitFile(
 		return err
 	}
 
-	applier, err := db.NewApplier(r.metaM, initialMarshaller)
+	applier, err := internal.NewApplier(r.metaM, initialMarshaller)
 	if err != nil {
 		return err
 	}
@@ -561,7 +562,7 @@ loop:
 			}
 
 			_, checksum, err = applier.ApplyTx(checksum, tx, txRaw, updatedTypes)
-			if err != nil && !errors.Is(err, db.ErrTxOutdatedTx) {
+			if err != nil && !errors.Is(err, db2.ErrTxOutdatedTx) {
 				return err
 			}
 		}
@@ -593,7 +594,7 @@ loop:
 	srcView := applier.View(memDB.Txn(true))
 
 	for i, upgrade := range upgrades {
-		dstDBConfig, err := db.NewDBConfig(upgrade.Marshaller, nil)
+		dstDBConfig, err := internal.NewDBConfig(upgrade.Marshaller, nil)
 		if err != nil {
 			return err
 		}
@@ -603,13 +604,13 @@ loop:
 			return err
 		}
 
-		_, byType, err := db.NewTypeCache(upgrade.Marshaller)
+		_, byType, err := internal.NewTypeCache(upgrade.Marshaller)
 		if err != nil {
 			return err
 		}
 
 		isLastUpgrade := i == len(upgrades)-1
-		applier, err := db.NewApplier(r.metaM, upgrade.Marshaller)
+		applier, err := internal.NewApplier(r.metaM, upgrade.Marshaller)
 		if err != nil {
 			return err
 		}
@@ -645,7 +646,7 @@ loop:
 					}
 
 					_, metaSize, err := r.metaM.Marshal(&wire.InitEntityMetadata{
-						ID:        memdb.ID(db.UnsafeIDFromEntity(ePtrValue.UnsafePointer())),
+						ID:        memdb.ID(internal.UnsafeIDFromEntity(ePtrValue.UnsafePointer())),
 						MessageID: typeDef.MsgID,
 					}, buf[varuint64.MaxSize:])
 					if err != nil {

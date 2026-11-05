@@ -6,17 +6,18 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/client/wire"
+	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/internal"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/proton"
 )
 
 var (
-	_ ReadClient    = &LocalClient{}
-	_ WriteClient   = &LocalClient{}
-	_ db.Transactor = &localTransactor{}
-	_ db.Tx         = &localTx{}
+	_ ReadClient     = &LocalClient{}
+	_ WriteClient    = &LocalClient{}
+	_ db2.Transactor = &localTransactor{}
+	_ db2.Tx         = &localTx{}
 )
 
 // LocalConfig is the config for local client.
@@ -30,17 +31,17 @@ type LocalConfig struct {
 type LocalClient struct {
 	config  LocalConfig
 	db      *memdb.MemDB
-	applier *db.Applier
+	applier *internal.Applier
 }
 
 // NewLocalClient creates static client.
 func NewLocalClient(config LocalConfig) (*LocalClient, error) {
-	dbConfig, err := db.NewDBConfig(config.Marshaller, config.Indices)
+	dbConfig, err := internal.NewDBConfig(config.Marshaller, config.Indices)
 	if err != nil {
 		return nil, err
 	}
 
-	applier, err := db.NewApplier(wire.NewMarshaller(), config.Marshaller)
+	applier, err := internal.NewApplier(wire.NewMarshaller(), config.Marshaller)
 	if err != nil {
 		return nil, err
 	}
@@ -63,12 +64,12 @@ func (c *LocalClient) WarmUp(ctx context.Context) error {
 }
 
 // View returns db view.
-func (c *LocalClient) View() *db.View {
-	return db.NewView(c.db.Txn(true), c.applier)
+func (c *LocalClient) View() *db2.View {
+	return internal.NewView(c.db.Txn(true), c.applier)
 }
 
 // NewTransactor creates new transactor.
-func (c *LocalClient) NewTransactor() db.Transactor {
+func (c *LocalClient) NewTransactor() db2.Transactor {
 	return &localTransactor{
 		c: c,
 	}
@@ -78,7 +79,7 @@ type localTransactor struct {
 	c *LocalClient
 }
 
-func (t *localTransactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
+func (t *localTransactor) Tx(ctx context.Context, txF func(tx db2.Tx) error) error {
 	pendingTx := &localTx{
 		client:       t.c,
 		txn:          t.c.db.Txn(true),
@@ -110,8 +111,8 @@ type localTx struct {
 	updatedTypes map[reflect.Type]struct{}
 }
 
-func (tx *localTx) View() *db.View {
-	return db.NewView(tx.txn.Txn(true), tx.client.applier)
+func (tx *localTx) View() *db2.View {
+	return internal.NewView(tx.txn.Txn(true), tx.client.applier)
 }
 
 func (tx *localTx) Set(o any) error {
