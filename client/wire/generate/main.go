@@ -9,7 +9,9 @@ import (
 
 func main() {
 	proton.Generate("../wire.proton.go",
+		proton.Message[wire.InitMetadata](),
+		proton.Message[wire.InitEntityMetadata](),
 		proton.Message[wire.TxMetadata](),
-		proton.Message[wire.EntityMetadata](),
+		proton.Message[wire.TxEntityMetadata](),
 	)
 }

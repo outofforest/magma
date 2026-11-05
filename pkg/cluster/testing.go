@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/client"
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
-	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
 )
 
@@ -23,10 +23,11 @@ type TestingCluster struct {
 
 // ConfigTesting is the config for cluster used in tests.
 type ConfigTesting struct {
+	Directory         string
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
 	PageSize          uint64
-	Marshallers       map[types.PartitionID]proton.Marshaller
+	Partitions        []config.PartitionConfig
 }
 
 // NewTesting returns new testing cluster wrapper.
@@ -36,13 +37,18 @@ func NewTesting(group *parallel.Group, t *testing.T, config ConfigTesting) Testi
 	c2pCA, err := resonance.NewCA(nil)
 	requireT.NoError(err)
 
+	dir := config.Directory
+	if dir == "" {
+		dir = t.TempDir()
+	}
+
 	cluster, err := New(Config{
 		C2PCA:             c2pCA,
-		Directory:         t.TempDir(),
+		Directory:         dir,
 		MaxMessageSize:    config.MaxMessageSize,
 		MaxUncommittedLog: config.MaxUncommittedLog,
 		PageSize:          config.PageSize,
-		Marshallers:       config.Marshallers,
+		Partitions:        config.Partitions,
 	})
 	requireT.NoError(err)
 
@@ -66,12 +72,11 @@ func (c TestingCluster) NewPeer(peerID types.ServerID, partitions types.Partitio
 func (c TestingCluster) NewClient(
 	peer *Peer,
 	name string,
-	marshaller proton.Marshaller,
 	partitionID types.PartitionID,
 	triggerFunc client.TriggerFunc,
 	indices ...memdb.Index,
 ) *Client {
-	cl, err := c.cluster.NewClient(peer, name, marshaller, partitionID, triggerFunc, indices...)
+	cl, err := c.cluster.NewClient(peer, name, partitionID, triggerFunc, indices...)
 	c.requireT.NoError(err)
 	return cl
 }

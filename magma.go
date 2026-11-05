@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/gossip"
-	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft"
 	"github.com/outofforest/magma/raft/partition"
 	"github.com/outofforest/magma/raft/reactor"
@@ -18,6 +17,7 @@ import (
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
 	"github.com/outofforest/magma/types"
+	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 )
 
@@ -39,37 +39,50 @@ func Generate(filePath string, entities ...proton.Msg) {
 // Run runs magma.
 func Run(
 	ctx context.Context,
-	config types.Config,
+	cfg config.Config,
 	p2pListener, c2pListener net.Listener,
 ) (retErr error) {
-	if config.ServerID == types.ZeroServerID {
+	if cfg.ServerID == types.ZeroServerID {
 		return errors.New("server ID is not set")
 	}
-	if len(config.Servers) == 0 {
+	if len(cfg.Servers) == 0 {
 		return errors.New("list of servers is empty")
 	}
-	if config.MaxMessageSize == 0 {
+	if cfg.MaxMessageSize == 0 {
 		return errors.New("max message size is not set")
 	}
-	if config.MaxUncommittedLog == 0 {
+	if cfg.MaxUncommittedLog == 0 {
 		return errors.New("max uncommitted log is not set")
 	}
 
 	pStates := map[types.PartitionID]partition.State{}
-	var partitions []types.PartitionID
-	for _, s := range config.Servers {
-		if s.ID == config.ServerID {
-			partitions = lo.Keys(s.Partitions)
+	partitions := make([]config.PartitionConfig, 0, len(cfg.Partitions))
+	for _, s := range cfg.Servers {
+		if s.ID == cfg.ServerID {
+		loop:
+			for pID := range s.Partitions {
+				for _, p := range cfg.Partitions {
+					if p.ID == pID {
+						partitions = append(partitions, p)
+						continue loop
+					}
+				}
+				return errors.Errorf("partition config not found for partition %s", pID)
+			}
 			break
 		}
 	}
 
-	for _, pID := range partitions {
-		dir := filepath.Join(config.Directory, string(pID))
-		repo, err := repository.Open(filepath.Join(dir, "repo"), config.PageSize)
+	repos := make([]*repository.Repository, 0, len(partitions))
+
+	for _, p := range partitions {
+		dir := filepath.Join(cfg.Directory, string(p.ID))
+		repo, err := repository.Open(filepath.Join(dir, "repo"), cfg.PageSize, p, cfg.MaxMessageSize)
 		if err != nil {
 			return err
 		}
+		repos = append(repos, repo)
+
 		em, err := events.Open(filepath.Join(dir, "events"))
 		if err != nil {
 			return err
@@ -82,17 +95,17 @@ func Run(
 		}
 		defer defCloser(sCloser, &retErr)
 
-		peers := make([]types.ServerConfig, 0, len(config.Servers))
-		activePeers := make([]types.ServerID, 0, len(config.Servers))
+		peers := make([]config.ServerConfig, 0, len(cfg.Servers))
+		activePeers := make([]types.ServerID, 0, len(cfg.Servers))
 		activeServersMap := map[types.ServerID]struct{}{}
-		passivePeers := make([]types.ServerID, 0, len(config.Servers))
+		passivePeers := make([]types.ServerID, 0, len(cfg.Servers))
 		var role types.PartitionRole
-		for _, s := range config.Servers {
-			if pRole, exists := s.Partitions[pID]; exists {
+		for _, s := range cfg.Servers {
+			if pRole, exists := s.Partitions[p.ID]; exists {
 				if pRole == types.PartitionRoleActive {
 					activeServersMap[s.ID] = struct{}{}
 				}
-				if config.ServerID == s.ID {
+				if cfg.ServerID == s.ID {
 					role = pRole
 					continue
 				}
@@ -105,14 +118,10 @@ func Run(
 			}
 		}
 
-		m := config.Marshallers[pID]
-		if m == nil {
-			return errors.Errorf("no marshaller for partition %s", pID)
-		}
-		pStates[pID] = partition.State{
-			Namespace:     wire.NamespaceFromMarshaller(m),
-			Repo:          repo,
-			Reactor:       reactor.New(config.ServerID, activePeers, passivePeers, config.MaxUncommittedLog, s),
+		pStates[p.ID] = partition.State{
+			Repo: repo,
+			Reactor: reactor.New(cfg.ServerID, activePeers, passivePeers, cfg.MaxUncommittedLog,
+				types.Version(len(p.Upgrades)), s),
 			Peers:         peers,
 			ActiveServers: activeServersMap,
 			PartitionRole: role,
@@ -124,11 +133,20 @@ func Run(
 		}
 	}
 
-	return raft.Run(
-		ctx,
-		pStates,
-		gossip.New(config.P2PCA, config.C2PCA, config.ServerID, config.MaxMessageSize, p2pListener, c2pListener, pStates),
-	)
+	return parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
+		for _, repo := range repos {
+			spawn("repository", parallel.Fail, repo.Run)
+		}
+		spawn("raft", parallel.Fail, func(ctx context.Context) error {
+			return raft.Run(
+				ctx,
+				pStates,
+				gossip.New(cfg.P2PCA, cfg.C2PCA, cfg.ServerID, cfg.MaxMessageSize, p2pListener, c2pListener, pStates),
+			)
+		})
+
+		return nil
+	})
 }
 
 func defCloser(sCloser state.Closer, retErr *error) {

@@ -3,9 +3,19 @@ package wire
 import (
 	"time"
 
+	"github.com/outofforest/magma/raft/types"
 	magmatypes "github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 )
+
+// InitMetadata stores init metadata.
+type InitMetadata struct {
+	Version          magmatypes.Version
+	Term             types.Term
+	PreviousChecksum uint64
+	NextIndex        magmatypes.Index
+	EntityMetadataID uint64
+}
 
 // TxMetadata stores transaction metadata.
 type TxMetadata struct {
@@ -15,8 +25,14 @@ type TxMetadata struct {
 	EntityMetadataID uint64
 }
 
-// EntityMetadata stores entity metadata.
-type EntityMetadata struct {
+// InitEntityMetadata stores init entity metadata.
+type InitEntityMetadata struct {
+	ID        memdb.ID
+	MessageID uint64
+}
+
+// TxEntityMetadata stores tx entity metadata.
+type TxEntityMetadata struct {
 	ID        memdb.ID
 	Revision  magmatypes.Revision
 	MessageID uint64

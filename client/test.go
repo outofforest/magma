@@ -3,13 +3,17 @@ package client
 import (
 	"context"
 	"encoding/binary"
+	"io"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
+	"github.com/outofforest/magma/client/db"
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
@@ -18,9 +22,9 @@ import (
 )
 
 var (
-	_ ReadClient  = &TestClient{}
-	_ WriteClient = &TestClient{}
-	_ Transactor  = &testTransactor{}
+	_ ReadClient    = &TestClient{}
+	_ WriteClient   = &TestClient{}
+	_ db.Transactor = &testTransactor{}
 )
 
 const maxMsgSize = 4 * 1024
@@ -30,9 +34,11 @@ func NewTestConfig(marshaller proton.Marshaller, indices ...memdb.Index) Config 
 	return Config{
 		Service:        "test",
 		MaxMessageSize: maxMsgSize,
-		Marshaller:     marshaller,
-		Indices:        indices,
-		PeerAddresses:  []string{""},
+		Partition: config.PartitionConfig{
+			InitialMarshaller: marshaller,
+		},
+		Indices:       indices,
+		PeerAddresses: []string{""},
 	}
 }
 
@@ -40,16 +46,20 @@ func NewTestConfig(marshaller proton.Marshaller, indices ...memdb.Index) Config 
 type TestClient struct {
 	client       *Client
 	updatedTypes map[reflect.Type]struct{}
+	w            io.Writer
 }
 
 // NewTestClient creates new client for tests.
-func NewTestClient(t *testing.T, config Config) *TestClient {
+func NewTestClient(t *testing.T, config Config, previousChecksum uint64, w io.Writer) *TestClient {
 	client, err := New(config)
 	require.NoError(t, err)
+
+	client.previousChecksum = previousChecksum
 
 	return &TestClient{
 		client:       client,
 		updatedTypes: map[reflect.Type]struct{}{},
+		w:            w,
 	}
 }
 
@@ -59,12 +69,12 @@ func (tc *TestClient) WarmUp(ctx context.Context) error {
 }
 
 // View returns current view.
-func (tc *TestClient) View() *View {
+func (tc *TestClient) View() *db.View {
 	return tc.client.View()
 }
 
 // NewTransactor returns new transactor.
-func (tc *TestClient) NewTransactor() Transactor {
+func (tc *TestClient) NewTransactor() db.Transactor {
 	return &testTransactor{
 		tc:           tc,
 		updatedTypes: tc.updatedTypes,
@@ -81,8 +91,8 @@ type testTransactor struct {
 	updatedTypes map[reflect.Type]struct{}
 }
 
-func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
-	tx, _, err := t.tc.client.NewTransactor().(*transactor).prepareTx(txF)
+func (t *testTransactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
+	tx, _, err := t.tc.client.NewTransactor().(*transactor).prepareTx(memdb.ID{}, time.Time{}, txF)
 	if err != nil {
 		return err
 	}
@@ -93,6 +103,7 @@ func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 
 	_, n := varuint64.Parse(tx.Tx)
 	txRaw := tx.Tx[n:]
+
 	size := uint64(len(txRaw)) + format.ChecksumSize
 	buf := make([]byte, varuint64.MaxSize+size)
 	n = varuint64.Put(buf, size)
@@ -107,8 +118,17 @@ func (t *testTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
 	if err != nil {
 		return err
 	}
+
+	if t.tc.w != nil {
+		_, err := t.tc.w.Write(buf[:size+format.ChecksumSize])
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
 	txn.Commit()
 	t.tc.client.previousChecksum = previousChecksum
 	t.tc.client.nextIndex += types.Index(len(tx.Tx))
+
 	return nil
 }

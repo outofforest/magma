@@ -6,55 +6,43 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/outofforest/magma/client/db"
+	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/memdb"
+	"github.com/outofforest/proton"
 )
 
 var (
-	_ ReadClient  = &LocalClient{}
-	_ WriteClient = &LocalClient{}
-	_ Transactor  = &localTransactor{}
-	_ Tx          = &localTx{}
+	_ ReadClient    = &LocalClient{}
+	_ WriteClient   = &LocalClient{}
+	_ db.Transactor = &localTransactor{}
+	_ db.Tx         = &localTx{}
 )
 
 // LocalConfig is the config for local client.
 type LocalConfig struct {
+	Marshaller  proton.Marshaller
 	Indices     []memdb.Index
 	TriggerFunc TriggerFunc
-	Types       []reflect.Type
 }
 
 // LocalClient is the client storing entities locally without propagating transactions to the server.
 type LocalClient struct {
-	config LocalConfig
-	db     *memdb.MemDB
-	byType map[reflect.Type]typeInfo
+	config  LocalConfig
+	db      *memdb.MemDB
+	applier *db.Applier
 }
 
 // NewLocalClient creates static client.
 func NewLocalClient(config LocalConfig) (*LocalClient, error) {
-	byType := map[reflect.Type]typeInfo{}
-
-	dbConfig := memdb.Config{
-		Entities: config.Types,
-		Indices:  config.Indices,
+	dbConfig, err := db.NewDBConfig(config.Marshaller, config.Indices)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, t := range dbConfig.Entities {
-		if _, exists := byType[t]; exists {
-			continue
-		}
-
-		idFType, err := validateType(t, false)
-		if err != nil {
-			return nil, err
-		}
-
-		info := typeInfo{
-			Type:    t,
-			IDType:  idFType,
-			TableID: uint64(len(byType)),
-		}
-		byType[t] = info
+	applier, err := db.NewApplier(wire.NewMarshaller(), config.Marshaller)
+	if err != nil {
+		return nil, err
 	}
 
 	db, err := memdb.NewMemDB(dbConfig)
@@ -63,9 +51,9 @@ func NewLocalClient(config LocalConfig) (*LocalClient, error) {
 	}
 
 	return &LocalClient{
-		config: config,
-		db:     db,
-		byType: byType,
+		config:  config,
+		db:      db,
+		applier: applier,
 	}, nil
 }
 
@@ -75,15 +63,12 @@ func (c *LocalClient) WarmUp(ctx context.Context) error {
 }
 
 // View returns db view.
-func (c *LocalClient) View() *View {
-	return &View{
-		tx:     c.db.Txn(true),
-		byType: c.byType,
-	}
+func (c *LocalClient) View() *db.View {
+	return db.NewView(c.db.Txn(true), c.applier)
 }
 
 // NewTransactor creates new transactor.
-func (c *LocalClient) NewTransactor() Transactor {
+func (c *LocalClient) NewTransactor() db.Transactor {
 	return &localTransactor{
 		c: c,
 	}
@@ -93,7 +78,7 @@ type localTransactor struct {
 	c *LocalClient
 }
 
-func (t *localTransactor) Tx(ctx context.Context, txF func(tx Tx) error) error {
+func (t *localTransactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
 	pendingTx := &localTx{
 		client:       t.c,
 		txn:          t.c.db.Txn(true),
@@ -125,15 +110,12 @@ type localTx struct {
 	updatedTypes map[reflect.Type]struct{}
 }
 
-func (tx *localTx) View() *View {
-	return &View{
-		tx:     tx.txn.Txn(true),
-		byType: tx.client.byType,
-	}
+func (tx *localTx) View() *db.View {
+	return db.NewView(tx.txn.Txn(true), tx.client.applier)
 }
 
 func (tx *localTx) Set(o any) error {
-	_, typeDef, _, _ := insert(tx.txn, tx.client.byType, o)
+	_, typeDef, _, _ := tx.client.applier.Insert(tx.txn, o)
 	tx.updatedTypes[typeDef.Type] = struct{}{}
 	return nil
 }

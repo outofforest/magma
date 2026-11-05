@@ -44,40 +44,13 @@ type Result struct {
 // ErrUncommittedLogTooLong is returned when uncommitted log size exceeds configured limit.
 var ErrUncommittedLogTooLong = errors.New("uncommitted log is too long")
 
-// New creates new reactor of raft consensus algorithm.
-func New(
-	serverID magmatypes.ServerID,
-	activePeers []magmatypes.ServerID,
-	passivePeers []magmatypes.ServerID,
-	maxUncommittedLog uint64,
-	s *state.State,
-) *Reactor {
-	r := &Reactor{
-		serverID:          serverID,
-		peers:             append(append([]magmatypes.ServerID{}, activePeers...), passivePeers...),
-		activePeers:       activePeers,
-		maxUncommittedLog: magmatypes.Index(maxUncommittedLog),
-		state:             s,
-		majority:          (len(activePeers)+1)/2 + 1,
-		lastTerm:          s.LastTerm(),
-		commitInfo: types.CommitInfo{
-			NextIndex: s.NextIndex(),
-		},
-		nextIndex:  map[magmatypes.ServerID]magmatypes.Index{},
-		matchIndex: map[magmatypes.ServerID]magmatypes.Index{},
-	}
-	r.transitionToFollower()
-	r.ignoreElectionTick = 0
-
-	return r
-}
-
 // Reactor implements Raft's state machine.
 type Reactor struct {
 	serverID          magmatypes.ServerID
 	peers             []magmatypes.ServerID
 	activePeers       []magmatypes.ServerID
 	maxUncommittedLog magmatypes.Index
+	desiredVersion    magmatypes.Version
 	leaderID          magmatypes.ServerID
 	state             *state.State
 
@@ -101,6 +74,36 @@ type Reactor struct {
 	matchIndex       map[magmatypes.ServerID]magmatypes.Index
 }
 
+// New creates new reactor of raft consensus algorithm.
+func New(
+	serverID magmatypes.ServerID,
+	activePeers []magmatypes.ServerID,
+	passivePeers []magmatypes.ServerID,
+	maxUncommittedLog uint64,
+	desiredVersion magmatypes.Version,
+	s *state.State,
+) *Reactor {
+	r := &Reactor{
+		serverID:          serverID,
+		peers:             append(append([]magmatypes.ServerID{}, activePeers...), passivePeers...),
+		activePeers:       activePeers,
+		maxUncommittedLog: magmatypes.Index(maxUncommittedLog),
+		desiredVersion:    desiredVersion,
+		state:             s,
+		majority:          (len(activePeers)+1)/2 + 1,
+		lastTerm:          s.LastTerm(),
+		commitInfo: types.CommitInfo{
+			NextIndex: s.NextIndex(),
+		},
+		nextIndex:  map[magmatypes.ServerID]magmatypes.Index{},
+		matchIndex: map[magmatypes.ServerID]magmatypes.Index{},
+	}
+	r.transitionToFollower()
+	r.ignoreElectionTick = 0
+
+	return r
+}
+
 // Apply applies command to the state machine.
 func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 	switch {
@@ -121,14 +124,16 @@ func (r *Reactor) Apply(peerID magmatypes.ServerID, cmd any) (Result, error) {
 		switch c := cmd.(type) {
 		case []byte:
 			return r.applyAppendTx(peerID, c)
-		case *types.LogSyncRequest:
-			return r.applyLogSyncRequest(peerID, c)
-		case *types.LogSyncResponse:
-			return r.applyLogSyncResponse(peerID, c)
 		case *types.LogACK:
 			return r.applyLogACK(peerID, c)
 		case *types.Heartbeat:
 			return r.applyHeartbeat(peerID, c)
+		case magmatypes.Version:
+			return r.applyVersion(peerID, c)
+		case *types.LogSyncRequest:
+			return r.applyLogSyncRequest(peerID, c)
+		case *types.LogSyncResponse:
+			return r.applyLogSyncResponse(peerID, c)
 		case *types.VoteRequest:
 			return r.applyVoteRequest(peerID, c)
 		case *types.VoteResponse:
@@ -382,6 +387,18 @@ func (r *Reactor) applyElectionTick(tick types.ElectionTick) (Result, error) {
 	return r.transitionToCandidate()
 }
 
+func (r *Reactor) applyVersion(peerID magmatypes.ServerID, version magmatypes.Version) (Result, error) {
+	if r.role == types.RoleLeader || r.leaderID != peerID {
+		return r.resultEmpty()
+	}
+
+	if err := r.state.SetCurrentVersion(version); err != nil {
+		return r.resultError(err)
+	}
+
+	return r.resultEmpty()
+}
+
 func (r *Reactor) applyHotEnd(peerID magmatypes.ServerID) (Result, error) {
 	if r.role != types.RoleLeader && r.leaderID == peerID {
 		r.commitInfo.HotEndIndex = r.commitInfo.NextIndex
@@ -470,6 +487,11 @@ func (r *Reactor) transitionToLeader() (Result, error) {
 	clear(r.matchIndex)
 
 	r.indexTermStarted = r.commitInfo.NextIndex
+
+	if err := r.state.SetCurrentVersion(r.desiredVersion); err != nil {
+		return r.resultError(err)
+	}
+
 	var err error
 	r.lastTerm, r.commitInfo.NextIndex, err = r.state.AppendTerm()
 	if err != nil {

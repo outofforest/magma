@@ -200,7 +200,12 @@ func applyPatch0(m *wire.HotEnd, b []byte) uint64 {
 }
 
 func size1(m *wire.StartLogStream) uint64 {
-	var n uint64 = 1
+	var n uint64 = 2
+	{
+		// Version
+
+		helpers.UInt64Size(m.Version, &n)
+	}
 	{
 		// Length
 
@@ -211,6 +216,11 @@ func size1(m *wire.StartLogStream) uint64 {
 
 func marshal1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Marshal(m.Version, b, &o)
+	}
 	{
 		// Length
 
@@ -223,6 +233,11 @@ func marshal1(m *wire.StartLogStream, b []byte) uint64 {
 func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64
 	{
+		// Version
+
+		helpers.UInt64Unmarshal(&m.Version, b, &o)
+	}
+	{
 		// Length
 
 		helpers.UInt64Unmarshal(&m.Length, b, &o)
@@ -232,6 +247,14 @@ func unmarshal1(m *wire.StartLogStream, b []byte) uint64 {
 }
 
 func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
+	{
+		// Version
+
+		if !reflect.DeepEqual(m.Version, mSrc.Version) {
+			return true
+		}
+
+	}
 	{
 		// Length
 
@@ -247,12 +270,22 @@ func isPatchNeeded1(m, mSrc *wire.StartLogStream) bool {
 func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// Length
+		// Version
 
-		if reflect.DeepEqual(m.Length, mSrc.Length) {
+		if reflect.DeepEqual(m.Version, mSrc.Version) {
 			b[0] &= 0xFE
 		} else {
 			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Version, b, &o)
+		}
+	}
+	{
+		// Length
+
+		if reflect.DeepEqual(m.Length, mSrc.Length) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
 			helpers.UInt64Marshal(m.Length, b, &o)
 		}
 	}
@@ -263,9 +296,16 @@ func makePatch1(m, mSrc *wire.StartLogStream, b []byte) uint64 {
 func applyPatch1(m *wire.StartLogStream, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// Length
+		// Version
 
 		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Version, b, &o)
+		}
+	}
+	{
+		// Length
+
+		if b[0]&0x02 != 0 {
 			helpers.UInt64Unmarshal(&m.Length, b, &o)
 		}
 	}
@@ -274,7 +314,7 @@ func applyPatch1(m *wire.StartLogStream, b []byte) uint64 {
 }
 
 func size2(m *InitResponse) uint64 {
-	var n uint64 = 1
+	var n uint64 = 2
 	{
 		// Error
 
@@ -283,6 +323,11 @@ func size2(m *InitResponse) uint64 {
 			helpers.UInt64Size(l, &n)
 			n += l
 		}
+	}
+	{
+		// InitSize
+
+		helpers.UInt64Size(m.InitSize, &n)
 	}
 	return n
 }
@@ -298,6 +343,11 @@ func marshal2(m *InitResponse, b []byte) uint64 {
 			copy(b[o:o+l], m.Error)
 			o += l
 		}
+	}
+	{
+		// InitSize
+
+		helpers.UInt64Marshal(m.InitSize, b, &o)
 	}
 
 	return o
@@ -317,6 +367,11 @@ func unmarshal2(m *InitResponse, b []byte) uint64 {
 			}
 		}
 	}
+	{
+		// InitSize
+
+		helpers.UInt64Unmarshal(&m.InitSize, b, &o)
+	}
 
 	return o
 }
@@ -326,6 +381,14 @@ func isPatchNeeded2(m, mSrc *InitResponse) bool {
 		// Error
 
 		if !reflect.DeepEqual(m.Error, mSrc.Error) {
+			return true
+		}
+
+	}
+	{
+		// InitSize
+
+		if !reflect.DeepEqual(m.InitSize, mSrc.InitSize) {
 			return true
 		}
 
@@ -351,6 +414,16 @@ func makePatch2(m, mSrc *InitResponse, b []byte) uint64 {
 			}
 		}
 	}
+	{
+		// InitSize
+
+		if reflect.DeepEqual(m.InitSize, mSrc.InitSize) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.InitSize, b, &o)
+		}
+	}
 
 	return o
 }
@@ -371,6 +444,13 @@ func applyPatch2(m *InitResponse, b []byte) uint64 {
 			}
 		}
 	}
+	{
+		// InitSize
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.InitSize, b, &o)
+		}
+	}
 
 	return o
 }
@@ -387,13 +467,9 @@ func size3(m *InitRequest) uint64 {
 		}
 	}
 	{
-		// Namespace
+		// Version
 
-		{
-			l := uint64(len(m.Namespace))
-			helpers.UInt64Size(l, &n)
-			n += l
-		}
+		helpers.UInt64Size(m.Version, &n)
 	}
 	{
 		// NextIndex
@@ -416,14 +492,9 @@ func marshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
+		// Version
 
-		{
-			l := uint64(len(m.Namespace))
-			helpers.UInt64Marshal(l, b, &o)
-			copy(b[o:o+l], m.Namespace)
-			o += l
-		}
+		helpers.UInt64Marshal(m.Version, b, &o)
 	}
 	{
 		// NextIndex
@@ -449,16 +520,9 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
+		// Version
 
-		{
-			var l uint64
-			helpers.UInt64Unmarshal(&l, b, &o)
-			if l > 0 {
-				m.Namespace = wire.Namespace(b[o:o+l])
-				o += l
-			}
-		}
+		helpers.UInt64Unmarshal(&m.Version, b, &o)
 	}
 	{
 		// NextIndex
@@ -479,9 +543,9 @@ func isPatchNeeded3(m, mSrc *InitRequest) bool {
 
 	}
 	{
-		// Namespace
+		// Version
 
-		if !reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
+		if !reflect.DeepEqual(m.Version, mSrc.Version) {
 			return true
 		}
 
@@ -516,18 +580,13 @@ func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
+		// Version
 
-		if reflect.DeepEqual(m.Namespace, mSrc.Namespace) {
+		if reflect.DeepEqual(m.Version, mSrc.Version) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			{
-				l := uint64(len(m.Namespace))
-				helpers.UInt64Marshal(l, b, &o)
-				copy(b[o:o+l], m.Namespace)
-				o += l
-			}
+			helpers.UInt64Marshal(m.Version, b, &o)
 		}
 	}
 	{
@@ -561,17 +620,10 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Namespace
+		// Version
 
 		if b[0]&0x02 != 0 {
-			{
-				var l uint64
-				helpers.UInt64Unmarshal(&l, b, &o)
-				if l > 0 {
-					m.Namespace = wire.Namespace(b[o:o+l])
-					o += l
-				}
-			}
+			helpers.UInt64Unmarshal(&m.Version, b, &o)
 		}
 	}
 	{

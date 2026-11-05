@@ -8,13 +8,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/memdb/indices"
 	"github.com/outofforest/qa"
 )
 
-var config = NewTestConfig(entities.NewMarshaller())
+var cfg = NewTestConfig(entities.NewMarshaller())
 
 func withIndices(config Config, indices ...memdb.Index) Config {
 	config.Indices = append(append([]memdb.Index{}, config.Indices...), indices...)
@@ -27,7 +28,7 @@ func TestEntityCreation(t *testing.T) {
 	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
-	c := NewTestClient(t, config)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -40,17 +41,17 @@ func TestEntityCreation(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
-		_, exists := Get[entities.Account](tx.View(), acc1.ID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		_, exists := db.Get[entities.Account](tx.View(), acc1.ID)
 		requireT.False(exists)
 
 		requireT.NoError(tx.Set(acc1))
 
-		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
+		acc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
-		accP, exists := GetPointer[entities.Account](tx.View(), acc1.ID)
+		accP, exists := db.GetPointer[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, *accP)
 
@@ -59,14 +60,14 @@ func TestEntityCreation(t *testing.T) {
 
 	acc1.Revision = 1
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
-		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		acc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
 		requireT.NoError(tx.Set(acc2))
 
-		acc, exists = Get[entities.Account](tx.View(), acc2.ID)
+		acc, exists = db.Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(acc2, acc)
 
@@ -76,11 +77,11 @@ func TestEntityCreation(t *testing.T) {
 	acc2.Revision = 1
 	v := c.View()
 
-	acc, exists := Get[entities.Account](v, acc1.ID)
+	acc, exists := db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc, acc1)
 
-	acc, exists = Get[entities.Account](v, acc2.ID)
+	acc, exists = db.Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc, acc2)
 }
@@ -91,7 +92,7 @@ func TestEntityUpdate(t *testing.T) {
 	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
-	c := NewTestClient(t, config)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -104,7 +105,7 @@ func TestEntityUpdate(t *testing.T) {
 		LastName:  "Last2",
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 
@@ -114,26 +115,26 @@ func TestEntityUpdate(t *testing.T) {
 	acc1.Revision = 1
 	acc2.Revision = 1
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
-		acc, exists := Get[entities.Account](tx.View(), acc1.ID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		acc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(acc1, acc)
 
 		acc.FirstName = "AAA"
 		requireT.NoError(tx.Set(acc))
 
-		accc, exists := Get[entities.Account](tx.View(), acc1.ID)
+		accc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
 		requireT.True(exists)
 		requireT.Equal(accc, acc)
 
-		acc, exists = Get[entities.Account](tx.View(), acc2.ID)
+		acc, exists = db.Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(acc2, acc)
 
 		acc.FirstName = "BBB"
 		requireT.NoError(tx.Set(acc))
 
-		accc, exists = Get[entities.Account](tx.View(), acc2.ID)
+		accc, exists = db.Get[entities.Account](tx.View(), acc2.ID)
 		requireT.True(exists)
 		requireT.Equal(accc, acc)
 
@@ -146,11 +147,11 @@ func TestEntityUpdate(t *testing.T) {
 	acc2.FirstName = "BBB"
 	v := c.View()
 
-	acc, exists := Get[entities.Account](v, acc1.ID)
+	acc, exists := db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, acc)
 
-	acc, exists = Get[entities.Account](v, acc2.ID)
+	acc, exists = db.Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc2, acc)
 }
@@ -163,8 +164,8 @@ func TestFailingTransaction(t *testing.T) {
 	requireT := require.New(t)
 
 	err := errors.New("error")
-	requireT.ErrorIs(NewTestClient(t, config).NewTransactor().
-		Tx(ctx, func(tx Tx) error {
+	requireT.ErrorIs(NewTestClient(t, cfg, 0, nil).NewTransactor().
+		Tx(ctx, func(tx db.Tx) error {
 			return err
 		}), err)
 }
@@ -179,7 +180,7 @@ func TestFieldIndexString(t *testing.T) {
 	var acc entities.Account
 	indexLastName := indices.NewFieldIndex(&acc, &acc.LastName)
 
-	c := NewTestClient(t, withIndices(config, indexLastName))
+	c := NewTestClient(t, withIndices(cfg, indexLastName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -199,7 +200,7 @@ func TestFieldIndexString(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -211,23 +212,23 @@ func TestFieldIndexString(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexLastName)
+	acc, exists := db.First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	accP, exists := FirstPointer[entities.Account](v, indexLastName)
+	accP, exists := db.FirstPointer[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[1], *accP)
 
-	acc, exists = First[entities.Account](v, indexLastName, "Last2")
+	acc, exists = db.First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = First[entities.Account](v, indexLastName, "La")
+	_, exists = db.First[entities.Account](v, indexLastName, "La")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexLastName) {
+	for acc := range db.Iterate[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -243,7 +244,7 @@ func TestFieldIndexString(t *testing.T) {
 	requireT.Equal(3, i)
 
 	i = 0
-	for accP := range IteratePointers[entities.Account](v, indexLastName) {
+	for accP := range db.IteratePointers[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], *accP)
@@ -259,7 +260,7 @@ func TestFieldIndexString(t *testing.T) {
 	requireT.Equal(3, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, "Last1") {
+	for acc := range db.Iterate[entities.Account](v, indexLastName, "Last1") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -270,11 +271,11 @@ func TestFieldIndexString(t *testing.T) {
 	}
 	requireT.Equal(1, i)
 
-	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+	for range db.Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexLastName)
+	it := db.Iterator[entities.Account](v, indexLastName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -287,7 +288,7 @@ func TestFieldIndexString(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	itP := IteratorPointers[entities.Account](v, indexLastName)
+	itP := db.IteratorPointers[entities.Account](v, indexLastName)
 	accP, ok = itP()
 	requireT.True(ok)
 	requireT.Equal(accs[1], *accP)
@@ -300,19 +301,19 @@ func TestFieldIndexString(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	it = db.Iterator[entities.Account](v, indexLastName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	it = db.Iterator[entities.Account](v, indexLastName, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, memdb.From, "Last2") {
+	for acc := range db.Iterate[entities.Account](v, indexLastName, memdb.From, "Last2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -326,7 +327,7 @@ func TestFieldIndexString(t *testing.T) {
 	requireT.Equal(2, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, memdb.From, "Last21", memdb.Back, 1) {
+	for acc := range db.Iterate[entities.Account](v, indexLastName, memdb.From, "Last21", memdb.Back, 1) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -339,11 +340,11 @@ func TestFieldIndexString(t *testing.T) {
 	}
 	requireT.Equal(2, i)
 
-	for range Iterate[entities.Account](v, indexLastName, memdb.From, "Missing") {
+	for range db.Iterate[entities.Account](v, indexLastName, memdb.From, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it = Iterator[entities.Account](v, indexLastName, memdb.From)
+	it = db.Iterator[entities.Account](v, indexLastName, memdb.From)
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -356,7 +357,7 @@ func TestFieldIndexString(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, memdb.From, "Last2")
+	it = db.Iterator[entities.Account](v, indexLastName, memdb.From, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
@@ -366,7 +367,7 @@ func TestFieldIndexString(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, memdb.From, "Missing")
+	it = db.Iterator[entities.Account](v, indexLastName, memdb.From, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -381,7 +382,7 @@ func TestFieldIndexBool(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Bool)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -394,7 +395,7 @@ func TestFieldIndexBool(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -406,19 +407,19 @@ func TestFieldIndexBool(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	e, exists = First[entities.Fields](v, index, true)
+	e, exists = db.First[entities.Fields](v, index, true)
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	e, exists = First[entities.Fields](v, index, false)
+	e, exists = db.First[entities.Fields](v, index, false)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -428,14 +429,14 @@ func TestFieldIndexBool(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, true)
+	it = db.Iterator[entities.Fields](v, index, true)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[0], e)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From)
+	it = db.Iterator[entities.Fields](v, index, memdb.From)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -445,7 +446,7 @@ func TestFieldIndexBool(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From, true)
+	it = db.Iterator[entities.Fields](v, index, memdb.From, true)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[0], e)
@@ -463,7 +464,7 @@ func TestFieldIndexTime(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Time)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	time0 := time.Unix(100, 10)
 	time1 := time.Unix(10, 20)
@@ -504,7 +505,7 @@ func TestFieldIndexTime(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -516,22 +517,22 @@ func TestFieldIndexTime(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[6], e)
 
-	e, exists = First[entities.Fields](v, index, time4)
+	e, exists = db.First[entities.Fields](v, index, time4)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, time1)
+	e, exists = db.First[entities.Fields](v, index, time1)
 	requireT.True(exists)
 	requireT.Equal(es[1], e)
 
-	_, exists = First[entities.Fields](v, index, time.Time{})
+	_, exists = db.First[entities.Fields](v, index, time.Time{})
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[6], e)
@@ -556,14 +557,14 @@ func TestFieldIndexTime(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, time3)
+	it = db.Iterator[entities.Fields](v, index, time3)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[3], e)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From)
+	it = db.Iterator[entities.Fields](v, index, memdb.From)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[6], e)
@@ -588,7 +589,7 @@ func TestFieldIndexTime(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From, time3)
+	it = db.Iterator[entities.Fields](v, index, memdb.From, time3)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[3], e)
@@ -617,7 +618,7 @@ func TestFieldIndexInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int8)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -642,7 +643,7 @@ func TestFieldIndexInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -654,22 +655,22 @@ func TestFieldIndexInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(-100))
+	e, exists = db.First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -688,7 +689,7 @@ func TestFieldIndexInt8(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -708,7 +709,7 @@ func TestFieldIndexInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int16)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -733,7 +734,7 @@ func TestFieldIndexInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -745,22 +746,22 @@ func TestFieldIndexInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(-100))
+	e, exists = db.First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -779,7 +780,7 @@ func TestFieldIndexInt16(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -799,7 +800,7 @@ func TestFieldIndexInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int32)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -824,7 +825,7 @@ func TestFieldIndexInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -836,22 +837,22 @@ func TestFieldIndexInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(-100))
+	e, exists = db.First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -870,7 +871,7 @@ func TestFieldIndexInt32(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -890,7 +891,7 @@ func TestFieldIndexInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Int64)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -915,7 +916,7 @@ func TestFieldIndexInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -927,22 +928,22 @@ func TestFieldIndexInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(-100))
+	e, exists = db.First[entities.Fields](v, index, intType(-100))
 	requireT.True(exists)
 	requireT.Equal(es[4], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -961,14 +962,14 @@ func TestFieldIndexInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From)
+	it = db.Iterator[entities.Fields](v, index, memdb.From)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[4], e)
@@ -987,7 +988,7 @@ func TestFieldIndexInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From, intType(10))
+	it = db.Iterator[entities.Fields](v, index, memdb.From, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1010,7 +1011,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint8)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -1027,7 +1028,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1039,18 +1040,18 @@ func TestFieldIndexUInt8(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1063,7 +1064,7 @@ func TestFieldIndexUInt8(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1083,7 +1084,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint16)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -1100,7 +1101,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1112,18 +1113,18 @@ func TestFieldIndexUInt16(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1136,7 +1137,7 @@ func TestFieldIndexUInt16(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1156,7 +1157,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint32)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -1173,7 +1174,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1185,18 +1186,18 @@ func TestFieldIndexUInt32(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1209,7 +1210,7 @@ func TestFieldIndexUInt32(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1229,7 +1230,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.Uint64)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -1246,7 +1247,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1258,18 +1259,18 @@ func TestFieldIndexUInt64(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = First[entities.Fields](v, index, intType(100))
+	e, exists = db.First[entities.Fields](v, index, intType(100))
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, intType(1))
+	_, exists = db.First[entities.Fields](v, index, intType(1))
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1282,14 +1283,14 @@ func TestFieldIndexUInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, intType(10))
+	it = db.Iterator[entities.Fields](v, index, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From)
+	it = db.Iterator[entities.Fields](v, index, memdb.From)
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1302,7 +1303,7 @@ func TestFieldIndexUInt64(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, memdb.From, intType(10))
+	it = db.Iterator[entities.Fields](v, index, memdb.From, intType(10))
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1323,7 +1324,7 @@ func TestFieldIndexID(t *testing.T) {
 	var e entities.Fields
 	index := indices.NewFieldIndex(&e, &e.EntityID)
 
-	c := NewTestClient(t, withIndices(config, index))
+	c := NewTestClient(t, withIndices(cfg, index), 0, nil)
 
 	es := []entities.Fields{
 		{
@@ -1340,7 +1341,7 @@ func TestFieldIndexID(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, e := range es {
 			requireT.NoError(tx.Set(e))
 		}
@@ -1352,18 +1353,18 @@ func TestFieldIndexID(t *testing.T) {
 	}
 
 	v := c.View()
-	e, exists := First[entities.Fields](v, index)
+	e, exists := db.First[entities.Fields](v, index)
 	requireT.True(exists)
 	requireT.Equal(es[2], e)
 
-	e, exists = First[entities.Fields](v, index, entities.AccountID{0x02})
+	e, exists = db.First[entities.Fields](v, index, entities.AccountID{0x02})
 	requireT.True(exists)
 	requireT.Equal(es[0], e)
 
-	_, exists = First[entities.Fields](v, index, entities.AccountID{0x03})
+	_, exists = db.First[entities.Fields](v, index, entities.AccountID{0x03})
 	requireT.False(exists)
 
-	it := Iterator[entities.Fields](v, index)
+	it := db.Iterator[entities.Fields](v, index)
 	e, ok := it()
 	requireT.True(ok)
 	requireT.Equal(es[2], e)
@@ -1376,7 +1377,7 @@ func TestFieldIndexID(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Fields](v, index, entities.AccountID{0x00, 0x01})
+	it = db.Iterator[entities.Fields](v, index, entities.AccountID{0x00, 0x01})
 	e, ok = it()
 	requireT.True(ok)
 	requireT.Equal(es[1], e)
@@ -1399,7 +1400,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	)
 
-	c := NewTestClient(t, withIndices(config, indexLastName))
+	c := NewTestClient(t, withIndices(cfg, indexLastName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -1419,7 +1420,7 @@ func TestIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1431,19 +1432,19 @@ func TestIfIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexLastName)
+	acc, exists := db.First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	acc, exists = First[entities.Account](v, indexLastName, "Last2")
+	acc, exists = db.First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[2], acc)
 
-	_, exists = First[entities.Account](v, indexLastName, "Missing")
+	_, exists = db.First[entities.Account](v, indexLastName, "Missing")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexLastName) {
+	for acc := range db.Iterate[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[2], acc)
@@ -1457,7 +1458,7 @@ func TestIfIndex(t *testing.T) {
 	requireT.Equal(2, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, "Last3") {
+	for acc := range db.Iterate[entities.Account](v, indexLastName, "Last3") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -1468,11 +1469,11 @@ func TestIfIndex(t *testing.T) {
 	}
 	requireT.Equal(1, i)
 
-	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+	for range db.Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexLastName)
+	it := db.Iterator[entities.Account](v, indexLastName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
@@ -1482,14 +1483,14 @@ func TestIfIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	it = db.Iterator[entities.Account](v, indexLastName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	it = db.Iterator[entities.Account](v, indexLastName, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1514,25 +1515,25 @@ func TestIfIndexWhenEntityIsExcludedAfterUpdate(t *testing.T) {
 		},
 	)
 
-	c := NewTestClient(t, withIndices(config, indexLastName))
+	c := NewTestClient(t, withIndices(cfg, indexLastName), 0, nil)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexLastName)
+	acc, exists := db.First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		acc.FirstName = "First2"
 		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
 
 	v = c.View()
-	_, exists = First[entities.Account](v, indexLastName)
+	_, exists = db.First[entities.Account](v, indexLastName)
 	requireT.False(exists)
 }
 
@@ -1549,7 +1550,7 @@ func TestMultiIndex(t *testing.T) {
 		indices.NewFieldIndex(&acc, &acc.FirstName),
 	)
 
-	c := NewTestClient(t, withIndices(config, indexName))
+	c := NewTestClient(t, withIndices(cfg, indexName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -1579,7 +1580,7 @@ func TestMultiIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1591,34 +1592,34 @@ func TestMultiIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexName)
+	acc, exists := db.First[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "Last2")
+	acc, exists = db.First[entities.Account](v, indexName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "Last")
+	acc, exists = db.First[entities.Account](v, indexName, "Last")
 	requireT.True(exists)
 	requireT.Equal(accs[3], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "La")
+	acc, exists = db.First[entities.Account](v, indexName, "La")
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	_, exists = First[entities.Account](v, indexName, "Las")
+	_, exists = db.First[entities.Account](v, indexName, "Las")
 	requireT.False(exists)
 
-	acc, exists = First[entities.Account](v, indexName, "Last2", "First3")
+	acc, exists = db.First[entities.Account](v, indexName, "Last2", "First3")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = First[entities.Account](v, indexName, "Last2", "Fir")
+	_, exists = db.First[entities.Account](v, indexName, "Last2", "Fir")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexName) {
+	for acc := range db.Iterate[entities.Account](v, indexName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[4], acc)
@@ -1638,7 +1639,7 @@ func TestMultiIndex(t *testing.T) {
 	requireT.Equal(5, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2") {
+	for acc := range db.Iterate[entities.Account](v, indexName, "Last2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -1652,7 +1653,7 @@ func TestMultiIndex(t *testing.T) {
 	requireT.Equal(2, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2", "First2") {
+	for acc := range db.Iterate[entities.Account](v, indexName, "Last2", "First2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -1663,15 +1664,15 @@ func TestMultiIndex(t *testing.T) {
 	}
 	requireT.Equal(1, i)
 
-	for range Iterate[entities.Account](v, indexName, "Las") {
+	for range db.Iterate[entities.Account](v, indexName, "Las") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	for range Iterate[entities.Account](v, indexName, "Last2", "Fir") {
+	for range db.Iterate[entities.Account](v, indexName, "Last2", "Fir") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexName)
+	it := db.Iterator[entities.Account](v, indexName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[4], acc)
@@ -1690,7 +1691,7 @@ func TestMultiIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2")
+	it = db.Iterator[entities.Account](v, indexName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -1700,14 +1701,14 @@ func TestMultiIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2", "First3")
+	it = db.Iterator[entities.Account](v, indexName, "Last2", "First3")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Las")
+	it = db.Iterator[entities.Account](v, indexName, "Las")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1731,7 +1732,7 @@ func TestMultiIfIndex(t *testing.T) {
 			}),
 	)
 
-	c := NewTestClient(t, withIndices(config, indexName))
+	c := NewTestClient(t, withIndices(cfg, indexName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -1756,7 +1757,7 @@ func TestMultiIfIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1769,7 +1770,7 @@ func TestMultiIfIndex(t *testing.T) {
 
 	v := c.View()
 
-	it := Iterator[entities.Account](v, indexName)
+	it := db.Iterator[entities.Account](v, indexName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
@@ -1779,25 +1780,25 @@ func TestMultiIfIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "A1", "B1")
+	it = db.Iterator[entities.Account](v, indexName, "A1", "B1")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[2], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "A2")
+	it = db.Iterator[entities.Account](v, indexName, "A2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[3], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "B1", "A1")
+	it = db.Iterator[entities.Account](v, indexName, "B1", "A1")
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "B1")
+	it = db.Iterator[entities.Account](v, indexName, "B1")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1812,7 +1813,7 @@ func TestReverseIndex(t *testing.T) {
 	var acc entities.Account
 	indexLastName := indices.NewReverseIndex(indices.NewFieldIndex(&acc, &acc.LastName))
 
-	c := NewTestClient(t, withIndices(config, indexLastName))
+	c := NewTestClient(t, withIndices(cfg, indexLastName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -1832,7 +1833,7 @@ func TestReverseIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1844,19 +1845,19 @@ func TestReverseIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexLastName)
+	acc, exists := db.First[entities.Account](v, indexLastName)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	acc, exists = First[entities.Account](v, indexLastName, "Last2")
+	acc, exists = db.First[entities.Account](v, indexLastName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	_, exists = First[entities.Account](v, indexLastName, "Missing")
+	_, exists = db.First[entities.Account](v, indexLastName, "Missing")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexLastName) {
+	for acc := range db.Iterate[entities.Account](v, indexLastName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -1872,7 +1873,7 @@ func TestReverseIndex(t *testing.T) {
 	requireT.Equal(3, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexLastName, "Last3") {
+	for acc := range db.Iterate[entities.Account](v, indexLastName, "Last3") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[0], acc)
@@ -1883,11 +1884,11 @@ func TestReverseIndex(t *testing.T) {
 	}
 	requireT.Equal(1, i)
 
-	for range Iterate[entities.Account](v, indexLastName, "Missing") {
+	for range db.Iterate[entities.Account](v, indexLastName, "Missing") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexLastName)
+	it := db.Iterator[entities.Account](v, indexLastName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
@@ -1900,14 +1901,14 @@ func TestReverseIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Last2")
+	it = db.Iterator[entities.Account](v, indexLastName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexLastName, "Missing")
+	it = db.Iterator[entities.Account](v, indexLastName, "Missing")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -1923,7 +1924,7 @@ func TestFuncIndex(t *testing.T) {
 		return &acc.LastName, &acc.FirstName
 	})
 
-	c := NewTestClient(t, withIndices(config, indexName))
+	c := NewTestClient(t, withIndices(cfg, indexName), 0, nil)
 
 	accs := []entities.Account{
 		{
@@ -1953,7 +1954,7 @@ func TestFuncIndex(t *testing.T) {
 		},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -1965,34 +1966,34 @@ func TestFuncIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := First[entities.Account](v, indexName)
+	acc, exists := db.First[entities.Account](v, indexName)
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "Last2")
+	acc, exists = db.First[entities.Account](v, indexName, "Last2")
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "Last")
+	acc, exists = db.First[entities.Account](v, indexName, "Last")
 	requireT.True(exists)
 	requireT.Equal(accs[3], acc)
 
-	acc, exists = First[entities.Account](v, indexName, "La")
+	acc, exists = db.First[entities.Account](v, indexName, "La")
 	requireT.True(exists)
 	requireT.Equal(accs[4], acc)
 
-	_, exists = First[entities.Account](v, indexName, "Las")
+	_, exists = db.First[entities.Account](v, indexName, "Las")
 	requireT.False(exists)
 
-	acc, exists = First[entities.Account](v, indexName, "Last2", "First3")
+	acc, exists = db.First[entities.Account](v, indexName, "Last2", "First3")
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	_, exists = First[entities.Account](v, indexName, "Last2", "Fir")
+	_, exists = db.First[entities.Account](v, indexName, "Last2", "Fir")
 	requireT.False(exists)
 
 	i := 0
-	for acc := range Iterate[entities.Account](v, indexName) {
+	for acc := range db.Iterate[entities.Account](v, indexName) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[4], acc)
@@ -2012,7 +2013,7 @@ func TestFuncIndex(t *testing.T) {
 	requireT.Equal(5, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2") {
+	for acc := range db.Iterate[entities.Account](v, indexName, "Last2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -2026,7 +2027,7 @@ func TestFuncIndex(t *testing.T) {
 	requireT.Equal(2, i)
 
 	i = 0
-	for acc := range Iterate[entities.Account](v, indexName, "Last2", "First2") {
+	for acc := range db.Iterate[entities.Account](v, indexName, "Last2", "First2") {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -2037,15 +2038,15 @@ func TestFuncIndex(t *testing.T) {
 	}
 	requireT.Equal(1, i)
 
-	for range Iterate[entities.Account](v, indexName, "Las") {
+	for range db.Iterate[entities.Account](v, indexName, "Las") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	for range Iterate[entities.Account](v, indexName, "Last2", "Fir") {
+	for range db.Iterate[entities.Account](v, indexName, "Last2", "Fir") {
 		requireT.Fail("nothing should be returned")
 	}
 
-	it := Iterator[entities.Account](v, indexName)
+	it := db.Iterator[entities.Account](v, indexName)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[4], acc)
@@ -2064,7 +2065,7 @@ func TestFuncIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2")
+	it = db.Iterator[entities.Account](v, indexName, "Last2")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -2074,14 +2075,14 @@ func TestFuncIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Last2", "First3")
+	it = db.Iterator[entities.Account](v, indexName, "Last2", "First3")
 	acc, ok = it()
 	requireT.True(ok)
 	requireT.Equal(accs[0], acc)
 	_, ok = it()
 	requireT.False(ok)
 
-	it = Iterator[entities.Account](v, indexName, "Las")
+	it = db.Iterator[entities.Account](v, indexName, "Las")
 	_, ok = it()
 	requireT.False(ok)
 }
@@ -2093,7 +2094,7 @@ func TestOverrideSingleNonExistingEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc := entities.Account{
@@ -2105,7 +2106,7 @@ func TestOverrideSingleNonExistingEntity(t *testing.T) {
 	acc2.LastName = "Changed"
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc))
 		requireT.NoError(tx.Set(acc2))
 		return nil
@@ -2114,7 +2115,7 @@ func TestOverrideSingleNonExistingEntity(t *testing.T) {
 	acc2.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 }
@@ -2126,7 +2127,7 @@ func TestOverrideSingleExistingEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc := entities.Account{
@@ -2140,11 +2141,11 @@ func TestOverrideSingleExistingEntity(t *testing.T) {
 	acc3.LastName = "BBBBBBBBBBBBB2"
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc3))
 		return nil
@@ -2153,7 +2154,7 @@ func TestOverrideSingleExistingEntity(t *testing.T) {
 	acc3.Revision += 2
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc3, accAfter)
 }
@@ -2165,7 +2166,7 @@ func TestOverrideLastEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2185,7 +2186,7 @@ func TestOverrideLastEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc3))
@@ -2196,11 +2197,11 @@ func TestOverrideLastEntity(t *testing.T) {
 	acc1.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc3, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc1.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, accAfter)
 }
@@ -2212,7 +2213,7 @@ func TestOverrideFirstEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2232,7 +2233,7 @@ func TestOverrideFirstEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc3))
@@ -2243,11 +2244,11 @@ func TestOverrideFirstEntity(t *testing.T) {
 	acc1.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc3, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc1.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, accAfter)
 }
@@ -2259,7 +2260,7 @@ func TestOverrideMiddleEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2284,7 +2285,7 @@ func TestOverrideMiddleEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc12))
@@ -2297,15 +2298,15 @@ func TestOverrideMiddleEntity(t *testing.T) {
 	acc12.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc3, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc11.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc11.ID)
 	requireT.True(exists)
 	requireT.Equal(acc11, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc12.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc12.ID)
 	requireT.True(exists)
 	requireT.Equal(acc12, accAfter)
 }
@@ -2317,7 +2318,7 @@ func TestManyOverrides(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2337,7 +2338,7 @@ func TestManyOverrides(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		requireT.NoError(tx.Set(acc2))
 		requireT.NoError(tx.Set(acc1))
@@ -2349,11 +2350,11 @@ func TestManyOverrides(t *testing.T) {
 	acc3.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc3, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc1.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, accAfter)
 }
@@ -2365,7 +2366,7 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2390,12 +2391,12 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc12))
 		requireT.NoError(tx.Set(acc2))
@@ -2407,15 +2408,15 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 	acc2.Revision += 2
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc11.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc11.ID)
 	requireT.True(exists)
 	requireT.Equal(acc11, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc12.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc12.ID)
 	requireT.True(exists)
 	requireT.Equal(acc12, accAfter)
 }
@@ -2427,7 +2428,7 @@ func TestSetEmptyTx(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc2 := entities.Account{
@@ -2442,11 +2443,11 @@ func TestSetEmptyTx(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc2))
 		return nil
@@ -2455,7 +2456,7 @@ func TestSetEmptyTx(t *testing.T) {
 	acc2.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 }
@@ -2467,7 +2468,7 @@ func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2492,12 +2493,12 @@ func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc11))
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.Set(acc12))
 		requireT.NoError(tx.SoftSet(acc2))
@@ -2509,15 +2510,15 @@ func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
 	acc2.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc11.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc11.ID)
 	requireT.True(exists)
 	requireT.Equal(acc11, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc12.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc12.ID)
 	requireT.True(exists)
 	requireT.Equal(acc12, accAfter)
 }
@@ -2529,7 +2530,7 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc2 := entities.Account{
@@ -2544,11 +2545,11 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc3))
 		requireT.NoError(tx.SoftSet(acc2))
 		return nil
@@ -2557,7 +2558,7 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 	acc2.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 }
@@ -2569,7 +2570,7 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, config)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2589,27 +2590,27 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc2))
 		return nil
 	}))
 
 	acc2.Revision++
 
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
-		requireT.ErrorIs(tx.Set(acc3), ErrTxTooBig)
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		requireT.ErrorIs(tx.Set(acc3), db.ErrTxTooBig)
 
-		accAfter, exists := Get[entities.Account](tx.View(), accID)
+		accAfter, exists := db.Get[entities.Account](tx.View(), accID)
 		requireT.True(exists)
 		requireT.Equal(acc2, accAfter)
 
 		requireT.NoError(tx.Set(acc))
 
-		accAfter, exists = Get[entities.Account](tx.View(), accID)
+		accAfter, exists = db.Get[entities.Account](tx.View(), accID)
 		requireT.True(exists)
 		requireT.Equal(acc2, accAfter)
 
-		accAfter, exists = Get[entities.Account](tx.View(), acc.ID)
+		accAfter, exists = db.Get[entities.Account](tx.View(), acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, accAfter)
 
@@ -2619,11 +2620,11 @@ func TestTxSizeOutOfLimit(t *testing.T) {
 	acc.Revision++
 
 	v := c.View()
-	accAfter, exists := Get[entities.Account](v, accID)
+	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 
-	accAfter, exists = Get[entities.Account](v, acc.ID)
+	accAfter, exists = db.Get[entities.Account](v, acc.ID)
 	requireT.True(exists)
 	requireT.Equal(acc, accAfter)
 }
@@ -2635,7 +2636,7 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	id := memdb.NewID[memdb.ID]()
 	e1 := entities.Account{
@@ -2646,7 +2647,7 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(e1))
 		requireT.NoError(tx.Set(e2))
 		return nil
@@ -2656,10 +2657,10 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 	e2.Revision++
 
 	v := c.View()
-	_, exists := Get[entities.Account](v, e1.ID)
+	_, exists := db.Get[entities.Account](v, e1.ID)
 	requireT.True(exists)
 
-	_, exists = Get[entities.Fields](v, e2.ID)
+	_, exists = db.Get[entities.Fields](v, e2.ID)
 	requireT.True(exists)
 }
 
@@ -2670,7 +2671,7 @@ func TestIgnoredField(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(config))
+	c := NewTestClient(t, withIndices(cfg), 0, nil)
 
 	e := entities.Ignore{
 		ID:      memdb.NewID[memdb.ID](),
@@ -2679,7 +2680,7 @@ func TestIgnoredField(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(e))
 		return nil
 	}))
@@ -2688,7 +2689,7 @@ func TestIgnoredField(t *testing.T) {
 	e.Ignored = 0
 
 	v := c.View()
-	e2, exists := Get[entities.Ignore](v, e.ID)
+	e2, exists := db.Get[entities.Ignore](v, e.ID)
 	requireT.True(exists)
 	requireT.Equal(e, e2)
 }

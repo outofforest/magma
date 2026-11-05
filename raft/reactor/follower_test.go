@@ -11,11 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/xxh3"
 
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state"
 	"github.com/outofforest/magma/state/events"
 	"github.com/outofforest/magma/state/repository"
+	"github.com/outofforest/magma/state/repository/format"
 	magmatypes "github.com/outofforest/magma/types"
 	"github.com/outofforest/varuint64"
 )
@@ -29,9 +31,9 @@ var (
 
 	passivePeerID = magmatypes.ServerID("PP")
 
-	config = magmatypes.Config{
+	cfg = config.Config{
 		ServerID: serverID,
-		Servers: []magmatypes.ServerConfig{
+		Servers: []config.ServerConfig{
 			{ID: serverID},
 			{ID: peer1ID},
 			{ID: peer2ID},
@@ -46,7 +48,8 @@ func newState(t *testing.T, dir string) (*state.State, string) {
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()))
+	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()), config.PartitionConfig{},
+		1024*1024)
 	require.NoError(t, err)
 	em, err := events.Open(filepath.Join(dir, "events"))
 	require.NoError(t, err)
@@ -59,18 +62,19 @@ func newState(t *testing.T, dir string) (*state.State, string) {
 }
 
 func newReactor(serverID magmatypes.ServerID, s *state.State) *Reactor {
-	activePeers := make([]magmatypes.ServerID, 0, len(config.Servers))
-	for _, s := range config.Servers {
+	activePeers := make([]magmatypes.ServerID, 0, len(cfg.Servers))
+	for _, s := range cfg.Servers {
 		if s.ID != serverID {
 			activePeers = append(activePeers, s.ID)
 		}
 	}
 
-	return New(serverID, activePeers, []magmatypes.ServerID{passivePeerID}, 600, s)
+	return New(serverID, activePeers, []magmatypes.ServerID{passivePeerID}, 600, 0, s)
 }
 
 func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
-	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()))
+	repo, err := repository.Open(filepath.Join(dir, "repo"), uint64(os.Getpagesize()), config.PartitionConfig{},
+		1024*1024)
 	requireT.NoError(err)
 
 	tp := repository.NewTailProvider()
@@ -81,7 +85,7 @@ func logEqual(requireT *require.Assertions, dir string, expectedLog []byte) {
 
 	buf := bytes.NewBuffer(nil)
 	for buf.Len() < len(expectedLog) {
-		reader, _, err := it.Reader(true)
+		reader, _, _, err := it.Reader(true)
 		requireT.NoError(err)
 		_, err = io.Copy(buf, reader)
 		requireT.NoError(err)
@@ -1751,4 +1755,71 @@ func TestFollowerApplyHotEndIgnoreFromNonLeader(t *testing.T) {
 			HotEndIndex:    0,
 		},
 	}, result)
+}
+
+func TestFollowerApplyVersionIncrementsVersion(t *testing.T) {
+	requireT := require.New(t)
+	s, dir := newState(t, "")
+	requireT.NoError(s.SetCurrentTerm(5))
+
+	txb := newTxBuilder()
+	_, _, err := s.Append(txs(
+		txb(0x04),
+		txb(0x05),
+	), true, true)
+	requireT.NoError(err)
+
+	r := newReactor(serverID, s)
+	r.leaderID = peer1ID
+	r.commitInfo = types.CommitInfo{
+		NextIndex:      20,
+		CommittedCount: 10,
+		HotEndIndex:    0,
+	}
+
+	result, err := r.Apply(peer1ID, magmatypes.Version(4))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextIndex:      20,
+			CommittedCount: 10,
+			HotEndIndex:    0,
+		},
+	}, result)
+
+	requireT.NoError(s.SetCurrentTerm(6))
+	result, err = r.Apply(peer1ID, txb(0x06))
+	requireT.NoError(err)
+	requireT.Equal(types.RoleFollower, r.role)
+	requireT.Equal(Result{
+		Role:     types.RoleFollower,
+		LeaderID: peer1ID,
+		CommitInfo: types.CommitInfo{
+			NextIndex:      30,
+			CommittedCount: 10,
+			HotEndIndex:    0,
+		},
+	}, result)
+
+	data, err := os.ReadFile(filepath.Join(dir, "repo", "2"))
+	requireT.NoError(err)
+
+	m := format.NewMarshaller()
+	id, err := m.ID(&format.Header{})
+	requireT.NoError(err)
+
+	h, _, err := m.Unmarshal(id, data)
+	requireT.NoError(err)
+	requireT.Equal(&format.Header{
+		Version:          4,
+		FileIndex:        2,
+		PreviousTerm:     5,
+		Term:             6,
+		NextIndex:        20,
+		PreviousChecksum: 12067421020284993473,
+		HeaderChecksum:   13002672689043612224,
+	}, h)
 }

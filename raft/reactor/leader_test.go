@@ -1,11 +1,14 @@
 package reactor
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/outofforest/magma/raft/types"
+	"github.com/outofforest/magma/state/repository/format"
 	magmatypes "github.com/outofforest/magma/types"
 )
 
@@ -24,6 +27,7 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.NoError(err)
 	r := newReactor(serverID, s)
 
+	r.desiredVersion = 3
 	r.role = types.RoleCandidate
 	r.leaderID = peer1ID
 	r.votedForMe = 10
@@ -87,11 +91,32 @@ func TestLeaderSetup(t *testing.T) {
 	requireT.EqualValues(3, s.CurrentTerm())
 
 	txb = newTxBuilder()
+
+	requireT.NoError(os.WriteFile(filepath.Join(dir, "repo", "2.init"), nil, 0o600))
 	logEqual(requireT, dir, txs(
 		txb(0x01), txb(0x01, 0x00),
 		txb(0x02), txb(0x02, 0x00, 0x00),
 		txb(0x03),
 	))
+
+	data, err := os.ReadFile(filepath.Join(dir, "repo", "2"))
+	requireT.NoError(err)
+
+	m := format.NewMarshaller()
+	id, err := m.ID(&format.Header{})
+	requireT.NoError(err)
+
+	h, _, err := m.Unmarshal(id, data)
+	requireT.NoError(err)
+	requireT.Equal(&format.Header{
+		Version:          3,
+		FileIndex:        2,
+		PreviousTerm:     2,
+		Term:             3,
+		NextIndex:        43,
+		PreviousChecksum: 17150758802213953092,
+		HeaderChecksum:   3780832024403985736,
+	}, h)
 }
 
 func TestLeaderApplyLogSyncRequestTransitionToFollowerOnFutureTerm(t *testing.T) {

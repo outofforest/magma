@@ -113,7 +113,17 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 }
 
 func size0(m *Header) uint64 {
-	var n uint64 = 4
+	var n uint64 = 7
+	{
+		// Version
+
+		helpers.UInt64Size(m.Version, &n)
+	}
+	{
+		// FileIndex
+
+		helpers.UInt64Size(m.FileIndex, &n)
+	}
 	{
 		// PreviousTerm
 
@@ -130,6 +140,11 @@ func size0(m *Header) uint64 {
 		helpers.UInt64Size(m.NextIndex, &n)
 	}
 	{
+		// PreviousChecksum
+
+		helpers.UInt64Size(m.PreviousChecksum, &n)
+	}
+	{
 		// HeaderChecksum
 
 		helpers.UInt64Size(m.HeaderChecksum, &n)
@@ -139,6 +154,16 @@ func size0(m *Header) uint64 {
 
 func marshal0(m *Header, b []byte) uint64 {
 	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Marshal(m.Version, b, &o)
+	}
+	{
+		// FileIndex
+
+		helpers.UInt64Marshal(m.FileIndex, b, &o)
+	}
 	{
 		// PreviousTerm
 
@@ -155,6 +180,11 @@ func marshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Marshal(m.NextIndex, b, &o)
 	}
 	{
+		// PreviousChecksum
+
+		helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
+	}
+	{
 		// HeaderChecksum
 
 		helpers.UInt64Marshal(m.HeaderChecksum, b, &o)
@@ -165,6 +195,16 @@ func marshal0(m *Header, b []byte) uint64 {
 
 func unmarshal0(m *Header, b []byte) uint64 {
 	var o uint64
+	{
+		// Version
+
+		helpers.UInt64Unmarshal(&m.Version, b, &o)
+	}
+	{
+		// FileIndex
+
+		helpers.UInt64Unmarshal(&m.FileIndex, b, &o)
+	}
 	{
 		// PreviousTerm
 
@@ -181,6 +221,11 @@ func unmarshal0(m *Header, b []byte) uint64 {
 		helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
 	}
 	{
+		// PreviousChecksum
+
+		helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
+	}
+	{
 		// HeaderChecksum
 
 		helpers.UInt64Unmarshal(&m.HeaderChecksum, b, &o)
@@ -190,6 +235,22 @@ func unmarshal0(m *Header, b []byte) uint64 {
 }
 
 func isPatchNeeded0(m, mSrc *Header) bool {
+	{
+		// Version
+
+		if !reflect.DeepEqual(m.Version, mSrc.Version) {
+			return true
+		}
+
+	}
+	{
+		// FileIndex
+
+		if !reflect.DeepEqual(m.FileIndex, mSrc.FileIndex) {
+			return true
+		}
+
+	}
 	{
 		// PreviousTerm
 
@@ -215,6 +276,14 @@ func isPatchNeeded0(m, mSrc *Header) bool {
 
 	}
 	{
+		// PreviousChecksum
+
+		if !reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
+			return true
+		}
+
+	}
+	{
 		// HeaderChecksum
 
 		if !reflect.DeepEqual(m.HeaderChecksum, mSrc.HeaderChecksum) {
@@ -229,12 +298,32 @@ func isPatchNeeded0(m, mSrc *Header) bool {
 func makePatch0(m, mSrc *Header, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// PreviousTerm
+		// Version
 
-		if reflect.DeepEqual(m.PreviousTerm, mSrc.PreviousTerm) {
+		if reflect.DeepEqual(m.Version, mSrc.Version) {
 			b[0] &= 0xFE
 		} else {
 			b[0] |= 0x01
+			helpers.UInt64Marshal(m.Version, b, &o)
+		}
+	}
+	{
+		// FileIndex
+
+		if reflect.DeepEqual(m.FileIndex, mSrc.FileIndex) {
+			b[0] &= 0xFD
+		} else {
+			b[0] |= 0x02
+			helpers.UInt64Marshal(m.FileIndex, b, &o)
+		}
+	}
+	{
+		// PreviousTerm
+
+		if reflect.DeepEqual(m.PreviousTerm, mSrc.PreviousTerm) {
+			b[0] &= 0xFB
+		} else {
+			b[0] |= 0x04
 			helpers.UInt64Marshal(m.PreviousTerm, b, &o)
 		}
 	}
@@ -242,9 +331,9 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		// Term
 
 		if reflect.DeepEqual(m.Term, mSrc.Term) {
-			b[0] &= 0xFD
+			b[0] &= 0xF7
 		} else {
-			b[0] |= 0x02
+			b[0] |= 0x08
 			helpers.UInt64Marshal(m.Term, b, &o)
 		}
 	}
@@ -252,19 +341,29 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 		// NextIndex
 
 		if reflect.DeepEqual(m.NextIndex, mSrc.NextIndex) {
-			b[0] &= 0xFB
+			b[0] &= 0xEF
 		} else {
-			b[0] |= 0x04
+			b[0] |= 0x10
 			helpers.UInt64Marshal(m.NextIndex, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if reflect.DeepEqual(m.PreviousChecksum, mSrc.PreviousChecksum) {
+			b[0] &= 0xDF
+		} else {
+			b[0] |= 0x20
+			helpers.UInt64Marshal(m.PreviousChecksum, b, &o)
 		}
 	}
 	{
 		// HeaderChecksum
 
 		if reflect.DeepEqual(m.HeaderChecksum, mSrc.HeaderChecksum) {
-			b[0] &= 0xF7
+			b[0] &= 0xBF
 		} else {
-			b[0] |= 0x08
+			b[0] |= 0x40
 			helpers.UInt64Marshal(m.HeaderChecksum, b, &o)
 		}
 	}
@@ -275,30 +374,51 @@ func makePatch0(m, mSrc *Header, b []byte) uint64 {
 func applyPatch0(m *Header, b []byte) uint64 {
 	var o uint64 = 1
 	{
-		// PreviousTerm
+		// Version
 
 		if b[0]&0x01 != 0 {
+			helpers.UInt64Unmarshal(&m.Version, b, &o)
+		}
+	}
+	{
+		// FileIndex
+
+		if b[0]&0x02 != 0 {
+			helpers.UInt64Unmarshal(&m.FileIndex, b, &o)
+		}
+	}
+	{
+		// PreviousTerm
+
+		if b[0]&0x04 != 0 {
 			helpers.UInt64Unmarshal(&m.PreviousTerm, b, &o)
 		}
 	}
 	{
 		// Term
 
-		if b[0]&0x02 != 0 {
+		if b[0]&0x08 != 0 {
 			helpers.UInt64Unmarshal(&m.Term, b, &o)
 		}
 	}
 	{
 		// NextIndex
 
-		if b[0]&0x04 != 0 {
+		if b[0]&0x10 != 0 {
 			helpers.UInt64Unmarshal(&m.NextIndex, b, &o)
+		}
+	}
+	{
+		// PreviousChecksum
+
+		if b[0]&0x20 != 0 {
+			helpers.UInt64Unmarshal(&m.PreviousChecksum, b, &o)
 		}
 	}
 	{
 		// HeaderChecksum
 
-		if b[0]&0x08 != 0 {
+		if b[0]&0x40 != 0 {
 			helpers.UInt64Unmarshal(&m.HeaderChecksum, b, &o)
 		}
 	}

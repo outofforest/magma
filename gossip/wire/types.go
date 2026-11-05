@@ -1,10 +1,8 @@
 package wire
 
 import (
-	"reflect"
-
-	"github.com/outofforest/magma/types"
-	"github.com/outofforest/proton"
+	"github.com/outofforest/magma/raft/types"
+	magmatypes "github.com/outofforest/magma/types"
 )
 
 // Channel defines channel to use for sending the messages.
@@ -20,9 +18,8 @@ const (
 
 // Hello is the message exchanged between peers when connected.
 type Hello struct {
-	ServerID    types.ServerID
-	PartitionID types.PartitionID
-	Namespace   Namespace
+	ServerID    magmatypes.ServerID
+	PartitionID magmatypes.PartitionID
 	Channel     Channel
 }
 
@@ -33,17 +30,15 @@ type HelloResponse struct {
 
 // StartLogStream indicates beginning of log stream transfer.
 type StartLogStream struct {
-	Length uint64
+	Version magmatypes.Version
+	Length  uint64
+}
+
+// EndOfVersion means sender reached enf of version.
+type EndOfVersion struct {
+	NextVersion magmatypes.Version
+	NextTerm    types.Term
 }
 
 // HotEnd indicates that hot end has been reached.
 type HotEnd struct{}
-
-// Namespace represents namespace of objects stored in partition.
-type Namespace string
-
-// NamespaceFromMarshaller converts marshaller to namespace string.
-func NamespaceFromMarshaller(m proton.Marshaller) Namespace {
-	t := reflect.TypeOf(m)
-	return Namespace(t.PkgPath() + "." + t.Name())
-}

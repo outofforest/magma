@@ -13,10 +13,11 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client"
+	"github.com/outofforest/magma/client/db"
+	"github.com/outofforest/magma/config"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
-	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
 )
 
@@ -41,7 +42,7 @@ func (p *Peer) DropData() error {
 	return nil
 }
 
-func (p *Peer) run(ctx context.Context, config types.Config, p2pListener net.Listener) error {
+func (p *Peer) run(ctx context.Context, config config.Config, p2pListener net.Listener) error {
 	config.Directory = p.dir
 	err := magma.Run(ctx, config, p2pListener, p.c2pListener)
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
@@ -63,7 +64,7 @@ type Client struct {
 }
 
 // View returns current db view.
-func (c *Client) View() *client.View {
+func (c *Client) View() *db.View {
 	return c.client.View()
 }
 
@@ -73,7 +74,7 @@ func (c *Client) WarmUp(ctx context.Context) error {
 }
 
 // NewTransactor returns new transactor.
-func (c *Client) NewTransactor() client.Transactor {
+func (c *Client) NewTransactor() db.Transactor {
 	return c.client.NewTransactor()
 }
 
@@ -99,7 +100,7 @@ type Config struct {
 	MaxMessageSize    uint64
 	MaxUncommittedLog uint64
 	PageSize          uint64
-	Marshallers       map[types.PartitionID]proton.Marshaller
+	Partitions        []config.PartitionConfig
 }
 
 // New creates new cluster.
@@ -291,20 +292,29 @@ func (c *Cluster) NewPeer(peerID types.ServerID, partitions types.Partitions) (*
 func (c *Cluster) NewClient(
 	peer *Peer,
 	name string,
-	marshaller proton.Marshaller,
 	partitionID types.PartitionID,
 	triggerFunc client.TriggerFunc,
 	indices ...memdb.Index,
 ) (*Client, error) {
+	var pCfg config.PartitionConfig
+	for _, p := range c.config.Partitions {
+		if p.ID == partitionID {
+			pCfg = p
+			break
+		}
+	}
+	if pCfg.ID == "" {
+		return nil, errors.Errorf("no config for partition %q", partitionID)
+	}
+
 	cl, err := client.New(client.Config{
 		CA:               c.c2pCA,
 		Service:          name,
 		PeerAddresses:    []string{peer.c2pListener.Addr().String()},
-		PartitionID:      partitionID,
+		Partition:        pCfg,
 		MaxMessageSize:   c.config.MaxMessageSize,
-		BroadcastTimeout: time.Second,
-		AwaitTimeout:     5 * time.Second,
-		Marshaller:       marshaller,
+		BroadcastTimeout: 5 * time.Second,
+		AwaitTimeout:     10 * time.Second,
 		Indices:          indices,
 		TriggerFunc:      triggerFunc,
 	})
@@ -407,16 +417,16 @@ func (c *Cluster) DisableLink(ctx context.Context, peer1, peer2 *Peer) error {
 	return c.mesh.DisableLink(ctx, peer2, peer1)
 }
 
-func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, error) {
-	config := types.Config{
+func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (config.Config, error) {
+	cfg := config.Config{
 		P2PCA:             c.p2pCA,
 		C2PCA:             c.c2pCA,
 		ServerID:          peer.id,
+		Partitions:        c.config.Partitions,
 		MaxMessageSize:    c.config.MaxMessageSize,
 		MaxUncommittedLog: c.config.MaxUncommittedLog,
 		PageSize:          c.config.PageSize,
 		Directory:         c.config.Directory,
-		Marshallers:       c.config.Marshallers,
 	}
 
 	for _, p := range c.peers {
@@ -424,17 +434,17 @@ func (c *Cluster) newPeerConfig(ctx context.Context, peer *Peer) (types.Config, 
 		if p != peer {
 			pair, err := c.mesh.Pair(ctx, peer, p)
 			if err != nil {
-				return types.Config{}, err
+				return config.Config{}, err
 			}
 			p2pAddress = pair.SrcListener.Addr().String()
 		}
 
-		config.Servers = append(config.Servers, types.ServerConfig{
+		cfg.Servers = append(cfg.Servers, config.ServerConfig{
 			ID:         p.id,
 			P2PAddress: p2pAddress,
 			Partitions: p.partitions,
 		})
 	}
 
-	return config, nil
+	return cfg, nil
 }
