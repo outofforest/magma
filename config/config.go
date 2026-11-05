@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/outofforest/magma/client/db"
+	"github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"

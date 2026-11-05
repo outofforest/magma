@@ -3,17 +3,17 @@ package client
 import (
 	"context"
 
-	"github.com/outofforest/magma/client/db"
+	db2 "github.com/outofforest/magma/db"
 )
 
 // ReadClient defines read-only client.
 type ReadClient interface {
-	View() *db.View
+	View() *db2.View
 	WarmUp(ctx context.Context) error
 }
 
 // WriteClient defines read & write client.
 type WriteClient interface {
 	ReadClient
-	NewTransactor() db.Transactor
+	NewTransactor() db2.Transactor
 }

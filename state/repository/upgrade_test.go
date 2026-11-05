@@ -13,8 +13,8 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"github.com/outofforest/magma/client"
-	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/config"
+	db2 "github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/integration/entities2"
 	"github.com/outofforest/magma/raft/types"
@@ -45,11 +45,11 @@ func TestSeparateUpgrades(t *testing.T) {
 
 	r, dir := newRepo(t, "", config.PartitionConfig{
 		InitialMarshaller: m,
-		Upgrades: []db.Upgrade{
+		Upgrades: []db2.Upgrade{
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
-					for a := range db.All[entities.Account](view) {
+				UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+					for a := range db2.All[entities.Account](view) {
 						ch <- entities2.Account{
 							ID:        entities2.AccountID(a.ID),
 							FirstName: a.FirstName,
@@ -63,8 +63,8 @@ func TestSeparateUpgrades(t *testing.T) {
 			},
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
-					for a := range db.All[entities2.Account](view) {
+				UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+					for a := range db2.All[entities2.Account](view) {
 						a.LastName += ".2"
 						ch <- a
 					}
@@ -79,12 +79,12 @@ func TestSeparateUpgrades(t *testing.T) {
 	defer close0()
 
 	c := client.NewTestClient(t, client.NewTestConfig(m), readChecksum(w0), w0)
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		return tx.Set(acc1)
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), acc1.ID)
 		if !exists {
 			return errors.New("account does not exist")
 		}
@@ -166,11 +166,11 @@ func TestCombinedUpgrades(t *testing.T) {
 
 	r, dir := newRepo(t, "", config.PartitionConfig{
 		InitialMarshaller: m,
-		Upgrades: []db.Upgrade{
+		Upgrades: []db2.Upgrade{
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
-					for a := range db.All[entities.Account](view) {
+				UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+					for a := range db2.All[entities.Account](view) {
 						ch <- entities2.Account{
 							ID:        entities2.AccountID(a.ID),
 							FirstName: a.FirstName,
@@ -184,8 +184,8 @@ func TestCombinedUpgrades(t *testing.T) {
 			},
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
-					for a := range db.All[entities2.Account](view) {
+				UpgradeFunc: func(view *db2.View, ch chan<- any) error {
+					for a := range db2.All[entities2.Account](view) {
 						a.LastName += ".2"
 						ch <- a
 					}
@@ -200,12 +200,12 @@ func TestCombinedUpgrades(t *testing.T) {
 	defer close0()
 
 	c := client.NewTestClient(t, client.NewTestConfig(m), readChecksum(w0), w0)
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		return tx.Set(acc1)
 	}))
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
-		acc, exists := db.Get[entities.Account](tx.View(), acc1.ID)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		acc, exists := db2.Get[entities.Account](tx.View(), acc1.ID)
 		if !exists {
 			return errors.New("account does not exist")
 		}

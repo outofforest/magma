@@ -1,4 +1,4 @@
-package db
+package internal
 
 import (
 	"encoding/binary"
@@ -11,9 +11,15 @@ import (
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/state/repository/format"
+	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/varuint64"
+)
+
+var (
+	emptyID        memdb.ID
+	defaultPointer unsafe.Pointer
 )
 
 // Applier stores transaction in database.
@@ -308,4 +314,33 @@ func NewTypeCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]Ty
 	}
 
 	return byID, byType, nil
+}
+
+var revisionType = reflect.TypeFor[types.Revision]()
+var idType = reflect.TypeFor[memdb.ID]()
+
+func validateType(t reflect.Type) (reflect.Type, error) {
+	idF, exists := t.FieldByName("ID")
+	if !exists {
+		return nil, errors.Errorf("object %s has no ID field", t)
+	}
+	if !idF.Type.ConvertibleTo(idType) {
+		return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
+	}
+	if idF.Index[0] != 0 || idF.Offset != 0 {
+		return nil, errors.Errorf("id must be the first field in type %s", t)
+	}
+
+	revisionF, exists := t.FieldByName("Revision")
+	if !exists {
+		return nil, errors.Errorf("object %s has no Revision field", t)
+	}
+	if revisionF.Type != revisionType {
+		return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
+	}
+	if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
+		return nil, errors.Errorf("revision must be the second field in type %d", t)
+	}
+
+	return idF.Type, nil
 }

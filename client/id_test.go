@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/outofforest/magma/client/db"
 	"github.com/outofforest/magma/client/wire"
+	db2 "github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
@@ -50,7 +50,7 @@ func TestIDIndex(t *testing.T) {
 		{ID: id1},
 	}
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
 		for _, acc := range accs {
 			requireT.NoError(tx.Set(acc))
 		}
@@ -62,30 +62,30 @@ func TestIDIndex(t *testing.T) {
 	}
 
 	v := c.View()
-	acc, exists := db.Get[entities.Account](v, id0)
+	acc, exists := db2.Get[entities.Account](v, id0)
 	requireT.True(exists)
 	requireT.Equal(accs[0], acc)
 
-	accP, exists := db.GetPointer[entities.Account](v, id0)
+	accP, exists := db2.GetPointer[entities.Account](v, id0)
 	requireT.True(exists)
 	requireT.Equal(accs[0], *accP)
 
-	acc, exists = db.Get[entities.Account](v, id1)
+	acc, exists = db2.Get[entities.Account](v, id1)
 	requireT.True(exists)
 	requireT.Equal(accs[1], acc)
 
-	accP, exists = db.GetPointer[entities.Account](v, id1)
+	accP, exists = db2.GetPointer[entities.Account](v, id1)
 	requireT.True(exists)
 	requireT.Equal(accs[1], *accP)
 
-	_, exists = db.Get[entities.Account](v, entities.AccountID{0x09})
+	_, exists = db2.Get[entities.Account](v, entities.AccountID{0x09})
 	requireT.False(exists)
 
-	_, exists = db.GetPointer[entities.Account](v, entities.AccountID{0x09})
+	_, exists = db2.GetPointer[entities.Account](v, entities.AccountID{0x09})
 	requireT.False(exists)
 
 	i := 0
-	for acc := range db.All[entities.Account](v) {
+	for acc := range db2.All[entities.Account](v) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], acc)
@@ -98,7 +98,7 @@ func TestIDIndex(t *testing.T) {
 	}
 
 	i = 0
-	for accP := range db.AllPointers[entities.Account](v) {
+	for accP := range db2.AllPointers[entities.Account](v) {
 		switch i {
 		case 0:
 			requireT.Equal(accs[1], *accP)
@@ -110,7 +110,7 @@ func TestIDIndex(t *testing.T) {
 		i++
 	}
 
-	it := db.AllIterator[entities.Account](v)
+	it := db2.AllIterator[entities.Account](v)
 	acc, ok := it()
 	requireT.True(ok)
 	requireT.Equal(accs[1], acc)
@@ -120,7 +120,7 @@ func TestIDIndex(t *testing.T) {
 	_, ok = it()
 	requireT.False(ok)
 
-	itP := db.AllIteratorPointers[entities.Account](v)
+	itP := db2.AllIteratorPointers[entities.Account](v)
 	accP, ok = itP()
 	requireT.True(ok)
 	requireT.Equal(accs[1], *accP)
