@@ -29,7 +29,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		Entity1{},
 		Entity2{},
 	}
@@ -242,7 +242,7 @@ func unmarshali1(m *Entity1, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Value = string(b[o : o+l])
+				m.Value = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -295,7 +295,7 @@ func applyPatchi1(m *Entity1, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Value = string(b[o : o+l])
+					m.Value = string(b[o:o+l])
 					o += l
 				}
 			}

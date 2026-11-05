@@ -28,7 +28,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		Header{},
 	}
 }

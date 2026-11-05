@@ -33,7 +33,7 @@ type Marshaller struct {
 
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
-	return []any{
+	return []any {
 		Ignore{},
 		Blob{},
 		Fields{},
@@ -242,7 +242,7 @@ func unmarshali0(m *Account, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.Name = string(b[o : o+l])
+				m.Name = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -254,7 +254,7 @@ func unmarshali0(m *Account, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.FirstName = string(b[o : o+l])
+				m.FirstName = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -266,7 +266,7 @@ func unmarshali0(m *Account, b []byte) uint64 {
 			var l uint64
 			helpers.UInt64Unmarshal(&l, b, &o)
 			if l > 0 {
-				m.LastName = string(b[o : o+l])
+				m.LastName = string(b[o:o+l])
 				o += l
 			}
 		}
@@ -365,7 +365,7 @@ func applyPatchi0(m *Account, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.Name = string(b[o : o+l])
+					m.Name = string(b[o:o+l])
 					o += l
 				}
 			}
@@ -379,7 +379,7 @@ func applyPatchi0(m *Account, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.FirstName = string(b[o : o+l])
+					m.FirstName = string(b[o:o+l])
 					o += l
 				}
 			}
@@ -393,7 +393,7 @@ func applyPatchi0(m *Account, b []byte) uint64 {
 				var l uint64
 				helpers.UInt64Unmarshal(&l, b, &o)
 				if l > 0 {
-					m.LastName = string(b[o : o+l])
+					m.LastName = string(b[o:o+l])
 					o += l
 				}
 			}
@@ -527,7 +527,7 @@ func unmarshali1(m *Fields, b []byte) uint64 {
 		var nanoseconds uint32
 		helpers.Int64Unmarshal(&seconds, b, &o)
 		helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-		m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
+		m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 	}
 	{
 		// Int8
@@ -809,7 +809,7 @@ func applyPatchi1(m *Fields, b []byte) uint64 {
 			var nanoseconds uint32
 			helpers.Int64Unmarshal(&seconds, b, &o)
 			helpers.UInt32Unmarshal(&nanoseconds, b, &o)
-			m.Time = time.Unix(seconds+-62135596800, int64(nanoseconds))
+			m.Time = time.Unix(seconds + -62135596800, int64(nanoseconds))
 		}
 	}
 	{
