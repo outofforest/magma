@@ -25,7 +25,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -65,7 +65,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p)
 	clstr.StartPeers(p)
@@ -96,7 +96,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 1, Term 3
+	// ======= DesiredVersion 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -143,7 +143,7 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 4
+	// ======= DesiredVersion 2, Term 4
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
@@ -186,7 +186,7 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -226,7 +226,7 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p)
 	clstr.StartPeers(p)
@@ -257,7 +257,7 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 3
+	// ======= DesiredVersion 2, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -313,7 +313,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -356,7 +356,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p1, p2, p3)
 	clstr.StartPeers(p1, p2, p3)
@@ -387,7 +387,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 1, Term 3
+	// ======= DesiredVersion 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -437,7 +437,7 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 4
+	// ======= DesiredVersion 2, Term 4
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
@@ -483,7 +483,7 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -526,7 +526,7 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p1, p2, p3)
 	clstr.StartPeers(p1, p2, p3)
@@ -557,7 +557,7 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 3
+	// ======= DesiredVersion 2, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -616,7 +616,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -659,7 +659,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p1, p2)
 	clstr.StartPeers(p1, p2)
@@ -690,7 +690,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 1, Term 3
+	// ======= DesiredVersion 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -740,7 +740,7 @@ func TestColdPeerUpgrade(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 4
+	// ======= DesiredVersion 2, Term 4
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m,
@@ -801,7 +801,7 @@ func TestUpgradeComplex(t *testing.T) {
 	clusterConfig := clusterConfig
 	clusterConfig.Directory = t.TempDir()
 
-	// ======= Version 0, Term 1
+	// ======= DesiredVersion 0, Term 1
 
 	clstr := cluster.NewTesting(group, t, clusterConfig)
 	m := entities.NewMarshaller()
@@ -849,7 +849,7 @@ func TestUpgradeComplex(t *testing.T) {
 		return nil
 	}))
 
-	// ======= Version 0, Term 2
+	// ======= DesiredVersion 0, Term 2
 
 	clstr.StopPeers(p1, p2, p3)
 	clstr.StartPeers(p1, p2, p3)
@@ -880,7 +880,7 @@ func TestUpgradeComplex(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 1, Term 3
+	// ======= DesiredVersion 1, Term 3
 
 	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
 	clusterConfig.Partitions[0].Upgrades = []db2.Upgrade{
@@ -932,7 +932,7 @@ func TestUpgradeComplex(t *testing.T) {
 	group.Exit(nil)
 	requireT.NoError(group.Wait())
 
-	// ======= Version 2, Term 4
+	// ======= DesiredVersion 2, Term 4
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db2.Upgrade{
 		Marshaller: m2,

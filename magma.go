@@ -119,7 +119,8 @@ func Run(
 		}
 
 		pStates[p.ID] = partition.State{
-			Repo: repo,
+			DesiredVersion: types.Version(len(p.Upgrades)),
+			Repo:           repo,
 			Reactor: reactor.New(cfg.ServerID, activePeers, passivePeers, cfg.MaxUncommittedLog,
 				types.Version(len(p.Upgrades)), s),
 			Peers:         peers,

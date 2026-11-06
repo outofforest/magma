@@ -161,9 +161,9 @@ func (c *Client) Run(ctx context.Context) error {
 			conn.BufferWrites()
 
 			if _, err := conn.SendProton(&c2p.InitRequest{
-				PartitionID: c.config.Partition.ID,
-				Version:     types.Version(len(c.config.Partition.Upgrades)),
-				NextIndex:   c.nextIndex,
+				PartitionID:    c.config.Partition.ID,
+				DesiredVersion: types.Version(len(c.config.Partition.Upgrades)),
+				NextIndex:      c.nextIndex,
 			}, cMarshaller); err != nil {
 				return errors.WithStack(err)
 			}
