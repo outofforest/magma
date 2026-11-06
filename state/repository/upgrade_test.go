@@ -415,6 +415,44 @@ func TestUpgradePanics(t *testing.T) {
 	requireT.ErrorIs(err, os.ErrNotExist)
 }
 
+func TestUpgradeEmptyDatabase(t *testing.T) {
+	requireT := require.New(t)
+
+	m := entities.NewMarshaller()
+	m2 := entities2.NewMarshaller()
+
+	r, dir := newRepo(t, "", config.PartitionConfig{
+		InitialMarshaller: m,
+		Upgrades: []db.Upgrade{
+			{
+				Marshaller: m2,
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+					return nil
+				},
+			},
+			{
+				Marshaller: m2,
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+					return nil
+				},
+			},
+		},
+	})
+
+	requireT.NoError(r.SetCurrentVersion(2))
+	_, _, close1, err := createTerm(r, 1)
+	requireT.NoError(err)
+	defer close1()
+
+	requireT.NoError(r.upgrade())
+
+	initRaw, err := os.ReadFile(filepath.Join(dir, "0.init"))
+	requireT.NoError(err)
+	requireT.Equal([]byte{
+		0x5, 0x2, 0x1, 0x0, 0x0, 0x2,
+	}, initRaw)
+}
+
 func createTerm(
 	r *Repository,
 	term types.Term,
