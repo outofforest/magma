@@ -13,5 +13,6 @@ func main() {
 		magma.Entity[entities.Fields](),
 		magma.Entity[entities.Blob](),
 		magma.Entity[entities.Ignore]("Ignored"),
+		magma.Entity[entities.Empty](),
 	)
 }

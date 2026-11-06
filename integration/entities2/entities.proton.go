@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	id3 uint64 = iota + 1
+	id4 uint64 = iota + 1
+	id3
 	id2
 	id1
 	id0
@@ -34,6 +35,7 @@ type Marshaller struct {
 // Messages returns list of the message types supported by marshaller.
 func (m Marshaller) Messages() []any {
 	return []any {
+		Empty{},
 		Ignore{},
 		Blob{},
 		Fields{},
@@ -44,6 +46,8 @@ func (m Marshaller) Messages() []any {
 // ID returns ID of message type.
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
+	case *Empty:
+		return id4, nil
 	case *Ignore:
 		return id3, nil
 	case *Blob:
@@ -60,6 +64,8 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 // Size computes the size of marshalled message.
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
+	case *Empty:
+		return sizei4(msg2), nil
 	case *Ignore:
 		return sizei3(msg2), nil
 	case *Blob:
@@ -78,6 +84,8 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 	defer helpers.RecoverMarshal(&retErr)
 
 	switch msg2 := msg.(type) {
+	case *Empty:
+		return id4, marshali4(msg2, buf), nil
 	case *Ignore:
 		return id3, marshali3(msg2, buf), nil
 	case *Blob:
@@ -96,6 +104,9 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
+	case id4:
+		msg := &Empty{}
+		return msg, unmarshali4(msg, buf), nil
 	case id3:
 		msg := &Ignore{}
 		return msg, unmarshali3(msg, buf), nil
@@ -116,6 +127,8 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 // IsPatchNeeded checks if non-empty patch exists.
 func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
 	switch msg2 := msgDst.(type) {
+	case *Empty:
+		return isPatchNeededi4(msg2, msgSrc.(*Empty)), nil
 	case *Ignore:
 		return isPatchNeededi3(msg2, msgSrc.(*Ignore)), nil
 	case *Blob:
@@ -134,6 +147,8 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 	defer helpers.RecoverMakePatch(&retErr)
 
 	switch msg2 := msgDst.(type) {
+	case *Empty:
+		return id4, makePatchi4(msg2, msgSrc.(*Empty), buf), nil
 	case *Ignore:
 		return id3, makePatchi3(msg2, msgSrc.(*Ignore), buf), nil
 	case *Blob:
@@ -152,6 +167,8 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 	defer helpers.RecoverApplyPatch(&retErr)
 
 	switch msg2 := msg.(type) {
+	case *Empty:
+		return applyPatchi4(msg2, buf), nil
 	case *Ignore:
 		return applyPatchi3(msg2, buf), nil
 	case *Blob:
@@ -1050,6 +1067,40 @@ func applyPatchi3(m *Ignore, b []byte) uint64 {
 			helpers.Int64Unmarshal(&m.Value, b, &o)
 		}
 	}
+
+	return o
+}
+
+func sizei4(m *Empty) uint64 {
+	var n uint64
+	return n
+}
+
+func marshali4(m *Empty, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func unmarshali4(m *Empty, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func isPatchNeededi4(m, mSrc *Empty) bool {
+
+	return false
+}
+
+func makePatchi4(m, mSrc *Empty, b []byte) uint64 {
+	var o uint64
+
+	return o
+}
+
+func applyPatchi4(m *Empty, b []byte) uint64 {
+	var o uint64
 
 	return o
 }

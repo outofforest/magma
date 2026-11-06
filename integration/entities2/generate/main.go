@@ -9,6 +9,7 @@ import (
 
 func main() {
 	magma.Generate("../entities.proton.go",
+		magma.Entity[entities2.Empty](),
 		magma.Entity[entities2.Ignore]("Ignored"),
 		magma.Entity[entities2.Blob](),
 		magma.Entity[entities2.Fields](),
