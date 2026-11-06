@@ -2094,7 +2094,7 @@ func TestOverrideSingleNonExistingEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc := entities.Account{
@@ -2127,7 +2127,7 @@ func TestOverrideSingleExistingEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc := entities.Account{
@@ -2166,7 +2166,7 @@ func TestOverrideLastEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2213,7 +2213,7 @@ func TestOverrideFirstEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2260,7 +2260,7 @@ func TestOverrideMiddleEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2318,7 +2318,7 @@ func TestManyOverrides(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc1 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2366,7 +2366,7 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2421,14 +2421,14 @@ func TestSetRevertToOriginalEntity(t *testing.T) {
 	requireT.Equal(acc12, accAfter)
 }
 
-func TestSetEmptyTx(t *testing.T) {
+func TestSetOverwriteTx(t *testing.T) {
 	t.Parallel()
 
 	ctx := qa.NewContext(t)
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc2 := entities.Account{
@@ -2453,12 +2453,48 @@ func TestSetEmptyTx(t *testing.T) {
 		return nil
 	}))
 
-	acc2.Revision++
+	acc2.Revision += 2
 
 	v := c.View()
 	accAfter, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
+}
+
+func TestSetEmptyTx(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, cfg, 0, nil)
+
+	accID := memdb.NewID[entities.AccountID]()
+	acc := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		requireT.NoError(tx.Set(acc))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		acc, exists := db.Get[entities.Account](tx.View(), acc.ID)
+		requireT.True(exists)
+		requireT.NoError(tx.Set(acc))
+		return nil
+	}))
+
+	acc.Revision += 2
+
+	v := c.View()
+	accAfter, exists := db.Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc, accAfter)
 }
 
 func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
@@ -2468,7 +2504,7 @@ func TestSoftSetRevertToOriginalEntity1(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	acc11 := entities.Account{
 		ID:        memdb.NewID[entities.AccountID](),
@@ -2530,7 +2566,7 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	accID := memdb.NewID[entities.AccountID]()
 	acc2 := entities.Account{
@@ -2559,6 +2595,92 @@ func TestSoftSetRevertToOriginalEntity2(t *testing.T) {
 
 	v := c.View()
 	accAfter, exists := db.Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc2, accAfter)
+}
+
+func TestSoftSetEmptyTx(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, cfg, 0, nil)
+
+	accID := memdb.NewID[entities.AccountID]()
+	acc := entities.Account{
+		ID:        accID,
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		requireT.NoError(tx.Set(acc))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		acc, exists := db.Get[entities.Account](tx.View(), acc.ID)
+		requireT.True(exists)
+		requireT.NoError(tx.SoftSet(acc))
+		return nil
+	}))
+
+	acc.Revision++
+
+	v := c.View()
+	accAfter, exists := db.Get[entities.Account](v, accID)
+	requireT.True(exists)
+	requireT.Equal(acc, accAfter)
+}
+
+func TestSoftSetAndSetMix(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, cfg, 0, nil)
+
+	acc1 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+	acc2 := entities.Account{
+		ID:        memdb.NewID[entities.AccountID](),
+		FirstName: "AAAAAAAAAAAAAAA",
+		LastName:  "BBBBBBBBBBBBBBB",
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		requireT.NoError(tx.Set(acc1))
+		requireT.NoError(tx.SoftSet(acc2))
+		return nil
+	}))
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		acc1, exists := db.Get[entities.Account](tx.View(), acc1.ID)
+		requireT.True(exists)
+		acc2, exists := db.Get[entities.Account](tx.View(), acc2.ID)
+		requireT.True(exists)
+
+		requireT.NoError(tx.Set(acc1))
+		requireT.NoError(tx.SoftSet(acc2))
+		return nil
+	}))
+
+	acc1.Revision += 2
+	acc2.Revision++
+
+	v := c.View()
+	accAfter, exists := db.Get[entities.Account](v, acc1.ID)
+	requireT.True(exists)
+	requireT.Equal(acc1, accAfter)
+
+	accAfter, exists = db.Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc2, accAfter)
 }
@@ -2636,7 +2758,7 @@ func TestSetEntitiesOfDifferentTypeWithSameIDs(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	id := memdb.NewID[memdb.ID]()
 	e1 := entities.Account{
@@ -2671,7 +2793,7 @@ func TestIgnoredField(t *testing.T) {
 
 	requireT := require.New(t)
 
-	c := NewTestClient(t, withIndices(cfg), 0, nil)
+	c := NewTestClient(t, cfg, 0, nil)
 
 	e := entities.Ignore{
 		ID:      memdb.NewID[memdb.ID](),
@@ -2690,6 +2812,46 @@ func TestIgnoredField(t *testing.T) {
 
 	v := c.View()
 	e2, exists := db.Get[entities.Ignore](v, e.ID)
+	requireT.True(exists)
+	requireT.Equal(e, e2)
+}
+
+func TestEmptyEntity(t *testing.T) {
+	t.Parallel()
+
+	ctx := qa.NewContext(t)
+
+	requireT := require.New(t)
+
+	c := NewTestClient(t, cfg, 0, nil)
+
+	e := entities.Empty{
+		ID: memdb.NewID[memdb.ID](),
+	}
+
+	tr := c.NewTransactor()
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		requireT.NoError(tx.Set(e))
+		return nil
+	}))
+
+	e.Revision++
+	v := c.View()
+	e2, exists := db.Get[entities.Empty](v, e.ID)
+	requireT.True(exists)
+	requireT.Equal(e, e2)
+
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
+		e, exists := db.Get[entities.Empty](tx.View(), e.ID)
+		requireT.True(exists)
+
+		requireT.NoError(tx.Set(e))
+		return nil
+	}))
+
+	e.Revision++
+	v = c.View()
+	e2, exists = db.Get[entities.Empty](v, e.ID)
 	requireT.True(exists)
 	requireT.Equal(e, e2)
 }

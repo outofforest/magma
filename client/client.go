@@ -582,7 +582,7 @@ func (tx *tx) View() *db.View {
 // This is done to detect possible conflicts with other transactions. Use this function if atomicity
 // is required (most of the cases). Compare to SoftSet below.
 func (tx *tx) Set(o any) error {
-	return tx.set(o, false)
+	return tx.set(o, true)
 }
 
 // SoftSet sets object in transaction. It does it only if the object patch is not empty.
@@ -592,10 +592,10 @@ func (tx *tx) Set(o any) error {
 // with incremented revision.
 // Good scenario to use SoftSet is loading batches of unrelated object where conflicts don't matter.
 func (tx *tx) SoftSet(o any) error {
-	return tx.set(o, true)
+	return tx.set(o, false)
 }
 
-func (tx *tx) set(o any, isSoftSet bool) error {
+func (tx *tx) set(o any, force bool) error {
 	dbTx := tx.txn.Txn(true)
 
 	id, typeDef, oldValue, newValue := internal.Insert(dbTx, o, tx.client.byType)
@@ -643,21 +643,23 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	newValueRef := reflect.NewAt(typeDef.Type, newValue)
 	unsafeID := internal.UnsafeIDFromEntity(newValue)
 	var oldV reflect.Value
-	var isNeeded bool
+
+	//nolint:nestif
 	if chg.OldValue == defaultPointer {
 		oldV = reflect.New(typeDef.Type)
 		internal.SetIDInEntity(oldV.UnsafePointer(), (*memdb.ID)(unsafe.Pointer(&unsafeID[0])))
-		isNeeded = true
 	} else {
 		oldV = reflect.NewAt(typeDef.Type, chg.OldValue)
 
-		var err error
-		isNeeded, err = tx.client.m.IsPatchNeeded(newValueRef.Interface(), oldV.Interface())
-		if err != nil {
-			return err
-		}
-		if isSoftSet && !isNeeded {
-			return nil
+		if !force {
+			var err error
+			force, err = tx.client.m.IsPatchNeeded(newValueRef.Interface(), oldV.Interface())
+			if err != nil {
+				return err
+			}
+			if !force {
+				return nil
+			}
 		}
 	}
 
@@ -692,10 +694,8 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 		return err
 	}
 
-	if isNeeded {
-		chg.Added = true
-		tx.numOfObjects++
-	}
+	chg.Added = true
+	tx.numOfObjects++
 
 	chg.EndIndex += msgSize
 	tx.size = chg.EndIndex

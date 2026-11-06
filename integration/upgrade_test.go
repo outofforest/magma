@@ -824,11 +824,17 @@ func TestUpgradeComplex(t *testing.T) {
 	blobID2 := memdb.NewID[memdb.ID]()
 	blobID3 := memdb.NewID[memdb.ID]()
 
+	emptyID1 := memdb.NewID[memdb.ID]()
+	emptyID2 := memdb.NewID[memdb.ID]()
+
 	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID1,
 			FirstName: "FirstName1",
 			LastName:  "LastName1",
+		}))
+		requireT.NoError(tx.Set(entities.Empty{
+			ID: emptyID1,
 		}))
 		return nil
 	}))
@@ -898,6 +904,9 @@ func TestUpgradeComplex(t *testing.T) {
 					b.Data = append(b.Data, b.Data[0]+1)
 					ch <- b
 				}
+				for e := range db.All[entities.Empty](view) {
+					ch <- e
+				}
 				return nil
 			},
 		},
@@ -926,6 +935,10 @@ func TestUpgradeComplex(t *testing.T) {
 			Data: []byte{0x03, 0x03},
 		}))
 
+		requireT.NoError(tx.Set(entities.Empty{
+			ID: emptyID2,
+		}))
+
 		return nil
 	}))
 
@@ -951,6 +964,11 @@ func TestUpgradeComplex(t *testing.T) {
 				ch <- entities2.Blob{
 					ID:   b.ID,
 					Data: data,
+				}
+			}
+			for e := range db.All[entities.Empty](view) {
+				ch <- entities2.Empty{
+					ID: e.ID,
 				}
 			}
 			return nil
@@ -1033,4 +1051,16 @@ func TestUpgradeComplex(t *testing.T) {
 		Revision: 0,
 		Data:     []byte{0x04, 0x03},
 	}, blob)
+
+	empty, exists := db.Get[entities2.Empty](v, emptyID1)
+	requireT.True(exists)
+	requireT.Equal(entities2.Empty{
+		ID: emptyID1,
+	}, empty)
+
+	empty, exists = db.Get[entities2.Empty](v, emptyID2)
+	requireT.True(exists)
+	requireT.Equal(entities2.Empty{
+		ID: emptyID2,
+	}, empty)
 }
