@@ -13,7 +13,7 @@ import (
 	"github.com/outofforest/logger"
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/config"
-	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/db"
 	gossipwire "github.com/outofforest/magma/gossip/wire"
 	"github.com/outofforest/magma/gossip/wire/c2p"
 	"github.com/outofforest/magma/internal"
@@ -27,15 +27,15 @@ import (
 )
 
 var (
-	_ ReadClient     = &Client{}
-	_ WriteClient    = &Client{}
-	_ db2.Transactor = &transactor{}
+	_ ReadClient    = &Client{}
+	_ WriteClient   = &Client{}
+	_ db.Transactor = &transactor{}
 )
 
 var defaultPointer unsafe.Pointer
 
 // TriggerFunc defines function triggered after applying transactions.
-type TriggerFunc func(ctx context.Context, v *db2.View, types map[reflect.Type]struct{}) error
+type TriggerFunc func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error
 
 // Config is the configuration of magma client.
 type Config struct {
@@ -55,6 +55,7 @@ type Client struct {
 	config  Config
 	metaM   proton.Marshaller
 	m       proton.Marshaller
+	byType  map[reflect.Type]internal.TypeInfo
 	applier *internal.Applier
 	txCh    chan txEnvelope
 	doneCh  chan struct{}
@@ -85,7 +86,17 @@ func New(config Config) (*Client, error) {
 		m = config.Partition.Upgrades[len(config.Partition.Upgrades)-1].Marshaller
 	}
 
-	dbConfig, err := internal.NewDBConfig(m, config.Indices)
+	entities, err := internal.EntitiesFromMarshaller(m)
+	if err != nil {
+		return nil, err
+	}
+
+	_, byType, err := internal.NewCache(m)
+	if err != nil {
+		return nil, err
+	}
+
+	dbConfig, err := internal.NewDBConfig(entities, config.Indices)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +127,7 @@ func New(config Config) (*Client, error) {
 		config:           config,
 		metaM:            metaM,
 		m:                m,
+		byType:           byType,
 		applier:          applier,
 		txCh:             make(chan txEnvelope),
 		doneCh:           make(chan struct{}),
@@ -129,7 +141,7 @@ func New(config Config) (*Client, error) {
 }
 
 type trigger struct {
-	View         *db2.View
+	View         *db.View
 	UpdatedTypes map[reflect.Type]struct{}
 }
 
@@ -328,19 +340,19 @@ func (c *Client) WarmUp(ctx context.Context) error {
 }
 
 // View returns db view.
-func (c *Client) View() *db2.View {
-	return c.applier.View(c.db.Txn(true))
+func (c *Client) View() *db.View {
+	return internal.NewView(c.db.Txn(true), c.byType)
 }
 
 // NewTransactor creates new transactor.
-func (c *Client) NewTransactor() db2.Transactor {
+func (c *Client) NewTransactor() db.Transactor {
 	return &transactor{
 		client:  c,
 		changes: map[changeID]change{},
 	}
 }
 
-func (c *Client) applyHotEnd(triggerCh chan trigger, view *db2.View, updatedTypes map[reflect.Type]struct{}) {
+func (c *Client) applyHotEnd(triggerCh chan trigger, view *db.View, updatedTypes map[reflect.Type]struct{}) {
 	if !c.firstHotEnd {
 		c.firstHotEnd = true
 		close(c.readyCh)
@@ -378,7 +390,7 @@ func (c *Client) applyTx(
 		if txID == emptyTxID {
 			return checksum, nil
 		}
-	case !errors.Is(err, db2.ErrTxOutdatedTx):
+	case !errors.Is(err, db.ErrTxOutdatedTx):
 		return 0, err
 	}
 
@@ -413,7 +425,7 @@ type transactor struct {
 }
 
 // Tx creates and broadcasts transaction to the magma network.
-func (t *transactor) Tx(ctx context.Context, txF func(tx db2.Tx) error) error {
+func (t *transactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
 	tx, usedSize, err := t.prepareTx(memdb.NewID[memdb.ID](), time.Now(), txF)
 	if err != nil {
 		return err
@@ -431,7 +443,7 @@ func (t *transactor) Tx(ctx context.Context, txF func(tx db2.Tx) error) error {
 func (t *transactor) prepareTx(
 	txID memdb.ID,
 	txTime time.Time,
-	txF func(tx db2.Tx) error,
+	txF func(tx db.Tx) error,
 ) (
 	retTx txEnvelope,
 	retUsedSize uint64,
@@ -506,7 +518,7 @@ func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.BroadcastTimeout):
-		return db2.ErrTxBroadcastTimeout
+		return db.ErrTxBroadcastTimeout
 	case t.client.txCh <- tx:
 	}
 
@@ -519,7 +531,7 @@ func (t *transactor) broadcastAndAwaitTx(ctx context.Context, tx txEnvelope) err
 		}
 		return errors.New("client closed")
 	case <-time.After(t.client.config.AwaitTimeout):
-		return db2.ErrTxAwaitTimeout
+		return db.ErrTxAwaitTimeout
 	case result := <-tx.ReceivedCh:
 		switch r := result.(type) {
 		case error:
@@ -554,7 +566,7 @@ type changeID struct {
 	MsgID uint64
 }
 
-var _ db2.Tx = &tx{}
+var _ db.Tx = &tx{}
 
 type tx struct {
 	client       *Client
@@ -566,8 +578,8 @@ type tx struct {
 }
 
 // View returns non-persistent view of the DB.
-func (tx *tx) View() *db2.View {
-	return tx.client.applier.View(tx.txn.Txn(true))
+func (tx *tx) View() *db.View {
+	return internal.NewView(tx.txn.Txn(true), tx.client.byType)
 }
 
 // Set sets object in transaction. This function includes the object in tx even if patch is empty.
@@ -590,7 +602,7 @@ func (tx *tx) SoftSet(o any) error {
 func (tx *tx) set(o any, isSoftSet bool) error {
 	dbTx := tx.txn.Txn(true)
 
-	id, typeDef, oldValue, newValue := tx.client.applier.Insert(dbTx, o)
+	id, typeDef, oldValue, newValue := internal.Insert(dbTx, o, tx.client.byType)
 
 	chID := changeID{
 		ID:    id,
@@ -666,7 +678,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	switch {
 	case err == nil:
 	case errors.Is(err, proton.ErrBufferFailure):
-		return db2.ErrTxTooBig
+		return db.ErrTxTooBig
 	default:
 		return err
 	}
@@ -679,7 +691,7 @@ func (tx *tx) set(o any, isSoftSet bool) error {
 	switch {
 	case err == nil:
 	case errors.Is(err, proton.ErrBufferFailure):
-		return db2.ErrTxTooBig
+		return db.ErrTxTooBig
 	default:
 		return err
 	}

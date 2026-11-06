@@ -10,19 +10,15 @@ import (
 )
 
 // NewDBConfig creates db config.
-func NewDBConfig(m proton.Marshaller, indices []memdb.Index) (memdb.Config, error) {
-	entities, err := typesFromMarshaller(m)
-	if err != nil {
-		return memdb.Config{}, err
-	}
-
+func NewDBConfig(entities []reflect.Type, indices []memdb.Index) (memdb.Config, error) {
 	return memdb.Config{
 		Entities: entities,
 		Indices:  indices,
 	}, nil
 }
 
-func typesFromMarshaller(m proton.Marshaller) ([]reflect.Type, error) {
+// EntitiesFromMarshaller gets entity types from marshaller.
+func EntitiesFromMarshaller(m proton.Marshaller) ([]reflect.Type, error) {
 	entities := m.Messages()
 	if len(entities) == 0 {
 		return nil, errors.New("no object types provided")

@@ -14,27 +14,27 @@ import (
 // but those changes cannot be committed. They are always loca
 // to this view only.
 type View struct {
-	tx      *memdb.Txn
-	applier *Applier
+	tx     *memdb.Txn
+	byType map[reflect.Type]TypeInfo
 }
 
 // NewView creates new viewable representation of DB.
-func NewView(tx *memdb.Txn, applier *Applier) *View {
+func NewView(tx *memdb.Txn, byType map[reflect.Type]TypeInfo) *View {
 	return &View{
-		tx:      tx,
-		applier: applier,
+		tx:     tx,
+		byType: byType,
 	}
 }
 
 // Set sets the entity inside view.
 func (v *View) Set(o any) {
-	v.applier.Insert(v.tx, o)
+	Insert(v.tx, o, v.byType)
 }
 
 // First returns first entity from index.
 func First[T any](v *View, index uint64, args ...any) (*T, bool) {
 	t := reflect.TypeFor[T]()
-	typeDef, exists := v.applier.byType[t]
+	typeDef, exists := v.byType[t]
 	if !exists {
 		panic(errors.Errorf("type %s not defined", t))
 	}
@@ -105,7 +105,7 @@ func IteratorPointers[T any](v *View, index uint64, args ...any) func() (*T, boo
 
 func createIterator[T any](v *View, index uint64, args []any) memdb.ResultIterator {
 	t := reflect.TypeFor[T]()
-	typeDef, exists := v.applier.byType[t]
+	typeDef, exists := v.byType[t]
 	if !exists {
 		panic(errors.Errorf("type %s not defined", t))
 	}

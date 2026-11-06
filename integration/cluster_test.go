@@ -13,7 +13,7 @@ import (
 
 	"github.com/outofforest/magma/client"
 	"github.com/outofforest/magma/config"
-	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/integration/entities"
 	"github.com/outofforest/magma/pkg/cluster"
 	"github.com/outofforest/magma/types"
@@ -91,7 +91,7 @@ func TestBenchmark(t *testing.T) {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
 			for j := range transactionsPerClient {
-				err := tr.Tx(ctx, func(tx db2.Tx) error {
+				err := tr.Tx(ctx, func(tx db.Tx) error {
 					requireT.NoError(tx.Set(entities.Account{
 						ID:        memdb.NewID[entities.AccountID](),
 						FirstName: fmt.Sprintf("FirstName-%d-%d", i, j),
@@ -125,7 +125,7 @@ func TestSinglePeer(t *testing.T) {
 
 	accountID := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
@@ -135,7 +135,7 @@ func TestSinglePeer(t *testing.T) {
 	}))
 
 	v := c.View()
-	account, exists := db2.Get[entities.Account](v, accountID)
+	account, exists := db.Get[entities.Account](v, accountID)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID,
@@ -163,14 +163,14 @@ func Test3Peers3Clients(t *testing.T) {
 	results := make(chan map[entities.AccountID]entities.Account, 3)
 	triggerFunc := func() client.TriggerFunc {
 		var found bool
-		return func(ctx context.Context, v *db2.View, _ map[reflect.Type]struct{}) error {
+		return func(ctx context.Context, v *db.View, _ map[reflect.Type]struct{}) error {
 			if found {
 				return nil
 			}
 
 			accounts := map[entities.AccountID]entities.Account{}
 			for _, id := range ids {
-				acc, exists := db2.Get[entities.Account](v, id)
+				acc, exists := db.Get[entities.Account](v, id)
 				if !exists {
 					return nil
 				}
@@ -204,7 +204,7 @@ func Test3Peers3Clients(t *testing.T) {
 	clientGroup := qa.NewGroup(ctx, t)
 	for _, c := range clients {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
-			return c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+			return c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 				requireT.NoError(tx.Set(entities.Account{
 					ID:        <-idCh,
 					FirstName: "FirstName",
@@ -266,7 +266,7 @@ func TestPeerRestart(t *testing.T) {
 
 	loop:
 		for j := range 5 {
-			err := clients[cI].NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+			err := clients[cI].NewTransactor().Tx(ctx, func(tx db.Tx) error {
 				requireT.NoError(tx.Set(entities.Account{
 					ID:        memdb.NewID[entities.AccountID](),
 					FirstName: "FirstName",
@@ -277,8 +277,8 @@ func TestPeerRestart(t *testing.T) {
 			switch {
 			case err == nil:
 				break loop
-			case errors.Is(err, db2.ErrTxBroadcastTimeout):
-			case errors.Is(err, db2.ErrTxAwaitTimeout):
+			case errors.Is(err, db.ErrTxBroadcastTimeout):
+			case errors.Is(err, db.ErrTxAwaitTimeout):
 			default:
 				requireT.NoError(err)
 			}
@@ -332,7 +332,7 @@ func TestPassivePeers(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs {
-		requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -350,11 +350,11 @@ func TestPassivePeers(t *testing.T) {
 	for _, acc := range accs {
 		acc.Revision = 1
 
-		acc2, exists := db2.Get[entities.Account](v1, acc.ID)
+		acc2, exists := db.Get[entities.Account](v1, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
 
-		acc2, exists = db2.Get[entities.Account](v2, acc.ID)
+		acc2, exists = db.Get[entities.Account](v2, acc.ID)
 		requireT.True(exists)
 		requireT.Equal(acc, acc2)
 	}
@@ -413,7 +413,7 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs[:3] {
-		requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -428,7 +428,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	clstr.DisableLink(peer3, peer2)
 
 	for _, acc := range accs[3:] {
-		requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -438,7 +438,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	clstr.StartClients(c2)
 
 	tr2 := c2.NewTransactor()
-	requireT.Error(tr2.Tx(ctx, func(tx db2.Tx) error {
+	requireT.Error(tr2.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        memdb.NewID[entities.AccountID](),
 			FirstName: "FirstName100",
@@ -451,7 +451,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	clstr.StartClients(c3)
 
 	v := c3.View()
-	acc, exists := db2.Get[entities.Account](v, accID)
+	acc, exists := db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	acc.Revision = 0
 	requireT.Equal(accs[2], acc)
@@ -461,7 +461,7 @@ func TestSyncWhileRunning(t *testing.T) {
 
 	var err error
 	for range 10 {
-		err = tr2.Tx(ctx, func(tx db2.Tx) error {
+		err = tr2.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{
 				ID:        memdb.NewID[entities.AccountID](),
 				FirstName: "FirstName100",
@@ -476,7 +476,7 @@ func TestSyncWhileRunning(t *testing.T) {
 	requireT.NoError(err)
 
 	v = c2.View()
-	acc, exists = db2.Get[entities.Account](v, accID)
+	acc, exists = db.Get[entities.Account](v, accID)
 	requireT.True(exists)
 	acc.Revision = 0
 	requireT.Equal(accs[5], acc)
@@ -535,7 +535,7 @@ func TestSyncAfterRestart(t *testing.T) {
 
 	tr := c.NewTransactor()
 	for _, acc := range accs[:3] {
-		requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -544,8 +544,8 @@ func TestSyncAfterRestart(t *testing.T) {
 	accCh1 := make(chan entities.Account, 1)
 	accCh2 := make(chan entities.Account, 1)
 	triggerFunc := func(accCh chan<- entities.Account) client.TriggerFunc {
-		return func(ctx context.Context, v *db2.View, _ map[reflect.Type]struct{}) error {
-			a, exists := db2.Get[entities.Account](v, accID)
+		return func(ctx context.Context, v *db.View, _ map[reflect.Type]struct{}) error {
+			a, exists := db.Get[entities.Account](v, accID)
 			if exists {
 				select {
 				case accCh <- a:
@@ -561,11 +561,11 @@ func TestSyncAfterRestart(t *testing.T) {
 	clstr.StartPeers(peer3)
 	clstr.StartClients(c2, c3)
 
-	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
@@ -584,7 +584,7 @@ func TestSyncAfterRestart(t *testing.T) {
 	requireT.Equal(accs[2], acc)
 
 	for _, acc := range accs[3:] {
-		requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc))
 			return nil
 		}))
@@ -595,11 +595,11 @@ func TestSyncAfterRestart(t *testing.T) {
 	clstr.StartPeers(peer3)
 	clstr.StartClients(c2)
 
-	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
-	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
@@ -705,7 +705,7 @@ func TestPartitions(t *testing.T) {
 		clientGroup.Spawn("client", parallel.Continue, func(ctx context.Context) error {
 			tr := c.NewTransactor()
 			for _, acc := range accs[i] {
-				err := tr.Tx(ctx, func(tx db2.Tx) error {
+				err := tr.Tx(ctx, func(tx db.Tx) error {
 					requireT.NoError(tx.Set(acc))
 					return nil
 				})
@@ -730,7 +730,7 @@ func TestPartitions(t *testing.T) {
 		v := c.View()
 		for j, accs := range accs {
 			for _, acc := range accs {
-				acc2, exists := db2.Get[entities.Account](v, acc.ID)
+				acc2, exists := db.Get[entities.Account](v, acc.ID)
 				if i == j {
 					requireT.True(exists)
 					acc2.Revision = 0
@@ -762,18 +762,18 @@ func TestTimeouts(t *testing.T) {
 	accountID := memdb.NewID[entities.AccountID]()
 
 	tr := c.NewTransactor()
-	requireT.ErrorIs(tr.Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
 			LastName:  "LastName",
 		}))
 		return nil
-	}), db2.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	clstr.StopPeers(peer1)
 
-	requireT.Error(tr.Tx(ctx, func(tx db2.Tx) error {
+	requireT.Error(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
@@ -782,14 +782,14 @@ func TestTimeouts(t *testing.T) {
 		return nil
 	}))
 
-	requireT.ErrorIs(tr.Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID,
 			FirstName: "FirstName",
 			LastName:  "LastName",
 		}))
 		return nil
-	}), db2.ErrTxBroadcastTimeout)
+	}), db.ErrTxBroadcastTimeout)
 }
 
 func TestOutdatedTx(t *testing.T) {
@@ -811,7 +811,7 @@ func TestOutdatedTx(t *testing.T) {
 	accountID1 := memdb.NewID[entities.AccountID]()
 	accountID2 := memdb.NewID[entities.AccountID]()
 
-	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(c1.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID2,
 			FirstName: "ShouldNotPassFirstName",
@@ -824,7 +824,7 @@ func TestOutdatedTx(t *testing.T) {
 			LastName:  "LastName1",
 		}))
 
-		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		requireT.NoError(c2.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{
 				ID:        accountID1,
 				FirstName: "FirstName2",
@@ -834,10 +834,10 @@ func TestOutdatedTx(t *testing.T) {
 		}))
 
 		return nil
-	}), db2.ErrTxOutdatedTx)
+	}), db.ErrTxOutdatedTx)
 
 	v := c1.View()
-	acc, exists := db2.Get[entities.Account](v, accountID1)
+	acc, exists := db.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID1,
@@ -846,11 +846,11 @@ func TestOutdatedTx(t *testing.T) {
 		LastName:  "LastName2",
 	}, acc)
 
-	_, exists = db2.Get[entities.Account](v, accountID2)
+	_, exists = db.Get[entities.Account](v, accountID2)
 	requireT.False(exists)
 
 	v = c2.View()
-	acc, exists = db2.Get[entities.Account](v, accountID1)
+	acc, exists = db.Get[entities.Account](v, accountID1)
 	requireT.True(exists)
 	requireT.Equal(entities.Account{
 		ID:        accountID1,
@@ -859,7 +859,7 @@ func TestOutdatedTx(t *testing.T) {
 		LastName:  "LastName2",
 	}, acc)
 
-	_, exists = db2.Get[entities.Account](v, accountID2)
+	_, exists = db.Get[entities.Account](v, accountID2)
 	requireT.False(exists)
 }
 
@@ -878,7 +878,7 @@ func TestEmptyTx(t *testing.T) {
 	clstr.StartClients(c)
 	clstr.StopPeers(p)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		return nil
 	}))
 }
@@ -912,7 +912,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	}
 
 	tr := c.NewTransactor()
-	requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		return nil
 	}))
@@ -920,7 +920,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 	acc1.FirstName = "FirstName1"
 	acc1.LastName = "LastName1"
 
-	requireT.NoError(tr.Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(tr.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(acc1))
 		return nil
 	}))
@@ -931,7 +931,7 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 
 	var err error
 	for range 5 {
-		err = tr.Tx(ctx, func(tx db2.Tx) error {
+		err = tr.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(acc2))
 			return nil
 		})
@@ -946,11 +946,11 @@ func TestContinueClientSyncAfterPeerIsRestored(t *testing.T) {
 
 	v := c.View()
 
-	acc, exists := db2.Get[entities.Account](v, acc1.ID)
+	acc, exists := db.Get[entities.Account](v, acc1.ID)
 	requireT.True(exists)
 	requireT.Equal(acc1, acc)
 
-	acc, exists = db2.Get[entities.Account](v, acc2.ID)
+	acc, exists = db.Get[entities.Account](v, acc2.ID)
 	requireT.True(exists)
 	requireT.Equal(acc2, acc)
 }
@@ -978,12 +978,12 @@ func TestSplitAndResync(t *testing.T) {
 	clstr.StartClients(c1, c3)
 
 	acc1ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(tr1.Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc1ID}))
 		return nil
 	}))
 	acc3ID := memdb.NewID[entities.AccountID]()
-	requireT.NoError(tr3.Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(tr3.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc3ID}))
 		return nil
 	}))
@@ -993,15 +993,15 @@ func TestSplitAndResync(t *testing.T) {
 	clstr.DisableLink(peer3, peer2)
 
 	acc4ID := memdb.NewID[entities.AccountID]()
-	requireT.ErrorIs(tr3.Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(tr3.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: acc4ID}))
 		return nil
-	}), db2.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 	acc5ID := memdb.NewID[entities.AccountID]()
 
 	var err error
 	for range 5 {
-		err = tr1.Tx(ctx, func(tx db2.Tx) error {
+		err = tr1.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{ID: acc5ID}))
 			return nil
 		})
@@ -1016,7 +1016,7 @@ func TestSplitAndResync(t *testing.T) {
 
 	acc6ID := memdb.NewID[entities.AccountID]()
 	for range 5 {
-		err = c3.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+		err = c3.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Account{ID: acc6ID}))
 			return nil
 		})
@@ -1025,21 +1025,21 @@ func TestSplitAndResync(t *testing.T) {
 		}
 	}
 	requireT.NoError(err)
-	requireT.NoError(tr1.Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{ID: memdb.NewID[entities.AccountID]()}))
 		return nil
 	}))
 
 	v := c1.View()
-	_, exists := db2.Get[entities.Account](v, acc1ID)
+	_, exists := db.Get[entities.Account](v, acc1ID)
 	requireT.True(exists)
-	_, exists = db2.Get[entities.Account](v, acc3ID)
+	_, exists = db.Get[entities.Account](v, acc3ID)
 	requireT.True(exists)
-	_, exists = db2.Get[entities.Account](v, acc4ID)
+	_, exists = db.Get[entities.Account](v, acc4ID)
 	requireT.False(exists)
-	_, exists = db2.Get[entities.Account](v, acc5ID)
+	_, exists = db.Get[entities.Account](v, acc5ID)
 	requireT.True(exists)
-	_, exists = db2.Get[entities.Account](v, acc6ID)
+	_, exists = db.Get[entities.Account](v, acc6ID)
 	requireT.True(exists)
 }
 
@@ -1064,28 +1064,28 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	clstr.StopPeers(peer2)
 
 	blob1ID := memdb.NewID[memdb.ID]()
-	requireT.ErrorIs(tr1.Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Blob{ID: blob1ID}))
 		return nil
-	}), db2.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	// This one should exceed the limit.
 	for {
-		err := tr1.Tx(ctx, func(tx db2.Tx) error {
+		err := tr1.Tx(ctx, func(tx db.Tx) error {
 			requireT.NoError(tx.Set(entities.Blob{ID: memdb.NewID[memdb.ID](),
 				Data: make([]byte, clusterConfig.MaxMessageSize/2)}))
 			return nil
 		})
-		if errors.Is(err, db2.ErrTxAwaitTimeout) {
+		if errors.Is(err, db.ErrTxAwaitTimeout) {
 			break
 		}
 	}
 
 	blob2ID := memdb.NewID[memdb.ID]()
-	requireT.ErrorIs(tr1.Tx(ctx, func(tx db2.Tx) error {
+	requireT.ErrorIs(tr1.Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Blob{ID: blob2ID}))
 		return nil
-	}), db2.ErrTxAwaitTimeout)
+	}), db.ErrTxAwaitTimeout)
 
 	clstr.StartPeers(peer2)
 
@@ -1093,9 +1093,9 @@ func TestMaxUncommittedLogLimit(t *testing.T) {
 	clstr.StartClients(c2)
 
 	v := c2.View()
-	_, exists := db2.Get[entities.Blob](v, blob1ID)
+	_, exists := db.Get[entities.Blob](v, blob1ID)
 	requireT.True(exists)
-	_, exists = db2.Get[entities.Blob](v, blob2ID)
+	_, exists = db.Get[entities.Blob](v, blob2ID)
 	requireT.True(exists)
 }
 
@@ -1111,7 +1111,7 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 
 	receivedTypes := make(chan map[reflect.Type]struct{}, 3)
 	c := clstr.NewClient(p, "client", partitionDefault,
-		func(ctx context.Context, v *db2.View, types map[reflect.Type]struct{}) error {
+		func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error {
 			receivedTypes <- types
 			return nil
 		},
@@ -1125,7 +1125,7 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 	accountID3 := memdb.NewID[entities.AccountID]()
 	accountID4 := memdb.NewID[entities.AccountID]()
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID1,
 			FirstName: "FirstName1",
@@ -1138,7 +1138,7 @@ func TestTriggerFuncReceivesIDs(t *testing.T) {
 		}))
 		return nil
 	}))
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		requireT.NoError(tx.Set(entities.Account{
 			ID:        accountID3,
 			FirstName: "FirstName3",
@@ -1185,16 +1185,16 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	var a1, a2 entities.Account
 	doneCh := make(chan struct{})
 	c := clstr.NewClient(p, "client", partitionDefault,
-		func(ctx context.Context, v *db2.View, types map[reflect.Type]struct{}) error {
+		func(ctx context.Context, v *db.View, types map[reflect.Type]struct{}) error {
 			if _, exists := types[reflect.TypeFor[entities.Account]()]; !exists {
 				return nil
 			}
 
-			a1, _ = db2.Get[entities.Account](v, account1.ID)
+			a1, _ = db.Get[entities.Account](v, account1.ID)
 
 			v.Set(account2)
 
-			a2, _ = db2.Get[entities.Account](v, account1.ID)
+			a2, _ = db.Get[entities.Account](v, account1.ID)
 
 			close(doneCh)
 			return nil
@@ -1204,7 +1204,7 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	clstr.StartPeers(p)
 	clstr.StartClients(c)
 
-	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db2.Tx) error {
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
 		return tx.Set(account1)
 	}))
 
@@ -1214,7 +1214,7 @@ func TestTriggerFuncUpdatesView(t *testing.T) {
 	requireT.Equal(account1, a1)
 	requireT.Equal(account2, a2)
 
-	a, exists := db2.Get[entities.Account](c.View(), account1.ID)
+	a, exists := db.Get[entities.Account](c.View(), account1.ID)
 	requireT.True(exists)
 	requireT.Equal(account1, a)
 }
