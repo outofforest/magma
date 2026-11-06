@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	id1 uint64 = iota + 1
-	id0
+	id0 uint64 = iota + 1
 )
 
 var _ proton.Marshaller = Marshaller{}
@@ -33,7 +32,6 @@ type Marshaller struct {
 func (m Marshaller) Messages() []any {
 	return []any {
 		wire.Hello{},
-		wire.HelloResponse{},
 	}
 }
 
@@ -41,8 +39,6 @@ func (m Marshaller) Messages() []any {
 func (m Marshaller) ID(msg any) (uint64, error) {
 	switch msg.(type) {
 	case *wire.Hello:
-		return id1, nil
-	case *wire.HelloResponse:
 		return id0, nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -53,8 +49,6 @@ func (m Marshaller) ID(msg any) (uint64, error) {
 func (m Marshaller) Size(msg any) (uint64, error) {
 	switch msg2 := msg.(type) {
 	case *wire.Hello:
-		return size1(msg2), nil
-	case *wire.HelloResponse:
 		return size0(msg2), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
@@ -67,8 +61,6 @@ func (m Marshaller) Marshal(msg any, buf []byte) (retID, retSize uint64, retErr 
 
 	switch msg2 := msg.(type) {
 	case *wire.Hello:
-		return id1, marshal1(msg2, buf), nil
-	case *wire.HelloResponse:
 		return id0, marshal0(msg2, buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msg)
@@ -80,11 +72,8 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 	defer helpers.RecoverUnmarshal(&retErr)
 
 	switch id {
-	case id1:
-		msg := &wire.Hello{}
-		return msg, unmarshal1(msg, buf), nil
 	case id0:
-		msg := &wire.HelloResponse{}
+		msg := &wire.Hello{}
 		return msg, unmarshal0(msg, buf), nil
 	default:
 		return nil, 0, errors.Errorf("unknown ID %d", id)
@@ -95,9 +84,7 @@ func (m Marshaller) Unmarshal(id uint64, buf []byte) (retMsg any, retSize uint64
 func (m Marshaller) IsPatchNeeded(msgDst, msgSrc any) (bool, error) {
 	switch msg2 := msgDst.(type) {
 	case *wire.Hello:
-		return isPatchNeeded1(msg2, msgSrc.(*wire.Hello)), nil
-	case *wire.HelloResponse:
-		return isPatchNeeded0(msg2, msgSrc.(*wire.HelloResponse)), nil
+		return isPatchNeeded0(msg2, msgSrc.(*wire.Hello)), nil
 	default:
 		return false, errors.Errorf("unknown message type %T", msgDst)
 	}
@@ -109,9 +96,7 @@ func (m Marshaller) MakePatch(msgDst, msgSrc any, buf []byte) (retID, retSize ui
 
 	switch msg2 := msgDst.(type) {
 	case *wire.Hello:
-		return id1, makePatch1(msg2, msgSrc.(*wire.Hello), buf), nil
-	case *wire.HelloResponse:
-		return id0, makePatch0(msg2, msgSrc.(*wire.HelloResponse), buf), nil
+		return id0, makePatch0(msg2, msgSrc.(*wire.Hello), buf), nil
 	default:
 		return 0, 0, errors.Errorf("unknown message type %T", msgDst)
 	}
@@ -123,118 +108,14 @@ func (m Marshaller) ApplyPatch(msg any, buf []byte) (retSize uint64, retErr erro
 
 	switch msg2 := msg.(type) {
 	case *wire.Hello:
-		return applyPatch1(msg2, buf), nil
-	case *wire.HelloResponse:
 		return applyPatch0(msg2, buf), nil
 	default:
 		return 0, errors.Errorf("unknown message type %T", msg)
 	}
 }
 
-func size0(m *wire.HelloResponse) uint64 {
-	var n uint64 = 1
-	{
-		// Error
-
-		{
-			l := uint64(len(m.Error))
-			helpers.UInt64Size(l, &n)
-			n += l
-		}
-	}
-	return n
-}
-
-func marshal0(m *wire.HelloResponse, b []byte) uint64 {
-	var o uint64
-	{
-		// Error
-
-		{
-			l := uint64(len(m.Error))
-			helpers.UInt64Marshal(l, b, &o)
-			copy(b[o:o+l], m.Error)
-			o += l
-		}
-	}
-
-	return o
-}
-
-func unmarshal0(m *wire.HelloResponse, b []byte) uint64 {
-	var o uint64
-	{
-		// Error
-
-		{
-			var l uint64
-			helpers.UInt64Unmarshal(&l, b, &o)
-			if l > 0 {
-				m.Error = string(b[o:o+l])
-				o += l
-			}
-		}
-	}
-
-	return o
-}
-
-func isPatchNeeded0(m, mSrc *wire.HelloResponse) bool {
-	{
-		// Error
-
-		if !reflect.DeepEqual(m.Error, mSrc.Error) {
-			return true
-		}
-
-	}
-
-	return false
-}
-
-func makePatch0(m, mSrc *wire.HelloResponse, b []byte) uint64 {
-	var o uint64 = 1
-	{
-		// Error
-
-		if reflect.DeepEqual(m.Error, mSrc.Error) {
-			b[0] &= 0xFE
-		} else {
-			b[0] |= 0x01
-			{
-				l := uint64(len(m.Error))
-				helpers.UInt64Marshal(l, b, &o)
-				copy(b[o:o+l], m.Error)
-				o += l
-			}
-		}
-	}
-
-	return o
-}
-
-func applyPatch0(m *wire.HelloResponse, b []byte) uint64 {
-	var o uint64 = 1
-	{
-		// Error
-
-		if b[0]&0x01 != 0 {
-			{
-				var l uint64
-				helpers.UInt64Unmarshal(&l, b, &o)
-				if l > 0 {
-					m.Error = string(b[o:o+l])
-					o += l
-				}
-			}
-		}
-	}
-
-	return o
-}
-
-func size1(m *wire.Hello) uint64 {
-	var n uint64 = 3
+func size0(m *wire.Hello) uint64 {
+	var n uint64 = 4
 	{
 		// ServerID
 
@@ -253,10 +134,15 @@ func size1(m *wire.Hello) uint64 {
 			n += l
 		}
 	}
+	{
+		// DesiredVersion
+
+		helpers.UInt64Size(m.DesiredVersion, &n)
+	}
 	return n
 }
 
-func marshal1(m *wire.Hello, b []byte) uint64 {
+func marshal0(m *wire.Hello, b []byte) uint64 {
 	var o uint64
 	{
 		// ServerID
@@ -279,6 +165,11 @@ func marshal1(m *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
+		// DesiredVersion
+
+		helpers.UInt64Marshal(m.DesiredVersion, b, &o)
+	}
+	{
 		// Channel
 
 		b[o] = byte(m.Channel)
@@ -288,7 +179,7 @@ func marshal1(m *wire.Hello, b []byte) uint64 {
 	return o
 }
 
-func unmarshal1(m *wire.Hello, b []byte) uint64 {
+func unmarshal0(m *wire.Hello, b []byte) uint64 {
 	var o uint64
 	{
 		// ServerID
@@ -315,6 +206,11 @@ func unmarshal1(m *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
+		// DesiredVersion
+
+		helpers.UInt64Unmarshal(&m.DesiredVersion, b, &o)
+	}
+	{
 		// Channel
 
 		m.Channel = wire.Channel(b[o])
@@ -324,7 +220,7 @@ func unmarshal1(m *wire.Hello, b []byte) uint64 {
 	return o
 }
 
-func isPatchNeeded1(m, mSrc *wire.Hello) bool {
+func isPatchNeeded0(m, mSrc *wire.Hello) bool {
 	{
 		// ServerID
 
@@ -342,6 +238,14 @@ func isPatchNeeded1(m, mSrc *wire.Hello) bool {
 
 	}
 	{
+		// DesiredVersion
+
+		if !reflect.DeepEqual(m.DesiredVersion, mSrc.DesiredVersion) {
+			return true
+		}
+
+	}
+	{
 		// Channel
 
 		if !reflect.DeepEqual(m.Channel, mSrc.Channel) {
@@ -353,7 +257,7 @@ func isPatchNeeded1(m, mSrc *wire.Hello) bool {
 	return false
 }
 
-func makePatch1(m, mSrc *wire.Hello, b []byte) uint64 {
+func makePatch0(m, mSrc *wire.Hello, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// ServerID
@@ -386,12 +290,22 @@ func makePatch1(m, mSrc *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
-		// Channel
+		// DesiredVersion
 
-		if reflect.DeepEqual(m.Channel, mSrc.Channel) {
+		if reflect.DeepEqual(m.DesiredVersion, mSrc.DesiredVersion) {
 			b[0] &= 0xFB
 		} else {
 			b[0] |= 0x04
+			helpers.UInt64Marshal(m.DesiredVersion, b, &o)
+		}
+	}
+	{
+		// Channel
+
+		if reflect.DeepEqual(m.Channel, mSrc.Channel) {
+			b[0] &= 0xF7
+		} else {
+			b[0] |= 0x08
 			b[o] = byte(m.Channel)
 			o++
 		}
@@ -400,7 +314,7 @@ func makePatch1(m, mSrc *wire.Hello, b []byte) uint64 {
 	return o
 }
 
-func applyPatch1(m *wire.Hello, b []byte) uint64 {
+func applyPatch0(m *wire.Hello, b []byte) uint64 {
 	var o uint64 = 1
 	{
 		// ServerID
@@ -431,9 +345,16 @@ func applyPatch1(m *wire.Hello, b []byte) uint64 {
 		}
 	}
 	{
-		// Channel
+		// DesiredVersion
 
 		if b[0]&0x04 != 0 {
+			helpers.UInt64Unmarshal(&m.DesiredVersion, b, &o)
+		}
+	}
+	{
+		// Channel
+
+		if b[0]&0x08 != 0 {
 			m.Channel = wire.Channel(b[o])
 			o++
 		}

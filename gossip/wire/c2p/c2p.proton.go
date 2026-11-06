@@ -467,9 +467,9 @@ func size3(m *InitRequest) uint64 {
 		}
 	}
 	{
-		// Version
+		// DesiredVersion
 
-		helpers.UInt64Size(m.Version, &n)
+		helpers.UInt64Size(m.DesiredVersion, &n)
 	}
 	{
 		// NextIndex
@@ -492,9 +492,9 @@ func marshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Version
+		// DesiredVersion
 
-		helpers.UInt64Marshal(m.Version, b, &o)
+		helpers.UInt64Marshal(m.DesiredVersion, b, &o)
 	}
 	{
 		// NextIndex
@@ -520,9 +520,9 @@ func unmarshal3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Version
+		// DesiredVersion
 
-		helpers.UInt64Unmarshal(&m.Version, b, &o)
+		helpers.UInt64Unmarshal(&m.DesiredVersion, b, &o)
 	}
 	{
 		// NextIndex
@@ -543,9 +543,9 @@ func isPatchNeeded3(m, mSrc *InitRequest) bool {
 
 	}
 	{
-		// Version
+		// DesiredVersion
 
-		if !reflect.DeepEqual(m.Version, mSrc.Version) {
+		if !reflect.DeepEqual(m.DesiredVersion, mSrc.DesiredVersion) {
 			return true
 		}
 
@@ -580,13 +580,13 @@ func makePatch3(m, mSrc *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Version
+		// DesiredVersion
 
-		if reflect.DeepEqual(m.Version, mSrc.Version) {
+		if reflect.DeepEqual(m.DesiredVersion, mSrc.DesiredVersion) {
 			b[0] &= 0xFD
 		} else {
 			b[0] |= 0x02
-			helpers.UInt64Marshal(m.Version, b, &o)
+			helpers.UInt64Marshal(m.DesiredVersion, b, &o)
 		}
 	}
 	{
@@ -620,10 +620,10 @@ func applyPatch3(m *InitRequest, b []byte) uint64 {
 		}
 	}
 	{
-		// Version
+		// DesiredVersion
 
 		if b[0]&0x02 != 0 {
-			helpers.UInt64Unmarshal(&m.Version, b, &o)
+			helpers.UInt64Unmarshal(&m.DesiredVersion, b, &o)
 		}
 	}
 	{

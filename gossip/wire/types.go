@@ -18,14 +18,10 @@ const (
 
 // Hello is the message exchanged between peers when connected.
 type Hello struct {
-	ServerID    magmatypes.ServerID
-	PartitionID magmatypes.PartitionID
-	Channel     Channel
-}
-
-// HelloResponse is the response to Hello message.
-type HelloResponse struct {
-	Error string
+	ServerID       magmatypes.ServerID
+	PartitionID    magmatypes.PartitionID
+	DesiredVersion magmatypes.Version
+	Channel        Channel
 }
 
 // StartLogStream indicates beginning of log stream transfer.

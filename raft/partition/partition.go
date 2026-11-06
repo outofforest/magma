@@ -10,11 +10,12 @@ import (
 
 // State keeps the partition state used by other components.
 type State struct {
-	Peers         []config.ServerConfig
-	ActiveServers map[magmatypes.ServerID]struct{}
-	Repo          *repository.Repository
-	Reactor       *reactor.Reactor
-	PartitionRole magmatypes.PartitionRole
+	DesiredVersion magmatypes.Version
+	Peers          []config.ServerConfig
+	ActiveServers  map[magmatypes.ServerID]struct{}
+	Repo           *repository.Repository
+	Reactor        *reactor.Reactor
+	PartitionRole  magmatypes.PartitionRole
 
 	CmdP2PCh, CmdC2PCh chan types.Command
 	ResultCh           chan reactor.Result
