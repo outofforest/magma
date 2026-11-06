@@ -21,3 +21,14 @@ var (
 	// ErrTxOutdatedTx means that awaited transaction is outdated and hasn't been applied.
 	ErrTxOutdatedTx = errors.Wrap(ErrTxFailure, "outdated transaction")
 )
+
+// RecoveryHandler is used to recover from panics.
+func RecoveryHandler(err *error) {
+	if r := recover(); r != nil {
+		if e, ok := r.(error); ok {
+			*err = e
+			return
+		}
+		*err = errors.Errorf("function panicked: %s", r)
+	}
+}

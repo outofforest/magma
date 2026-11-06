@@ -477,7 +477,7 @@ func (t *transactor) prepareTx(
 		changes: t.changes,
 	}
 
-	defer txRecover(&retErr)
+	defer internal.RecoveryHandler(&retErr)
 
 	if err := txF(pendingTx); err != nil {
 		return txEnvelope{}, 0, err
@@ -704,14 +704,4 @@ func (tx *tx) set(o any, force bool) error {
 	dbTx.Commit()
 
 	return nil
-}
-
-func txRecover(err *error) {
-	if r := recover(); r != nil {
-		if e, ok := r.(error); ok {
-			*err = e
-			return
-		}
-		*err = errors.Errorf("transaction panicked: %s", r)
-	}
 }
