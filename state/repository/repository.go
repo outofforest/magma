@@ -26,7 +26,6 @@ import (
 	"github.com/outofforest/magma/state/repository/format"
 	magmatypes "github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
-	"github.com/outofforest/parallel"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/resonance"
 	"github.com/outofforest/varuint64"
@@ -426,13 +425,13 @@ func (r *Repository) Run(ctx context.Context) error {
 		case <-r.upgradeCh:
 		}
 
-		if err := r.upgrade(ctx); err != nil {
+		if err := r.upgrade(); err != nil {
 			return err
 		}
 	}
 }
 
-func (r *Repository) upgrade(ctx context.Context) error {
+func (r *Repository) upgrade() error {
 	r.mu.RLock()
 	if len(r.files) < 2 {
 		r.mu.RUnlock()
@@ -445,7 +444,7 @@ func (r *Repository) upgrade(ctx context.Context) error {
 		if h.Version == files[i].Version {
 			continue
 		}
-		if err := r.upgradeToVersion(ctx, h, files[i].Version); err != nil {
+		if err := r.upgradeToVersion(h, files[i].Version); err != nil {
 			return err
 		}
 	}
@@ -454,7 +453,6 @@ func (r *Repository) upgrade(ctx context.Context) error {
 }
 
 func (r *Repository) upgradeToVersion(
-	ctx context.Context,
 	header *format.Header,
 	previousVersion magmatypes.Version,
 ) error {
@@ -476,7 +474,7 @@ func (r *Repository) upgradeToVersion(
 		initialMarshaller = r.partitionConfig.Upgrades[previousVersion-1].Marshaller
 	}
 
-	if err := r.fillInitFile(ctx, f, header, previousVersion, initialMarshaller,
+	if err := r.fillInitFile(f, header, previousVersion, initialMarshaller,
 		r.partitionConfig.Upgrades[previousVersion:header.Version]); err != nil {
 		return err
 	}
@@ -484,9 +482,7 @@ func (r *Repository) upgradeToVersion(
 	return errors.WithStack(os.Rename(initFileTmp, initFile))
 }
 
-//nolint:gocyclo
 func (r *Repository) fillInitFile(
-	ctx context.Context,
 	f io.Writer,
 	header *format.Header,
 	previousVersion magmatypes.Version,
@@ -599,85 +595,27 @@ loop:
 	srcView := db.NewView(memDB.Txn(true), byType)
 
 	for i, upgrade := range upgrades {
-		entities, err := internal.EntitiesFromMarshaller(upgrade.Marshaller)
-		if err != nil {
-			return err
+		var dstView *db.View
+		var setF db.UpgradeSetFunc
+		if i == len(upgrades)-1 {
+			var err error
+			setF, err = r.newLastUpgradeSetter(upgrade.Marshaller, f)
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			dstView, setF, err = db.NewUpgradeSetter(upgrade.Marshaller)
+			if err != nil {
+				return err
+			}
 		}
 
-		dstDBConfig, err := internal.NewDBConfig(entities, nil)
-		if err != nil {
-			return err
-		}
+		err = func() (retErr error) {
+			defer internal.RecoveryHandler(&retErr)
 
-		dstMemDB, err := memdb.NewMemDB(dstDBConfig)
-		if err != nil {
-			return err
-		}
-
-		_, byType, err = internal.NewCache(upgrade.Marshaller)
-		if err != nil {
-			return err
-		}
-
-		isLastUpgrade := i == len(upgrades)-1
-		dstView := db.NewView(dstMemDB.Txn(true), byType)
-
-		err = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
-			ch := make(chan any, 5)
-			spawn("convert", parallel.Continue, func(_ context.Context) error {
-				defer close(ch)
-
-				return upgrade.UpgradeFunc(srcView, ch)
-			})
-			spawn("store", parallel.Exit, func(_ context.Context) error {
-				defer func() {
-					for range ch {
-					}
-				}()
-
-				for e := range ch {
-					eValue := reflect.ValueOf(e)
-					eType := eValue.Type()
-					ePtrValue := reflect.New(eType)
-					ePtrValue.Elem().Set(eValue)
-
-					typeDef, exists := byType[eType]
-					if !exists {
-						return errors.Errorf("undefined type %T", e)
-					}
-
-					if !isLastUpgrade {
-						dstView.Set(e)
-						continue
-					}
-
-					_, metaSize, err := r.metaM.Marshal(&wire.InitEntityMetadata{
-						ID:        memdb.ID(internal.UnsafeIDFromEntity(ePtrValue.UnsafePointer())),
-						MessageID: typeDef.MsgID,
-					}, buf[varuint64.MaxSize:])
-					if err != nil {
-						return err
-					}
-
-					_, size, err := upgrade.Marshaller.Marshal(ePtrValue.Interface(), buf[varuint64.MaxSize+metaSize:])
-					if err != nil {
-						return err
-					}
-					totalSize := metaSize + size
-					n := varuint64.Size(totalSize)
-					start := varuint64.MaxSize - n
-					varuint64.Put(buf[start:], totalSize)
-
-					msgBuf := buf[start : varuint64.MaxSize+totalSize]
-					if _, err := f.Write(msgBuf); err != nil {
-						return errors.WithStack(err)
-					}
-				}
-
-				return errors.WithStack(ctx.Err())
-			})
-			return nil
-		})
+			return upgrade.UpgradeFunc(srcView, setF)
+		}()
 		if err != nil {
 			return err
 		}
@@ -686,6 +624,51 @@ loop:
 	}
 
 	return nil
+}
+
+func (r *Repository) newLastUpgradeSetter(
+	m proton.Marshaller,
+	w io.Writer,
+) (db.UpgradeSetFunc, error) {
+	_, byType, err := internal.NewCache(m)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, r.maxMessageSize+2*varuint64.MaxSize)
+	return func(e any) {
+		eValue := reflect.ValueOf(e)
+		eType := eValue.Type()
+		ePtrValue := reflect.New(eType)
+		ePtrValue.Elem().Set(eValue)
+
+		typeDef, exists := byType[eType]
+		if !exists {
+			panic(errors.Errorf("undefined type %T", e))
+		}
+
+		_, metaSize, err := r.metaM.Marshal(&wire.InitEntityMetadata{
+			ID:        memdb.ID(internal.UnsafeIDFromEntity(ePtrValue.UnsafePointer())),
+			MessageID: typeDef.MsgID,
+		}, buf[varuint64.MaxSize:])
+		if err != nil {
+			panic(err)
+		}
+
+		_, size, err := m.Marshal(ePtrValue.Interface(), buf[varuint64.MaxSize+metaSize:])
+		if err != nil {
+			panic(err)
+		}
+		totalSize := metaSize + size
+		n := varuint64.Size(totalSize)
+		start := varuint64.MaxSize - n
+		varuint64.Put(buf[start:], totalSize)
+
+		msgBuf := buf[start : varuint64.MaxSize+totalSize]
+		if _, err := w.Write(msgBuf); err != nil {
+			panic(errors.WithStack(err))
+		}
+	}, nil
 }
 
 func (r *Repository) open(fileIndex, offset uint64) (*File, error) {

@@ -49,25 +49,25 @@ func TestSeparateUpgrades(t *testing.T) {
 		Upgrades: []db.Upgrade{
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 					for a := range db.All[entities.Account](view) {
-						ch <- entities2.Account{
+						set(entities2.Account{
 							ID:        entities2.AccountID(a.ID),
 							FirstName: a.FirstName,
 							LastName:  a.LastName,
 							Name:      a.FirstName + " " + a.LastName,
-						}
+						})
 					}
-					ch <- acc2
+					set(acc2)
 					return nil
 				},
 			},
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 					for a := range db.All[entities2.Account](view) {
 						a.LastName += ".2"
-						ch <- a
+						set(a)
 					}
 					return nil
 				},
@@ -100,7 +100,7 @@ func TestSeparateUpgrades(t *testing.T) {
 	requireT.NoError(err)
 	defer close1()
 
-	requireT.NoError(r.upgrade(ctx))
+	requireT.NoError(r.upgrade())
 
 	initRaw, err := os.ReadFile(filepath.Join(dir, "1.init"))
 	requireT.NoError(err)
@@ -125,7 +125,7 @@ func TestSeparateUpgrades(t *testing.T) {
 	requireT.NoError(err)
 	defer close2()
 
-	requireT.NoError(r.upgrade(ctx))
+	requireT.NoError(r.upgrade())
 
 	initRaw, err = os.ReadFile(filepath.Join(dir, "2.init"))
 	requireT.NoError(err)
@@ -170,25 +170,25 @@ func TestCombinedUpgrades(t *testing.T) {
 		Upgrades: []db.Upgrade{
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 					for a := range db.All[entities.Account](view) {
-						ch <- entities2.Account{
+						set(entities2.Account{
 							ID:        entities2.AccountID(a.ID),
 							FirstName: a.FirstName,
 							LastName:  a.LastName,
 							Name:      a.FirstName + " " + a.LastName,
-						}
+						})
 					}
-					ch <- acc2
+					set(acc2)
 					return nil
 				},
 			},
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 					for a := range db.All[entities2.Account](view) {
 						a.LastName += ".2"
-						ch <- a
+						set(a)
 					}
 					return nil
 				},
@@ -221,7 +221,7 @@ func TestCombinedUpgrades(t *testing.T) {
 	requireT.NoError(err)
 	defer close1()
 
-	requireT.NoError(r.upgrade(ctx))
+	requireT.NoError(r.upgrade())
 
 	initRaw, err := os.ReadFile(filepath.Join(dir, "1.init"))
 	requireT.NoError(err)
@@ -261,23 +261,20 @@ func TestUpgradeContainingEmptyEntity(t *testing.T) {
 		Upgrades: []db.Upgrade{
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 					for e := range db.All[entities.Empty](view) {
-						ch <- entities2.Empty{
+						set(entities2.Empty{
 							ID: e.ID,
-						}
+						})
 					}
-					ch <- e2
+					set(e2)
 					return nil
 				},
 			},
 			{
 				Marshaller: m2,
-				UpgradeFunc: func(view *db.View, ch chan<- any) error {
-					for e := range db.All[entities2.Empty](view) {
-						ch <- e
-					}
-					return nil
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+					return db.CopyAll[entities2.Empty](view, set)
 				},
 			},
 		},
@@ -307,7 +304,7 @@ func TestUpgradeContainingEmptyEntity(t *testing.T) {
 	requireT.NoError(err)
 	defer close1()
 
-	requireT.NoError(r.upgrade(ctx))
+	requireT.NoError(r.upgrade())
 
 	initRaw, err := os.ReadFile(filepath.Join(dir, "1.init"))
 	requireT.NoError(err)
@@ -320,6 +317,102 @@ func TestUpgradeContainingEmptyEntity(t *testing.T) {
 		0x1f, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
 		0x1,
 	}, initRaw)
+}
+
+func TestUpgradeFailure(t *testing.T) {
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+
+	m := entities.NewMarshaller()
+	m2 := entities2.NewMarshaller()
+
+	acc := entities.Account{
+		ID:        entities.AccountID{0x1f},
+		FirstName: "Jane",
+		LastName:  "Doe",
+	}
+
+	errUpgrade := errors.New("upgrade failure")
+	r, dir := newRepo(t, "", config.PartitionConfig{
+		InitialMarshaller: m,
+		Upgrades: []db.Upgrade{
+			{
+				Marshaller: m2,
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+					return errUpgrade
+				},
+			},
+		},
+	})
+
+	w0, sync0, close0, err := createTerm(r, 1)
+	requireT.NoError(err)
+	defer close0()
+
+	c := client.NewTestClient(t, client.NewTestConfig(m), readChecksum(w0), w0)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		return tx.Set(acc)
+	}))
+
+	requireT.NoError(sync0())
+
+	requireT.NoError(r.SetCurrentVersion(1))
+	_, _, close1, err := createTerm(r, 2, w0)
+	requireT.NoError(err)
+	defer close1()
+
+	requireT.ErrorIs(r.upgrade(), errUpgrade)
+
+	_, err = os.ReadFile(filepath.Join(dir, "1.init"))
+	requireT.ErrorIs(err, os.ErrNotExist)
+}
+
+func TestUpgradePanics(t *testing.T) {
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+
+	m := entities.NewMarshaller()
+	m2 := entities2.NewMarshaller()
+
+	acc := entities.Account{
+		ID:        entities.AccountID{0x1f},
+		FirstName: "Jane",
+		LastName:  "Doe",
+	}
+
+	errUpgrade := errors.New("upgrade failure")
+	r, dir := newRepo(t, "", config.PartitionConfig{
+		InitialMarshaller: m,
+		Upgrades: []db.Upgrade{
+			{
+				Marshaller: m2,
+				UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+					panic(errUpgrade)
+				},
+			},
+		},
+	})
+
+	w0, sync0, close0, err := createTerm(r, 1)
+	requireT.NoError(err)
+	defer close0()
+
+	c := client.NewTestClient(t, client.NewTestConfig(m), readChecksum(w0), w0)
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		return tx.Set(acc)
+	}))
+
+	requireT.NoError(sync0())
+
+	requireT.NoError(r.SetCurrentVersion(1))
+	_, _, close1, err := createTerm(r, 2, w0)
+	requireT.NoError(err)
+	defer close1()
+
+	requireT.ErrorIs(r.upgrade(), errUpgrade)
+
+	_, err = os.ReadFile(filepath.Join(dir, "1.init"))
+	requireT.ErrorIs(err, os.ErrNotExist)
 }
 
 func createTerm(

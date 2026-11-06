@@ -1,11 +1,6 @@
 package db
 
-import (
-	"context"
-
-	"github.com/outofforest/magma/internal"
-	"github.com/outofforest/proton"
-)
+import "github.com/outofforest/magma/internal"
 
 var (
 	// ErrTxTooBig means that adding new entity to transaction caused it to exceed the max size limit.
@@ -26,24 +21,3 @@ var (
 	// ErrTxOutdatedTx means that awaited transaction is outdated and hasn't been applied.
 	ErrTxOutdatedTx = internal.ErrTxOutdatedTx
 )
-
-// Transactor builds and broadcasts transactions.
-type Transactor interface {
-	Tx(ctx context.Context, txF func(tx Tx) error) error
-}
-
-// Tx prepares transaction.
-type Tx interface {
-	View() *View
-	Set(o any) error
-	SoftSet(o any) error
-}
-
-// UpgradeFunc defines the function for db conversion.
-type UpgradeFunc func(view *View, ch chan<- any) error
-
-// Upgrade defines db upgrade.
-type Upgrade struct {
-	Marshaller  proton.Marshaller
-	UpgradeFunc UpgradeFunc
-}

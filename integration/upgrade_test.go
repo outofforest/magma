@@ -102,10 +102,10 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.FirstName += ".1"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
@@ -147,10 +147,10 @@ func TestSeparateUpgradesSinglePeer(t *testing.T) {
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
+		UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 			for a := range db.All[entities.Account](view) {
 				a.LastName += ".2"
-				ch <- a
+				set(a)
 			}
 			return nil
 		},
@@ -263,20 +263,20 @@ func TestCombinedUpgradesSinglePeer(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.FirstName += ".1"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
 		},
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.LastName += ".2"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
@@ -393,10 +393,10 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.FirstName += ".1"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
@@ -441,10 +441,10 @@ func TestSeparateUpgrades3Peer(t *testing.T) {
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
+		UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 			for a := range db.All[entities.Account](view) {
 				a.LastName += ".2"
-				ch <- a
+				set(a)
 			}
 			return nil
 		},
@@ -563,20 +563,20 @@ func TestCombinedUpgrades3Peers(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.FirstName += ".1"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
 		},
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.LastName += ".2"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
@@ -696,10 +696,10 @@ func TestColdPeerUpgrade(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					a.FirstName += ".1"
-					ch <- a
+					set(a)
 				}
 				return nil
 			},
@@ -744,10 +744,10 @@ func TestColdPeerUpgrade(t *testing.T) {
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
 		Marshaller: m,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
+		UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 			for a := range db.All[entities.Account](view) {
 				a.LastName += ".2"
-				ch <- a
+				set(a)
 			}
 			return nil
 		},
@@ -892,22 +892,19 @@ func TestUpgradeComplex(t *testing.T) {
 	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
 		{
 			Marshaller: m,
-			UpgradeFunc: func(view *db.View, ch chan<- any) error {
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 				for a := range db.All[entities.Account](view) {
 					if a.ID == accountID1 {
 						a.FirstName += ".1"
 					}
-					ch <- a
+					set(a)
 				}
 				for b := range db.All[entities.Blob](view) {
 					b.Data = slices.Clone(b.Data)
 					b.Data = append(b.Data, b.Data[0]+1)
-					ch <- b
+					set(b)
 				}
-				for e := range db.All[entities.Empty](view) {
-					ch <- e
-				}
-				return nil
+				return db.CopyAll[entities.Empty](view, set)
 			},
 		},
 	}
@@ -949,27 +946,27 @@ func TestUpgradeComplex(t *testing.T) {
 
 	clusterConfig.Partitions[0].Upgrades = append(clusterConfig.Partitions[0].Upgrades, db.Upgrade{
 		Marshaller: m2,
-		UpgradeFunc: func(view *db.View, ch chan<- any) error {
+		UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
 			for a := range db.All[entities.Account](view) {
-				ch <- entities2.Account{
+				set(entities2.Account{
 					ID:        entities2.AccountID(a.ID),
 					Name:      a.FirstName + " " + a.LastName,
 					FirstName: a.FirstName,
 					LastName:  a.LastName + ".3",
-				}
+				})
 			}
 			for b := range db.All[entities.Blob](view) {
 				data := slices.Clone(b.Data)
 				data[0]++
-				ch <- entities2.Blob{
+				set(entities2.Blob{
 					ID:   b.ID,
 					Data: data,
-				}
+				})
 			}
 			for e := range db.All[entities.Empty](view) {
-				ch <- entities2.Empty{
+				set(entities2.Empty{
 					ID: e.ID,
-				}
+				})
 			}
 			return nil
 		},
