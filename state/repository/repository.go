@@ -20,7 +20,7 @@ import (
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/config"
-	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/internal"
 	"github.com/outofforest/magma/raft/types"
 	"github.com/outofforest/magma/state/repository/format"
@@ -491,14 +491,24 @@ func (r *Repository) fillInitFile(
 	header *format.Header,
 	previousVersion magmatypes.Version,
 	initialMarshaller proton.Marshaller,
-	upgrades []db2.Upgrade,
+	upgrades []db.Upgrade,
 ) error {
 	initEntityMetaMsgID, err := r.metaM.ID(&wire.InitEntityMetadata{})
 	if err != nil {
 		return err
 	}
 
-	dbConfig, err := internal.NewDBConfig(initialMarshaller, nil)
+	initialEntities, err := internal.EntitiesFromMarshaller(initialMarshaller)
+	if err != nil {
+		return err
+	}
+
+	byType, err := internal.NewByTypeCache(initialEntities)
+	if err != nil {
+		return err
+	}
+
+	dbConfig, err := internal.NewDBConfig(initialEntities, nil)
 	if err != nil {
 		return err
 	}
@@ -562,7 +572,7 @@ loop:
 			}
 
 			_, checksum, err = applier.ApplyTx(checksum, tx, txRaw, updatedTypes)
-			if err != nil && !errors.Is(err, db2.ErrTxOutdatedTx) {
+			if err != nil && !errors.Is(err, db.ErrTxOutdatedTx) {
 				return err
 			}
 		}
@@ -591,10 +601,15 @@ loop:
 		return errors.WithStack(err)
 	}
 
-	srcView := applier.View(memDB.Txn(true))
+	srcView := internal.NewView(memDB.Txn(true), byType)
 
 	for i, upgrade := range upgrades {
-		dstDBConfig, err := internal.NewDBConfig(upgrade.Marshaller, nil)
+		entities, err := internal.EntitiesFromMarshaller(upgrade.Marshaller)
+		if err != nil {
+			return err
+		}
+
+		dstDBConfig, err := internal.NewDBConfig(entities, nil)
 		if err != nil {
 			return err
 		}
@@ -604,17 +619,13 @@ loop:
 			return err
 		}
 
-		_, byType, err := internal.NewTypeCache(upgrade.Marshaller)
+		_, byType, err = internal.NewCache(upgrade.Marshaller)
 		if err != nil {
 			return err
 		}
 
 		isLastUpgrade := i == len(upgrades)-1
-		applier, err := internal.NewApplier(r.metaM, upgrade.Marshaller)
-		if err != nil {
-			return err
-		}
-		dstView := applier.View(dstMemDB.Txn(true))
+		dstView := internal.NewView(dstMemDB.Txn(true), byType)
 
 		err = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			ch := make(chan any, 5)

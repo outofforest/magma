@@ -14,7 +14,7 @@ import (
 	"github.com/outofforest/magma"
 	"github.com/outofforest/magma/client"
 	"github.com/outofforest/magma/config"
-	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/parallel"
@@ -64,7 +64,7 @@ type Client struct {
 }
 
 // View returns current db view.
-func (c *Client) View() *db2.View {
+func (c *Client) View() *db.View {
 	return c.client.View()
 }
 
@@ -74,7 +74,7 @@ func (c *Client) WarmUp(ctx context.Context) error {
 }
 
 // NewTransactor returns new transactor.
-func (c *Client) NewTransactor() db2.Transactor {
+func (c *Client) NewTransactor() db.Transactor {
 	return c.client.NewTransactor()
 }
 

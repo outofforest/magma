@@ -24,24 +24,22 @@ var (
 
 // Applier stores transaction in database.
 type Applier struct {
-	metaM  proton.Marshaller
-	m      proton.Marshaller
-	byID   map[uint64]TypeInfo
-	byType map[reflect.Type]TypeInfo
+	metaM proton.Marshaller
+	m     proton.Marshaller
+	byID  map[uint64]TypeInfo
 }
 
 // NewApplier creates applier.
 func NewApplier(metaM, m proton.Marshaller) (*Applier, error) {
-	byID, byType, err := NewTypeCache(m)
+	byID, _, err := NewCache(m)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Applier{
-		metaM:  metaM,
-		m:      m,
-		byID:   byID,
-		byType: byType,
+		metaM: metaM,
+		m:     m,
+		byID:  byID,
 	}, nil
 }
 
@@ -146,20 +144,24 @@ func (a *Applier) ApplyInit(
 	}
 }
 
-// View creates view based on tx.
-func (a *Applier) View(tx *memdb.Txn) *View {
-	return NewView(tx, a)
-}
-
 // Insert inserts object to DB.
-func (a *Applier) Insert(tx *memdb.Txn, o any) (memdb.ID, TypeInfo, unsafe.Pointer, unsafe.Pointer) {
+func Insert(
+	tx *memdb.Txn,
+	o any,
+	byType map[reflect.Type]TypeInfo,
+) (
+	memdb.ID,
+	TypeInfo,
+	unsafe.Pointer,
+	unsafe.Pointer,
+) {
 	oValue := reflect.ValueOf(o)
 	if oValue.Kind() == reflect.Pointer {
 		panic(errors.New("object must not be a pointer"))
 	}
 
 	oType := oValue.Type()
-	typeDef, exists := a.byType[oType]
+	typeDef, exists := byType[oType]
 	if !exists {
 		panic(errors.Errorf("unknown type %s", oType))
 	}
@@ -195,7 +197,7 @@ func (a *Applier) storeTx(
 
 		typeDef, exists := a.byID[entityMeta.MessageID]
 		if !exists {
-			return errors.Errorf("unknown type %s", typeDef.Type)
+			return errors.Errorf("unknown type for message ID %d", entityMeta.MessageID)
 		}
 
 		pointer, err := dbTx.First(typeDef.TableID, memdb.IDIndexID, entityMeta.ID)
@@ -279,9 +281,32 @@ type TypeInfo struct {
 	TableID uint64
 }
 
-// NewTypeCache creates new type cache from marshaller.
-func NewTypeCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]TypeInfo, error) {
-	entities, err := typesFromMarshaller(m)
+// NewByTypeCache creates new type cache indexed by entity types.
+func NewByTypeCache(entities []reflect.Type) (map[reflect.Type]TypeInfo, error) {
+	byType := map[reflect.Type]TypeInfo{}
+	for tableID, t := range entities {
+		idFType, err := ValidateEntityType(t, false)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, exists := byType[t]; exists {
+			return nil, errors.Errorf("double registration of object %s", t)
+		}
+
+		byType[t] = TypeInfo{
+			Type:    t,
+			IDType:  idFType,
+			TableID: uint64(tableID),
+		}
+	}
+
+	return byType, nil
+}
+
+// NewCache creates new type caches from marshaller.
+func NewCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]TypeInfo, error) {
+	entities, err := EntitiesFromMarshaller(m)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -289,7 +314,7 @@ func NewTypeCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]Ty
 	byID := map[uint64]TypeInfo{}
 	byType := map[reflect.Type]TypeInfo{}
 	for tableID, t := range entities {
-		idFType, err := validateType(t)
+		idFType, err := ValidateEntityType(t, true)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -319,7 +344,8 @@ func NewTypeCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]Ty
 var revisionType = reflect.TypeFor[types.Revision]()
 var idType = reflect.TypeFor[memdb.ID]()
 
-func validateType(t reflect.Type) (reflect.Type, error) {
+// ValidateEntityType checks if type might be used as entity.
+func ValidateEntityType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error) {
 	idF, exists := t.FieldByName("ID")
 	if !exists {
 		return nil, errors.Errorf("object %s has no ID field", t)
@@ -331,15 +357,17 @@ func validateType(t reflect.Type) (reflect.Type, error) {
 		return nil, errors.Errorf("id must be the first field in type %s", t)
 	}
 
-	revisionF, exists := t.FieldByName("Revision")
-	if !exists {
-		return nil, errors.Errorf("object %s has no Revision field", t)
-	}
-	if revisionF.Type != revisionType {
-		return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
-	}
-	if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
-		return nil, errors.Errorf("revision must be the second field in type %d", t)
+	if isRevisionRequired {
+		revisionF, exists := t.FieldByName("Revision")
+		if !exists {
+			return nil, errors.Errorf("object %s has no Revision field", t)
+		}
+		if revisionF.Type != revisionType {
+			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
+		}
+		if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
+			return nil, errors.Errorf("revision must be the second field in type %d", t)
+		}
 	}
 
 	return idF.Type, nil

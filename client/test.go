@@ -13,7 +13,7 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"github.com/outofforest/magma/config"
-	db2 "github.com/outofforest/magma/db"
+	"github.com/outofforest/magma/db"
 	"github.com/outofforest/magma/state/repository/format"
 	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
@@ -22,9 +22,9 @@ import (
 )
 
 var (
-	_ ReadClient     = &TestClient{}
-	_ WriteClient    = &TestClient{}
-	_ db2.Transactor = &testTransactor{}
+	_ ReadClient    = &TestClient{}
+	_ WriteClient   = &TestClient{}
+	_ db.Transactor = &testTransactor{}
 )
 
 const maxMsgSize = 4 * 1024
@@ -69,12 +69,12 @@ func (tc *TestClient) WarmUp(ctx context.Context) error {
 }
 
 // View returns current view.
-func (tc *TestClient) View() *db2.View {
+func (tc *TestClient) View() *db.View {
 	return tc.client.View()
 }
 
 // NewTransactor returns new transactor.
-func (tc *TestClient) NewTransactor() db2.Transactor {
+func (tc *TestClient) NewTransactor() db.Transactor {
 	return &testTransactor{
 		tc:           tc,
 		updatedTypes: tc.updatedTypes,
@@ -91,7 +91,7 @@ type testTransactor struct {
 	updatedTypes map[reflect.Type]struct{}
 }
 
-func (t *testTransactor) Tx(ctx context.Context, txF func(tx db2.Tx) error) error {
+func (t *testTransactor) Tx(ctx context.Context, txF func(tx db.Tx) error) error {
 	tx, _, err := t.tc.client.NewTransactor().(*transactor).prepareTx(memdb.ID{}, time.Time{}, txF)
 	if err != nil {
 		return err

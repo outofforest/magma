@@ -2,7 +2,6 @@ package gossip
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strings"
 
@@ -876,10 +875,6 @@ func (g *Gossip) hello(
 	expectedHello *wire.Hello,
 ) (*wire.Hello, partitionState, error) {
 	if expectedHello != nil {
-		if expectedHello.Channel == wire.ChannelP2P {
-			fmt.Printf("%s initiating hello to %s\n", g.serverID, expectedHello.ServerID)
-		}
-
 		if _, err := c.SendProton(&wire.Hello{
 			ServerID:       g.serverID,
 			PartitionID:    expectedHello.PartitionID,
@@ -898,10 +893,6 @@ func (g *Gossip) hello(
 	h, ok := m.(*wire.Hello)
 	if !ok {
 		return nil, partitionState{}, errors.Errorf("expected hello, got %T", m)
-	}
-
-	if h.Channel == wire.ChannelP2P {
-		fmt.Printf("%s received hello from %s\n", g.serverID, h.ServerID)
 	}
 
 	switch {
