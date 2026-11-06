@@ -1061,3 +1061,55 @@ func TestUpgradeComplex(t *testing.T) {
 		ID: emptyID2,
 	}, empty)
 }
+
+func TestUpgradeEmptyDatabase(t *testing.T) {
+	t.Parallel()
+
+	requireT := require.New(t)
+	ctx := qa.NewContext(t)
+	group := qa.NewGroup(ctx, t)
+
+	m2 := entities2.NewMarshaller()
+
+	clusterConfig := clusterConfig
+	clusterConfig.Directory = t.TempDir()
+	clusterConfig.Partitions = slices.Clone(clusterConfig.Partitions)
+	clusterConfig.Partitions[0].Upgrades = []db.Upgrade{
+		{
+			Marshaller: m2,
+			UpgradeFunc: func(view *db.View, set db.UpgradeSetFunc) error {
+				return nil
+			},
+		},
+	}
+
+	clstr := cluster.NewTesting(group, t, clusterConfig)
+
+	p1 := clstr.NewPeer("P1", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	p2 := clstr.NewPeer("P2", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	p3 := clstr.NewPeer("P3", types.Partitions{partitionDefault: types.PartitionRoleActive})
+	clstr.ForceLeader(p1)
+	c := clstr.NewClient(p2, "client", partitionDefault, nil)
+
+	clstr.StartPeers(p1, p2, p3)
+	clstr.StartClients(c)
+
+	acc := entities2.Account{
+		ID:        memdb.NewID[entities2.AccountID](),
+		FirstName: "John",
+		LastName:  "Doe",
+		Name:      "John Doe",
+	}
+
+	requireT.NoError(c.NewTransactor().Tx(ctx, func(tx db.Tx) error {
+		requireT.NoError(tx.Set(acc))
+		return nil
+	}))
+
+	acc.Revision++
+
+	v := c.View()
+	account, exists := db.Get[entities2.Account](v, acc.ID)
+	requireT.True(exists)
+	requireT.Equal(acc, account)
+}

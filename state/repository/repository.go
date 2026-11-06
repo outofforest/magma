@@ -232,7 +232,12 @@ func (r *Repository) Create(
 	r.nextFileIndex++
 	r.files = append(r.files, header)
 
-	if len(r.files) > 1 && r.files[len(r.files)-2].Version != r.currentVersion {
+	var lastVersion magmatypes.Version
+	if len(r.files) > 1 {
+		lastVersion = r.files[len(r.files)-2].Version
+	}
+
+	if lastVersion != r.currentVersion {
 		if len(r.upgradeCh) > 0 {
 			select {
 			case <-r.upgradeCh:
@@ -433,20 +438,20 @@ func (r *Repository) Run(ctx context.Context) error {
 
 func (r *Repository) upgrade() error {
 	r.mu.RLock()
-	if len(r.files) < 2 {
-		r.mu.RUnlock()
-		return nil
-	}
 	files := slices.Clone(r.files)
 	r.mu.RUnlock()
 
-	for i, h := range files[1:] {
-		if h.Version == files[i].Version {
+	var version magmatypes.Version
+	for _, h := range files {
+		if h.Version == version {
 			continue
 		}
-		if err := r.upgradeToVersion(h, files[i].Version); err != nil {
+
+		if err := r.upgradeToVersion(h, version); err != nil {
 			return err
 		}
+
+		version = h.Version
 	}
 
 	return nil
