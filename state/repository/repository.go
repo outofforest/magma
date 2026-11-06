@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/pkg/errors"
+	"github.com/zeebo/xxh3"
 	"golang.org/x/sys/unix"
 
 	"github.com/outofforest/magma/client/wire"
@@ -597,6 +599,11 @@ loop:
 		return errors.WithStack(err)
 	}
 
+	hasher := xxh3.NewSeed(header.PreviousChecksum)
+	if _, err := hasher.Write(metaBuf); err != nil {
+		return errors.WithStack(err)
+	}
+
 	srcView := db.NewView(memDB.Txn(true), byType)
 
 	for i, upgrade := range upgrades {
@@ -604,7 +611,7 @@ loop:
 		var setF db.UpgradeSetFunc
 		if i == len(upgrades)-1 {
 			var err error
-			setF, err = r.newLastUpgradeSetter(upgrade.Marshaller, f)
+			setF, err = r.newLastUpgradeSetter(upgrade.Marshaller, hasher, f)
 			if err != nil {
 				return err
 			}
@@ -628,11 +635,16 @@ loop:
 		srcView = dstView
 	}
 
-	return nil
+	checksumRaw := [format.ChecksumSize + 1]byte{format.ChecksumSize}
+	binary.LittleEndian.PutUint64(checksumRaw[1:], hasher.Sum64())
+	_, err = f.Write(checksumRaw[:])
+
+	return errors.WithStack(err)
 }
 
 func (r *Repository) newLastUpgradeSetter(
 	m proton.Marshaller,
+	hasher io.Writer,
 	w io.Writer,
 ) (db.UpgradeSetFunc, error) {
 	_, byType, err := internal.NewCache(m)
@@ -671,6 +683,9 @@ func (r *Repository) newLastUpgradeSetter(
 
 		msgBuf := buf[start : varuint64.MaxSize+totalSize]
 		if _, err := w.Write(msgBuf); err != nil {
+			panic(errors.WithStack(err))
+		}
+		if _, err := hasher.Write(msgBuf); err != nil {
 			panic(errors.WithStack(err))
 		}
 	}, nil

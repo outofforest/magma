@@ -2,7 +2,6 @@ package internal
 
 import (
 	"encoding/binary"
-	"io"
 	"reflect"
 	"unsafe"
 
@@ -76,6 +75,14 @@ func ApplyInit(
 	tx *memdb.Txn,
 	updatedTypes map[reflect.Type]struct{},
 ) (uint64, error) {
+	// +1 here is for size of the checksum.
+	checksumSize := uint64(format.ChecksumSize + 1)
+	if initSize <= checksumSize {
+		return 0, errors.New("invalid init size")
+	}
+
+	initSize -= checksumSize
+
 	initMetaMsgID, err := metaM.ID(&wire.InitMetadata{})
 	if err != nil {
 		return 0, err
@@ -99,17 +106,14 @@ func ApplyInit(
 
 	initMeta := initMetaMsg.(*wire.InitMetadata)
 
-	if size == initSize {
-		return initMeta.PreviousChecksum, nil
+	hasher := xxh3.NewSeed(initMeta.PreviousChecksum)
+	if _, err := hasher.Write(headerRaw); err != nil {
+		return 0, errors.WithStack(err)
 	}
 
-	for {
+	for size < initSize {
 		objRaw, _, err := r.ReceiveRawBytes()
-		switch {
-		case err == nil:
-		case errors.Is(err, io.EOF):
-			return initMeta.PreviousChecksum, nil
-		default:
+		if err != nil {
 			return 0, err
 		}
 
@@ -118,14 +122,31 @@ func ApplyInit(
 			return 0, errors.New("invalid size")
 		}
 
+		if _, err := hasher.Write(objRaw); err != nil {
+			return 0, errors.WithStack(err)
+		}
+
 		if err := storeObject(m, metaM, initMeta.EntityMetadataID, byID, tx, objRaw, updatedTypes); err != nil {
 			return 0, err
 		}
-
-		if size == initSize {
-			return initMeta.PreviousChecksum, nil
-		}
 	}
+
+	checksumRaw, _, err := r.ReceiveRawBytes()
+	if err != nil {
+		return 0, err
+	}
+	if uint64(len(checksumRaw)) != checksumSize {
+		return 0, errors.New("invalid size")
+	}
+
+	checksum := hasher.Sum64()
+	expectedChecksum := binary.LittleEndian.Uint64(checksumRaw[1:])
+
+	if checksum != expectedChecksum {
+		return 0, errors.Errorf("invalid init checksum, expected: %d, got: %d", expectedChecksum, checksum)
+	}
+
+	return initMeta.PreviousChecksum, nil
 }
 
 // Insert inserts object to DB.
