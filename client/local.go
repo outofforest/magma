@@ -63,7 +63,7 @@ func (c *LocalClient) WarmUp(ctx context.Context) error {
 
 // View returns db view.
 func (c *LocalClient) View() *db.View {
-	return internal.NewView(c.db.Txn(true), c.byType)
+	return db.NewView(c.db.Txn(true), c.byType)
 }
 
 // NewTransactor creates new transactor.
@@ -110,7 +110,7 @@ type localTx struct {
 }
 
 func (tx *localTx) View() *db.View {
-	return internal.NewView(tx.txn.Txn(true), tx.client.byType)
+	return db.NewView(tx.txn.Txn(true), tx.client.byType)
 }
 
 func (tx *localTx) Set(o any) error {

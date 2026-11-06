@@ -11,7 +11,6 @@ import (
 
 	"github.com/outofforest/magma/client/wire"
 	"github.com/outofforest/magma/state/repository/format"
-	"github.com/outofforest/magma/types"
 	"github.com/outofforest/memdb"
 	"github.com/outofforest/proton"
 	"github.com/outofforest/varuint64"
@@ -22,29 +21,11 @@ var (
 	defaultPointer unsafe.Pointer
 )
 
-// Applier stores transaction in database.
-type Applier struct {
-	metaM proton.Marshaller
-	m     proton.Marshaller
-	byID  map[uint64]TypeInfo
-}
-
-// NewApplier creates applier.
-func NewApplier(metaM, m proton.Marshaller) (*Applier, error) {
-	byID, _, err := NewCache(m)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Applier{
-		metaM: metaM,
-		m:     m,
-		byID:  byID,
-	}, nil
-}
-
 // ApplyTx stores transaction in database.
-func (a *Applier) ApplyTx(
+func ApplyTx(
+	m proton.Marshaller,
+	metaM proton.Marshaller,
+	byID map[uint64]TypeInfo,
 	previousChecksum uint64,
 	tx *memdb.Txn,
 	txRaw []byte,
@@ -71,13 +52,13 @@ func (a *Applier) ApplyTx(
 	}
 
 	metaID, n := varuint64.Parse(txRaw)
-	metaAny, metaSize, err := a.metaM.Unmarshal(metaID, txRaw[n:])
+	metaAny, metaSize, err := metaM.Unmarshal(metaID, txRaw[n:])
 	if err != nil {
 		return memdb.ID{}, 0, err
 	}
 	meta := metaAny.(*wire.TxMetadata)
 
-	return meta.ID, checksum, a.storeTx(meta.EntityMetadataID, tx, txRaw[n+metaSize:], updatedTypes)
+	return meta.ID, checksum, storeTx(m, metaM, meta.EntityMetadataID, byID, tx, txRaw[n+metaSize:], updatedTypes)
 }
 
 // InitReader reads log from stream.
@@ -86,13 +67,16 @@ type InitReader interface {
 }
 
 // ApplyInit stores objects from init in database.
-func (a *Applier) ApplyInit(
+func ApplyInit(
 	r InitReader,
+	m proton.Marshaller,
+	metaM proton.Marshaller,
+	byID map[uint64]TypeInfo,
 	initSize uint64,
 	tx *memdb.Txn,
 	updatedTypes map[reflect.Type]struct{},
 ) (uint64, error) {
-	initMetaMsgID, err := a.metaM.ID(&wire.InitMetadata{})
+	initMetaMsgID, err := metaM.ID(&wire.InitMetadata{})
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +92,7 @@ func (a *Applier) ApplyInit(
 		return 0, errors.New("invalid size")
 	}
 
-	initMetaMsg, _, err := a.metaM.Unmarshal(initMetaMsgID, headerRaw[n:])
+	initMetaMsg, _, err := metaM.Unmarshal(initMetaMsgID, headerRaw[n:])
 	if err != nil {
 		return 0, err
 	}
@@ -134,7 +118,7 @@ func (a *Applier) ApplyInit(
 			return 0, errors.New("invalid size")
 		}
 
-		if err := a.storeObject(initMeta.EntityMetadataID, tx, objRaw, updatedTypes); err != nil {
+		if err := storeObject(m, metaM, initMeta.EntityMetadataID, byID, tx, objRaw, updatedTypes); err != nil {
 			return 0, err
 		}
 
@@ -180,22 +164,25 @@ func Insert(
 	return id, typeDef, old, oPtrValue.UnsafePointer()
 }
 
-func (a *Applier) storeTx(
+func storeTx(
+	m proton.Marshaller,
+	metaM proton.Marshaller,
 	entityMetaID uint64,
+	byID map[uint64]TypeInfo,
 	tx *memdb.Txn,
 	txRaw []byte,
 	updatedTypes map[reflect.Type]struct{},
 ) error {
 	dbTx := tx.Txn(true)
 	for len(txRaw) > 0 {
-		entityMetaRaw, entityMetaSize, err := a.metaM.Unmarshal(entityMetaID, txRaw)
+		entityMetaRaw, entityMetaSize, err := metaM.Unmarshal(entityMetaID, txRaw)
 		if err != nil {
 			return err
 		}
 
 		entityMeta := entityMetaRaw.(*wire.TxEntityMetadata)
 
-		typeDef, exists := a.byID[entityMeta.MessageID]
+		typeDef, exists := byID[entityMeta.MessageID]
 		if !exists {
 			return errors.Errorf("unknown type for message ID %d", entityMeta.MessageID)
 		}
@@ -216,7 +203,7 @@ func (a *Applier) storeTx(
 			SetRevisionInEntity(oV.UnsafePointer(), &entityMeta.Revision)
 		}
 
-		msgSize, err := a.m.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
+		msgSize, err := m.ApplyPatch(oV.Interface(), txRaw[entityMetaSize:])
 		if err != nil {
 			return err
 		}
@@ -234,8 +221,11 @@ func (a *Applier) storeTx(
 	return nil
 }
 
-func (a *Applier) storeObject(
+func storeObject(
+	m proton.Marshaller,
+	metaM proton.Marshaller,
 	entityMetaID uint64,
+	byID map[uint64]TypeInfo,
 	tx *memdb.Txn,
 	objRaw []byte,
 	updatedTypes map[reflect.Type]struct{},
@@ -244,19 +234,19 @@ func (a *Applier) storeObject(
 
 	objRaw = objRaw[n:]
 
-	entityMetaRaw, entityMetaSize, err := a.metaM.Unmarshal(entityMetaID, objRaw)
+	entityMetaRaw, entityMetaSize, err := metaM.Unmarshal(entityMetaID, objRaw)
 	if err != nil {
 		return err
 	}
 
 	entityMeta := entityMetaRaw.(*wire.InitEntityMetadata)
 
-	typeDef, exists := a.byID[entityMeta.MessageID]
+	typeDef, exists := byID[entityMeta.MessageID]
 	if !exists {
 		return errors.Errorf("unknown type %s", typeDef.Type)
 	}
 
-	msg, _, err := a.m.Unmarshal(entityMeta.MessageID, objRaw[entityMetaSize:])
+	msg, _, err := m.Unmarshal(entityMeta.MessageID, objRaw[entityMetaSize:])
 	if err != nil {
 		return err
 	}
@@ -271,104 +261,4 @@ func (a *Applier) storeObject(
 	updatedTypes[typeDef.Type] = struct{}{}
 
 	return nil
-}
-
-// TypeInfo caches information about entity type.
-type TypeInfo struct {
-	Type    reflect.Type
-	IDType  reflect.Type
-	MsgID   uint64
-	TableID uint64
-}
-
-// NewByTypeCache creates new type cache indexed by entity types.
-func NewByTypeCache(entities []reflect.Type) (map[reflect.Type]TypeInfo, error) {
-	byType := map[reflect.Type]TypeInfo{}
-	for tableID, t := range entities {
-		idFType, err := ValidateEntityType(t, false)
-		if err != nil {
-			return nil, err
-		}
-
-		if _, exists := byType[t]; exists {
-			return nil, errors.Errorf("double registration of object %s", t)
-		}
-
-		byType[t] = TypeInfo{
-			Type:    t,
-			IDType:  idFType,
-			TableID: uint64(tableID),
-		}
-	}
-
-	return byType, nil
-}
-
-// NewCache creates new type caches from marshaller.
-func NewCache(m proton.Marshaller) (map[uint64]TypeInfo, map[reflect.Type]TypeInfo, error) {
-	entities, err := EntitiesFromMarshaller(m)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	byID := map[uint64]TypeInfo{}
-	byType := map[reflect.Type]TypeInfo{}
-	for tableID, t := range entities {
-		idFType, err := ValidateEntityType(t, true)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if _, exists := byType[t]; exists {
-			return nil, nil, errors.Errorf("double registration of object %s", t)
-		}
-
-		msgID, err := m.ID(reflect.New(t).Interface())
-		if err != nil {
-			return nil, nil, err
-		}
-
-		info := TypeInfo{
-			Type:    t,
-			IDType:  idFType,
-			MsgID:   msgID,
-			TableID: uint64(tableID),
-		}
-		byID[msgID] = info
-		byType[t] = info
-	}
-
-	return byID, byType, nil
-}
-
-var revisionType = reflect.TypeFor[types.Revision]()
-var idType = reflect.TypeFor[memdb.ID]()
-
-// ValidateEntityType checks if type might be used as entity.
-func ValidateEntityType(t reflect.Type, isRevisionRequired bool) (reflect.Type, error) {
-	idF, exists := t.FieldByName("ID")
-	if !exists {
-		return nil, errors.Errorf("object %s has no ID field", t)
-	}
-	if !idF.Type.ConvertibleTo(idType) {
-		return nil, errors.Errorf("object's %s ID field must be of type %s", t, idType)
-	}
-	if idF.Index[0] != 0 || idF.Offset != 0 {
-		return nil, errors.Errorf("id must be the first field in type %s", t)
-	}
-
-	if isRevisionRequired {
-		revisionF, exists := t.FieldByName("Revision")
-		if !exists {
-			return nil, errors.Errorf("object %s has no Revision field", t)
-		}
-		if revisionF.Type != revisionType {
-			return nil, errors.Errorf("object's %s Revision field must be of type %s", t, revisionType)
-		}
-		if revisionF.Index[0] != 1 || revisionF.Offset != memdb.IDLength {
-			return nil, errors.Errorf("revision must be the second field in type %d", t)
-		}
-	}
-
-	return idF.Type, nil
 }
