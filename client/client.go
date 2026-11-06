@@ -52,13 +52,13 @@ type Config struct {
 
 // Client connects to magma network, receives log updates and sends transactions.
 type Client struct {
-	config  Config
-	metaM   proton.Marshaller
-	m       proton.Marshaller
-	byType  map[reflect.Type]internal.TypeInfo
-	applier *internal.Applier
-	txCh    chan txEnvelope
-	doneCh  chan struct{}
+	config Config
+	metaM  proton.Marshaller
+	m      proton.Marshaller
+	byID   map[uint64]internal.TypeInfo
+	byType map[reflect.Type]internal.TypeInfo
+	txCh   chan txEnvelope
+	doneCh chan struct{}
 
 	db *memdb.MemDB
 
@@ -91,7 +91,7 @@ func New(config Config) (*Client, error) {
 		return nil, err
 	}
 
-	_, byType, err := internal.NewCache(m)
+	byID, byType, err := internal.NewCache(m)
 	if err != nil {
 		return nil, err
 	}
@@ -108,11 +108,6 @@ func New(config Config) (*Client, error) {
 
 	metaM := wire.NewMarshaller()
 
-	applier, err := internal.NewApplier(metaM, m)
-	if err != nil {
-		return nil, err
-	}
-
 	metaID, err := metaM.ID(&wire.TxMetadata{})
 	if err != nil {
 		return nil, err
@@ -127,8 +122,8 @@ func New(config Config) (*Client, error) {
 		config:           config,
 		metaM:            metaM,
 		m:                m,
+		byID:             byID,
 		byType:           byType,
-		applier:          applier,
 		txCh:             make(chan txEnvelope),
 		doneCh:           make(chan struct{}),
 		bufSize:          max(10*(config.MaxMessageSize+2*varuint64.MaxSize), 4*1024),
@@ -208,7 +203,8 @@ func (c *Client) Run(ctx context.Context) error {
 						tx = c.db.Txn(true)
 
 						var err error
-						c.previousChecksum, err = c.applier.ApplyInit(conn, initResponse.InitSize, tx, updatedTypes)
+						c.previousChecksum, err = internal.ApplyInit(conn, c.m, c.metaM, c.byID, initResponse.InitSize,
+							tx, updatedTypes)
 						if err != nil {
 							return err
 						}
@@ -341,7 +337,7 @@ func (c *Client) WarmUp(ctx context.Context) error {
 
 // View returns db view.
 func (c *Client) View() *db.View {
-	return internal.NewView(c.db.Txn(true), c.byType)
+	return db.NewView(c.db.Txn(true), c.byType)
 }
 
 // NewTransactor creates new transactor.
@@ -384,7 +380,7 @@ func (c *Client) applyTx(
 	txRaw []byte,
 	updatedTypes map[reflect.Type]struct{},
 ) (uint64, error) {
-	txID, checksum, err := c.applier.ApplyTx(previousChecksum, tx, txRaw, updatedTypes)
+	txID, checksum, err := internal.ApplyTx(c.m, c.metaM, c.byID, previousChecksum, tx, txRaw, updatedTypes)
 	switch {
 	case err == nil:
 		if txID == emptyTxID {
@@ -579,7 +575,7 @@ type tx struct {
 
 // View returns non-persistent view of the DB.
 func (tx *tx) View() *db.View {
-	return internal.NewView(tx.txn.Txn(true), tx.client.byType)
+	return db.NewView(tx.txn.Txn(true), tx.client.byType)
 }
 
 // Set sets object in transaction. This function includes the object in tx even if patch is empty.

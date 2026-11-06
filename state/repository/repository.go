@@ -498,12 +498,12 @@ func (r *Repository) fillInitFile(
 		return err
 	}
 
-	initialEntities, err := internal.EntitiesFromMarshaller(initialMarshaller)
+	byID, byType, err := internal.NewCache(initialMarshaller)
 	if err != nil {
 		return err
 	}
 
-	byType, err := internal.NewByTypeCache(initialEntities)
+	initialEntities, err := internal.EntitiesFromMarshaller(initialMarshaller)
 	if err != nil {
 		return err
 	}
@@ -514,11 +514,6 @@ func (r *Repository) fillInitFile(
 	}
 
 	memDB, err := memdb.NewMemDB(dbConfig)
-	if err != nil {
-		return err
-	}
-
-	applier, err := internal.NewApplier(r.metaM, initialMarshaller)
 	if err != nil {
 		return err
 	}
@@ -536,8 +531,8 @@ func (r *Repository) fillInitFile(
 		defer initReader.Close()
 
 		var err error
-		checksum, err = applier.ApplyInit(resonance.NewReader(initReader, r.maxMessageSize), initSize, tx,
-			updatedTypes)
+		checksum, err = internal.ApplyInit(resonance.NewReader(initReader, r.maxMessageSize), initialMarshaller,
+			r.metaM, byID, initSize, tx, updatedTypes)
 		if err != nil {
 			return err
 		}
@@ -571,7 +566,7 @@ loop:
 				return err
 			}
 
-			_, checksum, err = applier.ApplyTx(checksum, tx, txRaw, updatedTypes)
+			_, checksum, err = internal.ApplyTx(initialMarshaller, r.metaM, byID, checksum, tx, txRaw, updatedTypes)
 			if err != nil && !errors.Is(err, db.ErrTxOutdatedTx) {
 				return err
 			}
@@ -601,7 +596,7 @@ loop:
 		return errors.WithStack(err)
 	}
 
-	srcView := internal.NewView(memDB.Txn(true), byType)
+	srcView := db.NewView(memDB.Txn(true), byType)
 
 	for i, upgrade := range upgrades {
 		entities, err := internal.EntitiesFromMarshaller(upgrade.Marshaller)
@@ -625,7 +620,7 @@ loop:
 		}
 
 		isLastUpgrade := i == len(upgrades)-1
-		dstView := internal.NewView(dstMemDB.Txn(true), byType)
+		dstView := db.NewView(dstMemDB.Txn(true), byType)
 
 		err = parallel.Run(ctx, func(ctx context.Context, spawn parallel.SpawnFn) error {
 			ch := make(chan any, 5)
