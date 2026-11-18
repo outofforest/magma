@@ -1,6 +1,7 @@
 package db
 
 import (
+	"math/rand/v2"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -128,5 +129,33 @@ func TestUpgradePanics(t *testing.T) {
 	}
 	view2, err := ExecuteUpgrade(view, upgrade)
 	requireT.ErrorIs(err, errUpgrade)
+	requireT.Nil(view2)
+}
+
+func TestUpgradeIndeterminismIsDetected(t *testing.T) {
+	requireT := require.New(t)
+
+	view, err := CreateView(entities.NewMarshaller())
+	requireT.NoError(err)
+
+	f := entities.Fields{
+		ID:    memdb.NewID[memdb.ID](),
+		Int32: 1,
+	}
+
+	view.Set(f)
+
+	upgrade := Upgrade{
+		Marshaller: entities2.NewMarshaller(),
+		UpgradeFunc: func(view *View, set UpgradeSetFunc) error {
+			for f := range All[entities.Fields](view) {
+				f.Int32 = rand.Int32()
+				set(f)
+			}
+			return nil
+		},
+	}
+	view2, err := ExecuteUpgrade(view, upgrade)
+	requireT.Error(err)
 	requireT.Nil(view2)
 }
